@@ -478,8 +478,8 @@ export default function JemaatPage() {
             poster="/lighthouse-poster.png"
             className="w-full h-full object-cover opacity-[0.22] scale-105 filter contrast-110 brightness-110"
           >
+            <source src="/lighthouse-fast.mp4" type="video/mp4" />
             <source src="/lighthouse-bg.mp4" type="video/mp4" />
-            <source src="/lighthouse-music.mp4" type="video/mp4" />
           </video>
           {/* Subtle gradient overlays to blend edges perfectly into dark container */}
           <div className="absolute inset-0 bg-gradient-to-b from-slate-900/60 via-transparent to-slate-900/70" />
