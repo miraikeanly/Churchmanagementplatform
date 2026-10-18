@@ -45,6 +45,7 @@ const NAV_LINKS = [
   { to: '/tentang', label: 'Tentang' },
   { to: '/galeri',  label: 'Galeri' },
   { to: '/lokasi',  label: 'Lokasi' },
+  { to: '/give',    label: 'Persembahan' },
 ];
 
 export default function PublicNavbar() {

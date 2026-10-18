@@ -55,8 +55,9 @@ export default function AkunPage() {
             <h1 className="mt-4 text-xl font-bold text-gray-900">Shalom, {user.name}!</h1>
             <p className="text-sm text-gray-500 break-all">{user.email}</p>
 
-            <div className="grid grid-cols-3 gap-3 mt-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
               {[
+                { to: '/give', label: 'Persembahan', icon: CalendarHeart, color: 'bg-blue-50 text-blue-600' },
                 { to: '/service', label: 'Program Ibadah', icon: CalendarHeart, color: 'bg-rose-50 text-rose-600' },
                 { to: '/galeri', label: 'Galeri', icon: Images, color: 'bg-amber-50 text-amber-600' },
                 { to: '/tentang', label: 'Tim Kami', icon: Users, color: 'bg-emerald-50 text-emerald-600' },

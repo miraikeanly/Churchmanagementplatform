@@ -108,6 +108,68 @@ export default async function handler(req, res) {
       return sendJson(res, 200, { success: true, id });
     }
 
+    // Public: get giving categories
+    if (m === 'GET' && resource === 'giving' && a === 'categories') {
+      const defaultCategories = [
+        { id: 'tithes', code: 'TITHES', name: 'Persembahan Persepuluhan', description: 'Membawa seluruh persembahan persepuluhan ke dalam rumah perbendaharaan (Maleakhi 3:10)' },
+        { id: 'offering', code: 'OFFERING', name: 'Persembahan Umum', description: 'Persembahan ibadah mingguan dan pelayanan umum gereja' },
+        { id: 'thanksgiving', code: 'THANKSGIVING OFFERING', name: 'Persembahan Syukur', description: 'Ungkapan syukur atas berkat, kesehatan, dan penyertaan Tuhan' },
+        { id: 'christmas', code: 'CHRISTMAS OFFERING', name: 'Persembahan Natal', description: 'Persembahan khusus sukacita Natal dan bakti kasih' }
+      ];
+      const saved = await get('settings:giving_categories');
+      return sendJson(res, 200, { success: true, categories: saved && Array.isArray(saved) && saved.length > 0 ? saved : defaultCategories });
+    }
+
+    // Public / Jemaat: submit persembahan (giving confirmation)
+    if (m === 'POST' && resource === 'giving' && a === 'submissions') {
+      const body = getBody(req);
+      const { categoryCode, categoryName, amount, senderName, senderPhone, senderEmail, memo, paymentMethod, userId } = body;
+      if (!categoryCode || !amount || !senderName) {
+        return sendError(res, 400, 'Mohon lengkapi jenis persembahan, nominal, dan nama Anda.');
+      }
+      const numAmount = Number(amount);
+      if (isNaN(numAmount) || numAmount <= 0) {
+        return sendError(res, 400, 'Nominal persembahan tidak valid.');
+      }
+
+      const id = uid('give');
+      const record = {
+        id,
+        categoryCode,
+        categoryName: categoryName || categoryCode,
+        amount: numAmount,
+        senderName: String(senderName).trim(),
+        senderPhone: senderPhone ? String(senderPhone).trim() : '',
+        senderEmail: senderEmail ? String(senderEmail).trim() : '',
+        memo: memo ? String(memo).trim() : '',
+        paymentMethod: paymentMethod || 'BCA Transfer',
+        userId: userId || null,
+        status: 'pending', // pending | verified | rejected
+        submittedAt: now(),
+        createdAt: now()
+      };
+
+      await set(`giving:submission:${id}`, record);
+
+      // Otomatis masukkan ke transaksi keuangan dengan deskripsi persembahan
+      const txId = uid('tx_give');
+      const txDesc = `Persembahan ${record.categoryName} - ${record.senderName}${record.memo ? ` (${record.memo})` : ''}`;
+      const transaction = {
+        id: txId,
+        type: 'income',
+        category: record.categoryName,
+        amount: numAmount,
+        description: txDesc,
+        date: new Date().toISOString().split('T')[0],
+        givingSubmissionId: id,
+        createdBy: userId || 'online_giving',
+        createdAt: now()
+      };
+      await set(`transaction:${txId}`, transaction);
+
+      return sendJson(res, 200, { success: true, submission: record, transactionId: txId });
+    }
+
     // ── Everything below needs a logged-in admin ──
     const user = await requireUser(req, res);
     if (!user) return;
@@ -222,6 +284,39 @@ export default async function handler(req, res) {
         const transaction = { id, ...body, createdBy: user.id, createdAt: now() };
         await set(`transaction:${id}`, transaction);
         return sendJson(res, 200, { success: true, transaction });
+      }
+    }
+
+    // Admin: Manage Giving Categories
+    if (resource === 'giving' && a === 'categories') {
+      if (m === 'POST' || m === 'PUT') {
+        const { categories } = body;
+        if (!categories || !Array.isArray(categories)) {
+          return sendError(res, 400, 'Format categories harus array');
+        }
+        await set('settings:giving_categories', categories);
+        return sendJson(res, 200, { success: true, categories });
+      }
+    }
+
+    // Admin: Manage / View Giving Submissions
+    if (resource === 'giving' && a === 'submissions') {
+      if (m === 'GET') {
+        const items = (await byPrefix('giving:submission:')).filter((x) => x.id)
+          .sort((x, y) => new Date(y.submittedAt || y.createdAt) - new Date(x.submittedAt || x.createdAt));
+        return sendJson(res, 200, { success: true, submissions: items });
+      }
+      if (m === 'PUT' && b) {
+        // update status submission (verified / rejected)
+        const sub = await get(`giving:submission:${b}`);
+        if (!sub) return sendError(res, 404, 'Data konfirmasi persembahan tidak ditemukan');
+        const updated = { ...sub, ...body, id: b, updatedAt: now(), updatedBy: user.id };
+        await set(`giving:submission:${b}`, updated);
+        return sendJson(res, 200, { success: true, submission: updated });
+      }
+      if (m === 'DELETE' && b) {
+        await del(`giving:submission:${b}`);
+        return sendJson(res, 200, { success: true });
       }
     }
 

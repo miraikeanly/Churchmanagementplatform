@@ -15,6 +15,7 @@ import GaleriPage from "./pages/GaleriPage";
 import LokasiPage from "./pages/LokasiPage";
 import ServicePage from "./pages/ServicePage";
 import AkunPage from "./pages/AkunPage";
+import GivePage from "./pages/GivePage";
 import NativeBackHandler from "./components/common/NativeBackHandler";
 import AdminPinGate from "./components/auth/AdminPinGate";
 import ScrollNavigation from "./components/common/ScrollNavigation";
@@ -96,6 +97,8 @@ export default function App() {
           <Route path="/galeri" element={<GaleriPage />} />
           <Route path="/lokasi" element={<LokasiPage />} />
           <Route path="/service" element={<ServicePage />} />
+          <Route path="/give" element={<GivePage />} />
+          <Route path="/persembahan" element={<GivePage />} />
           <Route path="/akun" element={<AkunPage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />

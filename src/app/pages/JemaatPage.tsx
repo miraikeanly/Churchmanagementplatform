@@ -364,11 +364,12 @@ export default function JemaatPage() {
 
       {/* ── Akses cepat ── */}
       <section className="relative z-20 -mt-6 sm:-mt-8 md:-mt-12 px-3 sm:px-4">
-        <div className="max-w-4xl mx-auto bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl shadow-blue-950/10 border border-gray-100 p-2 sm:p-4 grid grid-cols-4 gap-1 sm:gap-3">
+        <div className="max-w-4xl mx-auto bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl shadow-blue-950/10 border border-gray-100 p-2 sm:p-4 grid grid-cols-5 gap-1 sm:gap-2">
           {[
             { href: '#jadwal', label: 'Jadwal', icon: Clock, color: 'from-blue-500 to-indigo-600' },
-            { to: '/lokasi', label: 'Lokasi', icon: MapPin, color: 'from-emerald-500 to-teal-600' },
-            { to: '/service', label: 'Daftar', icon: CalendarHeart, color: 'from-rose-500 to-orange-500' },
+            { to: '/give', label: 'Persembahan', icon: Heart, color: 'from-emerald-500 to-teal-600' },
+            { to: '/lokasi', label: 'Lokasi', icon: MapPin, color: 'from-sky-500 to-blue-600' },
+            { to: '/service', label: 'Layanan', icon: CalendarHeart, color: 'from-rose-500 to-orange-500' },
             { to: '/akun', label: 'Akun', icon: UserRound, color: 'from-purple-500 to-pink-600' },
           ].map(item => {
             const inner = (

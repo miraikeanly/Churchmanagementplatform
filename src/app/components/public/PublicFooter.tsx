@@ -8,6 +8,7 @@ const LINKS = [
   { to: '/galeri', label: 'Galeri' },
   { to: '/lokasi', label: 'Lokasi' },
   { to: '/service', label: 'Program Ibadah' },
+  { to: '/give', label: 'Persembahan' },
   { to: '/akun', label: 'Akun Jemaat' },
 ];
 
