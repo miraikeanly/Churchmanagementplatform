@@ -138,7 +138,6 @@ const HOME_SCHEDULES = [
 export default function JemaatPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const stats = useChurchStats();
-  const [videoFailed, setVideoFailed] = useState(false);
 
   useEffect(() => {
     fetch(`${API_URL}/announcements`)
@@ -166,25 +165,6 @@ export default function JemaatPage() {
           background: 'radial-gradient(ellipse 95% 75% at 50% 12%, #1e3a8a 0%, #0f172a 55%, #050814 100%)'
         }}
       >
-
-        {/* Background video (if exists) with parallax */}
-        {!videoFailed && (
-          <motion.div style={{ y: heroY }} className="absolute inset-0 pointer-events-none">
-            <video
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
-              controls={false}
-              disablePictureInPicture
-              onError={() => setVideoFailed(true)}
-              className="w-full h-full object-cover opacity-40 mix-blend-screen scale-110"
-            >
-              <source src="/hero.mp4" type="video/mp4" onError={() => setVideoFailed(true)} />
-            </video>
-          </motion.div>
-        )}
 
         {/* Church Building Background Artwork (15% opacity) */}
         <motion.div
