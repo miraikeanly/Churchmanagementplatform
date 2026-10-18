@@ -147,30 +147,42 @@ export default function JemaatPage() {
       .catch(() => {});
   }, []);
 
-  // Force autoplay & keep playing smoothly for Lighthouse Music video
+  // Ultra-fast instant autoplay & seamless looping for Lighthouse Music video
   useEffect(() => {
     const video = musicVideoRef.current;
     if (!video) return;
 
     video.muted = true;
     video.defaultMuted = true;
+    video.playsInline = true;
     video.setAttribute('muted', '');
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
 
     const tryPlay = () => {
-      if (video.paused) {
-        video.play().catch(() => {});
+      const p = video.play();
+      if (p !== undefined) {
+        p.catch(() => {});
       }
     };
 
     tryPlay();
-    video.addEventListener('loadedmetadata', tryPlay);
-    video.addEventListener('canplay', tryPlay);
-    video.addEventListener('ended', () => {
-      video.currentTime = 0;
-      tryPlay();
-    });
+    video.addEventListener('loadeddata', tryPlay, { passive: true });
+    video.addEventListener('canplay', tryPlay, { passive: true });
+    video.addEventListener('canplaythrough', tryPlay, { passive: true });
+
+    // Intersection observer so it never pauses or gets suspended by browser
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            tryPlay();
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(video);
 
     const onVisibility = () => {
       if (!document.hidden) tryPlay();
@@ -178,8 +190,10 @@ export default function JemaatPage() {
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      video.removeEventListener('loadedmetadata', tryPlay);
+      observer.disconnect();
+      video.removeEventListener('loadeddata', tryPlay);
       video.removeEventListener('canplay', tryPlay);
+      video.removeEventListener('canplaythrough', tryPlay);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
@@ -452,7 +466,7 @@ export default function JemaatPage() {
 
       {/* ── Lighthouse Music / Album Promo ── */}
       <section className="py-16 sm:py-24 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-white relative overflow-hidden">
-        {/* Background Choir Video (22% opacity, looped, muted, playsInline) */}
+        {/* Background Choir Video (22% opacity, fast-start optimized, looped, muted, playsInline) */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
           <video
             ref={musicVideoRef}
@@ -461,8 +475,10 @@ export default function JemaatPage() {
             loop
             playsInline
             preload="auto"
+            poster="/lighthouse-poster.png"
             className="w-full h-full object-cover opacity-[0.22] scale-105 filter contrast-110 brightness-110"
           >
+            <source src="/lighthouse-bg.mp4" type="video/mp4" />
             <source src="/lighthouse-music.mp4" type="video/mp4" />
           </video>
           {/* Subtle gradient overlays to blend edges perfectly into dark container */}
