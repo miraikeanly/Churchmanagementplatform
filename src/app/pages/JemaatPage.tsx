@@ -185,6 +185,22 @@ export default function JemaatPage() {
             </video>
           </motion.div>
         )}
+
+        {/* Church Building Background Artwork (15% opacity) */}
+        <motion.div
+          style={{ y: heroY }}
+          className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden"
+        >
+          <img
+            src="/gedung-gereja.png"
+            alt="Gedung GBI Jelambar Timur"
+            className="w-full h-full object-cover object-center opacity-15 mix-blend-luminosity filter contrast-125 brightness-95 scale-105"
+          />
+          {/* Subtle gradient vignette to blend edges smoothly into the celestial background */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050814] via-transparent to-[#1e3a8a]/40 mix-blend-multiply" />
+          <div className="absolute inset-0 bg-radial from-transparent via-[#0f172a]/40 to-[#050814]/90" />
+        </motion.div>
+
         <div className="absolute inset-0 hero-aurora pointer-events-none opacity-60" />
 
         {/* Ambient celestial lighting layers with Parallax */}
