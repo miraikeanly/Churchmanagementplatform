@@ -138,12 +138,50 @@ const HOME_SCHEDULES = [
 export default function JemaatPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const stats = useChurchStats();
+  const musicVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     fetch(`${API_URL}/announcements`)
       .then(r => r.json())
       .then(d => { if (d.announcements) setAnnouncements(d.announcements.filter((a: Announcement) => a.active)); })
       .catch(() => {});
+  }, []);
+
+  // Force autoplay & keep playing smoothly for Lighthouse Music video
+  useEffect(() => {
+    const video = musicVideoRef.current;
+    if (!video) return;
+
+    video.muted = true;
+    video.defaultMuted = true;
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+
+    const tryPlay = () => {
+      if (video.paused) {
+        video.play().catch(() => {});
+      }
+    };
+
+    tryPlay();
+    video.addEventListener('loadedmetadata', tryPlay);
+    video.addEventListener('canplay', tryPlay);
+    video.addEventListener('ended', () => {
+      video.currentTime = 0;
+      tryPlay();
+    });
+
+    const onVisibility = () => {
+      if (!document.hidden) tryPlay();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      video.removeEventListener('loadedmetadata', tryPlay);
+      video.removeEventListener('canplay', tryPlay);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   const { scrollY } = useScroll();
@@ -414,26 +452,22 @@ export default function JemaatPage() {
 
       {/* ── Lighthouse Music / Album Promo ── */}
       <section className="py-16 sm:py-24 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-white relative overflow-hidden">
-        {/* Background Choir Video (15% opacity, looped, muted, playsInline) */}
+        {/* Background Choir Video (22% opacity, looped, muted, playsInline) */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
           <video
-            ref={(el) => {
-              if (el && el.paused) {
-                el.play().catch(() => {});
-              }
-            }}
+            ref={musicVideoRef}
             autoPlay
             muted
             loop
             playsInline
             preload="auto"
-            className="w-full h-full object-cover opacity-15 scale-105 filter contrast-110 brightness-105"
+            className="w-full h-full object-cover opacity-[0.22] scale-105 filter contrast-110 brightness-110"
           >
             <source src="/lighthouse-music.mp4" type="video/mp4" />
           </video>
           {/* Subtle gradient overlays to blend edges perfectly into dark container */}
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-900/80 via-transparent to-slate-900/90" />
-          <div className="absolute inset-0 bg-radial from-transparent via-slate-950/40 to-slate-950/80" />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-900/60 via-transparent to-slate-900/70" />
+          <div className="absolute inset-0 bg-radial from-transparent via-slate-950/20 to-slate-950/70" />
         </div>
 
         {/* Ambient atmospheric glows */}
