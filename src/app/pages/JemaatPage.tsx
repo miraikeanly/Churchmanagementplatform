@@ -475,7 +475,6 @@ export default function JemaatPage() {
             loop
             playsInline
             preload="auto"
-            poster="/lighthouse-poster.png"
             className="w-full h-full object-cover opacity-[0.22] scale-105 filter contrast-110 brightness-110"
           >
             <source src="/lighthouse-fast.mp4" type="video/mp4" />

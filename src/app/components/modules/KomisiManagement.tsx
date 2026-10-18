@@ -370,6 +370,18 @@ export default function KomisiManagement() {
     setShowMemberForm(true);
   };
 
+  const selectJemaatToForm = (j: JemaatMember) => {
+    setSelectedJemaatId(j.id);
+    setMemberForm(prev => ({
+      ...prev,
+      name: j.name || prev.name,
+      phone: j.phone || prev.phone,
+      address: j.address || prev.address,
+      birthDate: j.birthDate || prev.birthDate,
+    }));
+    setLinkSearch('');
+  };
+
   const handleSaveMember = async () => {
     if (!memberForm.name.trim()) return;
     setSavingMember(true);
@@ -393,34 +405,37 @@ export default function KomisiManagement() {
         await supabaseAdmin.from(KV).insert({ key, value: member });
       }
 
-      // If linked to Data Jemaat, sync updated birthDate, name, phone, address back to Data Jemaat
+      // If linked to Data Jemaat, sync updated info back to Data Jemaat if exists
       if (selectedJemaatId) {
-        const primaryJemaatKey = `congregation:member:${selectedJemaatId}`;
-        const legacyJemaatKey = `member:${selectedJemaatId}`;
-        const { data: jRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', primaryJemaatKey).maybeSingle()
-          || await supabaseAdmin.from(KV).select('key, value').eq('key', legacyJemaatKey).maybeSingle();
+        try {
+          const rawId = selectedJemaatId.replace(/^congregation:member:/, '').replace(/^member:/, '');
+          const primaryJemaatKey = `congregation:member:${rawId}`;
+          const legacyJemaatKey = `member:${rawId}`;
+          const { data: jRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', primaryJemaatKey).maybeSingle()
+            || await supabaseAdmin.from(KV).select('key, value').eq('key', legacyJemaatKey).maybeSingle()
+            || await supabaseAdmin.from(KV).select('key, value').eq('key', selectedJemaatId).maybeSingle();
 
-        if (jRow && jRow.value) {
-          const updatedJemaat = {
-            ...jRow.value,
-            name: memberForm.name.trim(),
-            birthDate: memberForm.birthDate,
-            phone: memberForm.phone.trim() || jRow.value.phone,
-            address: memberForm.address.trim() || jRow.value.address,
-            updatedAt: new Date().toISOString(),
-          };
-          const targetKey = jRow.key || primaryJemaatKey;
-          await supabaseAdmin.from(KV).update({ value: updatedJemaat }).eq('key', targetKey);
-          if (targetKey !== primaryJemaatKey) {
-            await supabaseAdmin.from(KV).insert({ key: primaryJemaatKey, value: updatedJemaat });
+          if (jRow && jRow.value) {
+            const updatedJemaat = {
+              ...jRow.value,
+              name: memberForm.name.trim(),
+              birthDate: memberForm.birthDate || jRow.value.birthDate,
+              phone: memberForm.phone.trim() || jRow.value.phone,
+              address: memberForm.address.trim() || jRow.value.address,
+              updatedAt: new Date().toISOString(),
+            };
+            const targetKey = jRow.key || primaryJemaatKey;
+            await supabaseAdmin.from(KV).update({ value: updatedJemaat }).eq('key', targetKey);
           }
+        } catch (syncErr) {
+          console.warn('Sync back to jemaat error (non-fatal):', syncErr);
         }
       }
 
       setShowMemberForm(false);
       await Promise.all([loadMembers(), loadJemaat()]);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || 'Gagal menyimpan anggota');
     }
     setSavingMember(false);
   };
@@ -803,6 +818,93 @@ export default function KomisiManagement() {
             </div>
 
             <div className="overflow-y-auto flex-1 p-6 space-y-4 bg-slate-50/50">
+              {/* Method Selection & Sync Section at TOP */}
+              <div className="bg-white p-4 rounded-2xl border border-indigo-200/80 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Link size={14} className="text-indigo-600" />
+                    <span>Sinkronisasi ke Data Jemaat Umum</span>
+                  </label>
+                  {selectedJemaatId ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                      <Check size={10} /> Terhubung
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium text-slate-400">
+                      Opsional (Cari untuk mengisi otomatis)
+                    </span>
+                  )}
+                </div>
+
+                {selectedJemaatId ? (
+                  <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 rounded-xl p-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+                      <Check size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-emerald-900 font-bold truncate">
+                        {jemaatMap[selectedJemaatId]?.name || memberForm.name || selectedJemaatId}
+                      </p>
+                      <p className="text-[11px] text-emerald-700">
+                        {memberForm.birthDate ? `${formatDate(memberForm.birthDate)} · ` : ''}
+                        {memberForm.phone || 'Tanpa no. HP'}
+                      </p>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setSelectedJemaatId('')} 
+                      className="p-1.5 text-emerald-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Lepas tautan"
+                    >
+                      <Unlink size={15} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        type="text" 
+                        placeholder={`Ketik nama jemaat umum untuk sinkron otomatis (${jemaatList.length} jemaat)...`} 
+                        value={linkSearch}
+                        onChange={e => setLinkSearch(e.target.value)}
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                      />
+                    </div>
+                    {/* Inline suggestions */}
+                    {linkSearch.length >= 2 && formSuggestions.length > 0 && (
+                      <div className="mt-1 border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-white shadow-md">
+                        {formSuggestions.map(r => (
+                          <button 
+                            key={r.jemaat.id}
+                            type="button"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              selectJemaatToForm(r.jemaat);
+                            }}
+                            className="w-full text-left px-3.5 py-2.5 hover:bg-indigo-50 transition-colors border-b border-slate-100 last:border-0 cursor-pointer flex items-center justify-between group"
+                          >
+                            <div className="flex-1 min-w-0 pr-2">
+                              <p className="font-bold text-slate-900 text-xs group-hover:text-indigo-600 transition-colors">{r.jemaat.name}</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                {r.jemaat.birthDate && `${formatDate(r.jemaat.birthDate)} · `}
+                                {r.jemaat.phone ? r.jemaat.phone : 'Tanpa no. HP'}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100 flex items-center gap-1 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                              <Link size={10} /> Hubungkan
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {linkSearch.length >= 2 && formSuggestions.length === 0 && (
+                      <p className="text-[11px] text-slate-400 px-1">Tidak ditemukan jemaat dengan nama tersebut. Anda bisa input manual di bawah.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Auto-suggestion banner */}
               {!selectedJemaatId && autoSuggestion && (
                 <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-start gap-3 shadow-2xs">
@@ -818,7 +920,7 @@ export default function KomisiManagement() {
                   </div>
                   <button 
                     type="button"
-                    onClick={() => setSelectedJemaatId(autoSuggestion.jemaat.id)}
+                    onClick={() => selectJemaatToForm(autoSuggestion.jemaat)}
                     className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl font-bold flex-shrink-0 shadow-2xs cursor-pointer transition-colors"
                   >
                     <Link size={12} /> Hubungkan
@@ -907,82 +1009,6 @@ export default function KomisiManagement() {
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
                   />
                 </div>
-              </div>
-
-              {/* Card 3: Hubungkan ke Data Jemaat Umum */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <Link size={13} className="text-indigo-600" />
-                    <span>Sinkronisasi ke Data Jemaat Umum</span>
-                  </label>
-                  {selectedJemaatId && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      Terhubung
-                    </span>
-                  )}
-                </div>
-
-                {selectedJemaatId ? (
-                  <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 rounded-xl p-3">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
-                      <Check size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-emerald-900 font-bold truncate">
-                        {jemaatMap[selectedJemaatId]?.name || selectedJemaatId}
-                      </p>
-                      {jemaatMap[selectedJemaatId]?.birthDate && (
-                        <p className="text-[11px] text-emerald-700">
-                          {formatDate(jemaatMap[selectedJemaatId].birthDate!)} · {jemaatMap[selectedJemaatId].phone || 'Tanpa no. HP'}
-                        </p>
-                      )}
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={() => setSelectedJemaatId('')} 
-                      className="p-1.5 text-emerald-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="Lepas tautan"
-                    >
-                      <Unlink size={15} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <div className="relative">
-                      <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input 
-                        type="text" 
-                        placeholder={`Cari dari ${jemaatList.length} data jemaat umum...`} 
-                        value={linkSearch}
-                        onChange={e => setLinkSearch(e.target.value)}
-                        className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
-                      />
-                    </div>
-                    {/* Inline suggestions */}
-                    {linkSearch.length >= 2 && formSuggestions.length > 0 && (
-                      <div className="mt-1 border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-white shadow-md">
-                        {formSuggestions.map(r => (
-                          <button 
-                            key={r.jemaat.id}
-                            type="button"
-                            onMouseDown={e => { e.preventDefault(); setSelectedJemaatId(r.jemaat.id); setLinkSearch(''); }}
-                            className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 transition-colors border-b border-slate-100 last:border-0 cursor-pointer"
-                          >
-                            <p className="font-bold text-slate-900 text-xs">{r.jemaat.name}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                              {r.jemaat.birthDate && `${formatDate(r.jemaat.birthDate)} · `}
-                              {r.jemaat.phone && `${r.jemaat.phone}`}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {linkSearch.length >= 2 && formSuggestions.length === 0 && (
-                      <p className="text-[11px] text-slate-400 px-1">Tidak ditemukan jemaat dengan nama tersebut.</p>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
 
