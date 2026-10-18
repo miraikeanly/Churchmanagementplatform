@@ -12,6 +12,7 @@ export interface Ministry {
   location: string;
   photo: string;
   accent: string;
+  instagramUrl?: string;
 }
 
 /* ─────────── DATA: ADULT ─────────── */
@@ -39,6 +40,7 @@ export const ADULT: Ministry[] = [
     location: 'Ruang Serbaguna Lantai 2',
     photo: 'https://images.unsplash.com/photo-1641135309090-635897be4dd3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800',
     accent: '#fb923c',
+    instagramUrl: 'https://www.instagram.com/koemasjeltim?utm_source=ig_web_button_share_sheet&xtok=ZDNlZDc0MzIxNw==',
   },
   {
     id: 'kowari',
@@ -71,10 +73,11 @@ export const ADULT: Ministry[] = [
     greeting: 'Hi couples!',
     headline: 'KELUARGA YANG KUAT DIMULAI DARI SINI',
     description: 'Kompas adalah persekutuan khusus pasangan suami-istri yang ingin membangun keluarga di atas fondasi iman. Lewat ibadah dan sharing antar pasangan, Kompas hadir menemani setiap musim dalam pernikahan.',
-    schedules: [{ day: 'Sabtu Pertama', time: '16.00 – 18.30' }],
+    schedules: [{ day: 'Sabtu Ketiga', time: '18.00' }],
     location: 'Ruang Serbaguna Lantai 2',
     photo: 'https://images.unsplash.com/photo-1645620549807-0aea79c18482?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800',
     accent: '#34d399',
+    instagramUrl: 'https://www.instagram.com/kompasjeltim?utm_source=ig_web_button_share_sheet&mdxt=ZDNlZDc0MzIxNw==',
   },
   {
     id: 'doa',
@@ -103,12 +106,12 @@ export const NXT_GEN: Ministry[] = [
     headline: 'GENERASI YANG SIAP DIPAKAI TUHAN',
     description: 'Vessel adalah komunitas pemuda GBI Jelambar Timur untuk usia 18 sampai 30 tahun. Ibadahnya relevan, diskusinya jujur, dan suasananya jauh dari kaku. Tempat kamu bisa tumbuh dan terhubung dengan teman-teman yang satu iman.',
     schedules: [
-      { day: 'Jumat',  time: '18.30 – 21.00' },
-      { day: 'Minggu', time: '11.30 – 13.00' },
+      { day: 'Sabtu Pertama', time: '18.30' },
     ],
-    location: 'Ruang Vessel Lantai 3',
+    location: 'Ruang Vessel Lantai 2',
     photo: 'https://images.unsplash.com/photo-1521574778337-d962ef81733d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
     accent: '#818cf8',
+    instagramUrl: 'https://www.instagram.com/thevesselyouthcom?utm_source=ig_web_button_share_sheet&cplk=ZDNlZDc0MzIxNw==',
   },
   {
     id: 'teens',
@@ -118,12 +121,12 @@ export const NXT_GEN: Ministry[] = [
     headline: 'IDENTITASMU LEBIH DARI YANG KAMU KIRA',
     description: 'Teens adalah komunitas remaja GBI Jelambar Timur untuk usia 13 sampai 17 tahun. Programnya dirancang sesuai dunia remaja — jujur, relevan, dan nggak menggurui. Ada ruang buat bertanya, berbagi, dan jadi diri sendiri.',
     schedules: [
-      { day: 'Sabtu',  time: '16.00 – 18.00' },
-      { day: 'Minggu', time: '09.30 – 11.30' },
+      { day: 'Minggu', time: '12.30' },
     ],
-    location: 'Ruang Teens Lantai 3',
+    location: 'Ruang Teens Lantai 2',
     photo: 'https://images.unsplash.com/photo-1566135235200-616a028972c9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
     accent: '#a78bfa',
+    instagramUrl: 'https://www.instagram.com/rbijeltim/?utm_source=ig_web_button_share_sheet',
   },
 ];
 
@@ -137,12 +140,12 @@ export const KIDS: Ministry[] = [
     headline: 'MENGENAL TUHAN SEJAK KECIL',
     description: 'Sekolah Minggu adalah ibadah anak-anak GBI Jelambar Timur untuk usia 3 sampai 12 tahun. Materinya disampaikan lewat cerita Alkitab, lagu, dan aktivitas kreatif yang menyenangkan.',
     schedules: [
-      { day: 'Minggu', time: '07.00 – 09.00' },
-      { day: 'Minggu', time: '09.30 – 11.30' },
+      { day: 'Minggu', time: '10.00' },
     ],
     location: 'Ruang Anak Lantai 2',
     photo: 'https://images.unsplash.com/photo-1713012633197-1426a345ca99?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800',
     accent: '#facc15',
+    instagramUrl: 'https://www.instagram.com/abijeltim?utm_source=ig_web_button_share_sheet&srtk=ZDNlZDc0MzIxNw==',
   },
 ];
 
