@@ -414,6 +414,28 @@ export default function JemaatPage() {
 
       {/* ── Lighthouse Music / Album Promo ── */}
       <section className="py-16 sm:py-24 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-white relative overflow-hidden">
+        {/* Background Choir Video (15% opacity, looped, muted, playsInline) */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+          <video
+            ref={(el) => {
+              if (el && el.paused) {
+                el.play().catch(() => {});
+              }
+            }}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            className="w-full h-full object-cover opacity-15 scale-105 filter contrast-110 brightness-105"
+          >
+            <source src="/lighthouse-music.mp4" type="video/mp4" />
+          </video>
+          {/* Subtle gradient overlays to blend edges perfectly into dark container */}
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-900/80 via-transparent to-slate-900/90" />
+          <div className="absolute inset-0 bg-radial from-transparent via-slate-950/40 to-slate-950/80" />
+        </div>
+
         {/* Ambient atmospheric glows */}
         <div className="absolute top-0 right-1/4 w-96 h-96 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/4 w-96 h-96 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
