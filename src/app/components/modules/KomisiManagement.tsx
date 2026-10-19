@@ -9,8 +9,9 @@ import KomisiReport from './KomisiReport';
 import ModernDatePicker from '../common/ModernDatePicker';
 import {
   Users, Plus, Trash2, Edit2, X, Check, ChevronDown, AlertTriangle,
-  ClipboardList, Download, Calendar, UserCheck, UserX, Link, Unlink,
+  ClipboardList, Download, Calendar as CalendarIcon, UserCheck, UserX, Link, Unlink,
   Search, RefreshCw, ShieldAlert, Info, Activity, Circle, Save, Phone,
+  ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles
 } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
@@ -39,6 +40,7 @@ export interface KomisiMember {
   joinedAt: string;
   jemaatId?: string;
   komisiId: KomisiId;
+  photoUrl?: string;
 }
 
 interface AbsenSession {
@@ -57,6 +59,7 @@ interface JemaatMember {
   phone?: string;
   address?: string;
   birthDate?: string;
+  photoUrl?: string;
   role?: 'anggota' | 'pengurus' | 'guru';
 }
 
@@ -113,7 +116,9 @@ function formatDate(iso: string) {
 }
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const fmt = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const isoDate = fmt;
 
 /** The Sunday that ends the current Mon–Sun week (today if it is Sunday). Attendance resets every Monday. */
 function currentWeekSunday(): string {
@@ -126,11 +131,366 @@ function currentWeekSunday(): string {
 /** Age bands of the age-based komisi; used to flag members who have outgrown theirs. */
 const KOMISI_AGE_RANGE: Record<string, [number, number]> = { 'sekolah-minggu': [0, 12], teens: [13, 17], vessel: [18, 30] };
 
-// ── Badge components ──────────────────────────────────────────────────────────
 export function KomisiBadge({ id }: { id: string }) {
   const k = KOMISI_LIST.find(k => k.id === id);
   if (!k) return null;
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${k.color}`}>{k.label}</span>;
+}
+
+const monthLabel = (y: number, m: number) =>
+  new Date(y, m - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+function formatDateLabel(dateStr: string) {
+  if (!dateStr) return 'Pilih Tanggal';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  const dayName = d.toLocaleDateString('id-ID', { weekday: 'long' });
+  return `${dayName}, ${parts[2]} ${MONTH_SHORT[Number(parts[1]) - 1]} ${parts[0]}`;
+}
+
+function getWeekInfo(dateStr: string) {
+  const parts = dateStr.split('-').map(Number);
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  const day = d.getDay(); // 0 is Sun, 1 is Mon
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const cur = new Date(monday);
+    cur.setDate(monday.getDate() + i);
+    dates.push(fmt(cur));
+  }
+
+  return {
+    monday: fmt(monday),
+    sunday: fmt(sunday),
+    dates,
+    sundayDate: fmt(sunday),
+  };
+}
+
+// ── Member Avatar with photo and initials ───────────────────────────────────
+function MemberAvatar({ name, photoUrl, present }: { name: string; photoUrl?: string; present: boolean }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(w => w[0])
+    .join('')
+    .toUpperCase();
+
+  if (photoUrl && !imgError) {
+    return (
+      <div className="relative flex-shrink-0">
+        <img
+          src={photoUrl}
+          alt={name}
+          onError={() => setImgError(true)}
+          className={`w-11 h-11 rounded-full object-cover border-2 transition-all ${
+            present ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-gray-200'
+          }`}
+        />
+        {present && (
+          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 transition-all ${
+        present
+          ? 'bg-emerald-500 text-white shadow-xs ring-2 ring-emerald-200'
+          : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600 border border-slate-200'
+      }`}
+    >
+      {initials || '?'}
+    </div>
+  );
+}
+
+// ── Interactive Calendar Modal for Komisi Attendance ────────────────────────
+function KomisiCalendarModal({
+  isOpen,
+  onClose,
+  selectedDate,
+  onSelectDate,
+  sessions,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedDate: string;
+  onSelectDate: (date: string) => void;
+  sessions: AbsenSession[];
+}) {
+  const initialDate = selectedDate ? new Date(selectedDate + 'T00:00:00') : new Date();
+  const [viewYear, setViewYear] = useState(initialDate.getFullYear() || new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState((initialDate.getMonth() + 1) || (new Date().getMonth() + 1));
+
+  useEffect(() => {
+    if (selectedDate && isOpen) {
+      const parts = selectedDate.split('-').map(Number);
+      if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        setViewYear(parts[0]);
+        setViewMonth(parts[1]);
+      }
+    }
+  }, [selectedDate, isOpen]);
+
+  if (!isOpen) return null;
+
+  const firstDayOfMonth = new Date(viewYear, viewMonth - 1, 1);
+  const startDay = firstDayOfMonth.getDay(); // 0 is Sun, 1 is Mon
+  const offset = startDay === 0 ? 6 : startDay - 1; // Mon = 0, Sun = 6
+
+  const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
+  const days: { dateStr: string; dayNum: number; isSunday: boolean }[] = [];
+
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = new Date(viewYear, viewMonth - 1, i);
+    const dateStr = fmt(d);
+    days.push({
+      dateStr,
+      dayNum: i,
+      isSunday: d.getDay() === 0,
+    });
+  }
+
+  const selectedWeek = getWeekInfo(selectedDate || fmt(new Date()));
+  const todayStr = fmt(new Date());
+  const thisWeekSundayStr = currentWeekSunday();
+
+  const sessionMap = new Map<string, number>();
+  sessions.forEach(s => {
+    if (s.date) {
+      sessionMap.set(s.date, (s.presentIds || []).length);
+    }
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+              <CalendarIcon size={17} />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-white">Kalender Absensi Komisi</h3>
+              <p className="text-[11px] text-indigo-200/80">Pilih tanggal ibadah / kegiatan komisi</p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+          {/* Year Navigator & Slider */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 space-y-2">
+            <div className="flex items-center justify-between gap-1">
+              <button 
+                type="button" 
+                onClick={() => setViewYear(y => Math.max(2015, y - 5))} 
+                className="px-2 py-1 rounded-xl hover:bg-white text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer border border-transparent hover:border-slate-200 text-xs font-bold"
+                title="-5 Tahun"
+              >
+                &laquo; 5th
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setViewYear(y => Math.max(2015, y - 1))} 
+                className="p-1.5 rounded-xl hover:bg-white text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                title="Tahun Sebelumnya"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tahun:</span>
+                <select
+                  value={viewYear}
+                  onChange={e => setViewYear(Number(e.target.value))}
+                  className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-sm font-extrabold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer shadow-2xs"
+                >
+                  {Array.from({ length: 31 }, (_, i) => 2015 + i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button 
+                type="button" 
+                onClick={() => setViewYear(y => Math.min(2045, y + 1))} 
+                className="p-1.5 rounded-xl hover:bg-white text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                title="Tahun Selanjutnya"
+              >
+                <ChevronRight size={16} />
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setViewYear(y => Math.min(2045, y + 5))} 
+                className="px-2 py-1 rounded-xl hover:bg-white text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer border border-transparent hover:border-slate-200 text-xs font-bold"
+                title="+5 Tahun"
+              >
+                5th &raquo;
+              </button>
+            </div>
+
+            <div className="pt-1">
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1 px-1">
+                <span>2015</span>
+                <span className="text-indigo-700 font-extrabold text-xs bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md">
+                  Tahun: {viewYear}
+                </span>
+                <span>2045</span>
+              </div>
+              <input
+                type="range"
+                min={2015}
+                max={2045}
+                value={viewYear}
+                onChange={e => setViewYear(Number(e.target.value))}
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Month Selector */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Pilih Bulan</span>
+              <span className="text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-lg">
+                {monthLabel(viewYear, viewMonth)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+              {['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'].map((mName, idx) => {
+                const mNum = idx + 1;
+                const isSelected = viewMonth === mNum;
+                return (
+                  <button
+                    key={mNum}
+                    type="button"
+                    onClick={() => setViewMonth(mNum)}
+                    className={`py-1.5 px-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-xs scale-102 ring-2 ring-indigo-400/30'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
+                    }`}
+                  >
+                    {mName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Days Grid */}
+          <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 pt-2 border-t border-slate-100">
+            <span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span><span className="text-rose-500 font-extrabold">Min</span>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1.5">
+            {Array.from({ length: offset }).map((_, idx) => (
+              <div key={`empty-${idx}`} className="h-12 rounded-xl opacity-0" />
+            ))}
+
+            {days.map(d => {
+              const count = sessionMap.get(d.dateStr);
+              const inSelectedWeek = selectedWeek.dates.includes(d.dateStr);
+              const isSelectedDate = selectedDate === d.dateStr;
+              const isToday = d.dateStr === todayStr;
+
+              return (
+                <button
+                  key={d.dateStr}
+                  type="button"
+                  onClick={() => {
+                    onSelectDate(d.dateStr);
+                    onClose();
+                  }}
+                  className={`h-12 rounded-xl p-1 flex flex-col items-center justify-between transition-all cursor-pointer border ${
+                    isSelectedDate
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md font-bold ring-2 ring-blue-300'
+                      : inSelectedWeek
+                      ? 'bg-blue-50/70 border-blue-200 text-blue-900 font-semibold'
+                      : d.isSunday
+                      ? 'bg-rose-50/40 border-rose-100 text-rose-700 hover:bg-rose-50'
+                      : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50 text-slate-700'
+                  } ${isToday && !isSelectedDate ? 'ring-2 ring-amber-400' : ''}`}
+                >
+                  <span className="text-xs leading-none font-bold">{d.dayNum}</span>
+                  {count !== undefined ? (
+                    <span
+                      className={`text-[9px] px-1 py-0.5 rounded-full font-extrabold leading-none ${
+                        isSelectedDate
+                          ? 'bg-white text-blue-700'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                      title={`${count} anggota hadir`}
+                    >
+                      {count}
+                    </span>
+                  ) : d.isSunday ? (
+                    <span className="text-[8px] text-rose-400">ibadah</span>
+                  ) : (
+                    <span className="h-1.5" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Quick Selection Buttons */}
+          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+              <span className="text-[11px] font-medium text-slate-600">Ada Data Absen</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectDate(todayStr);
+                  onClose();
+                }}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer transition-colors text-[11px]"
+              >
+                Hari Ini
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectDate(thisWeekSundayStr);
+                  onClose();
+                }}
+                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg cursor-pointer transition-colors text-[11px]"
+              >
+                Minggu Ini
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 
@@ -178,6 +538,10 @@ export default function KomisiManagement() {
 
   const [sessions, setSessions] = useState<AbsenSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(() => currentWeekSunday());
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [attendanceSearch, setAttendanceSearch] = useState('');
+  const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'present' | 'absent'>('all');
   const [activeSession, setActiveSession] = useState<AbsenSession | null>(null);
   const [draftPresentIds, setDraftPresentIds] = useState<Set<string>>(new Set());
   const [savingAttendance, setSavingAttendance] = useState(false);
@@ -190,7 +554,6 @@ export default function KomisiManagement() {
   const [savingMember, setSavingMember] = useState(false);
   const [selectedJemaatId, setSelectedJemaatId] = useState('');
   const [linkSearch, setLinkSearch] = useState('');
-
 
   // Session form
   const [showSessionForm, setShowSessionForm] = useState(false);
@@ -209,7 +572,14 @@ export default function KomisiManagement() {
       const toJ = (r: any): JemaatMember | null => {
         const m = r.value as any;
         if (!m?.name) return null;
-        return { id: m.id || r.key, name: m.name, phone: m.phone || '', address: m.address || '', birthDate: m.birthDate || '' };
+        return { 
+          id: m.id || r.key, 
+          name: m.name, 
+          phone: m.phone || '', 
+          address: m.address || '', 
+          birthDate: m.birthDate || '',
+          photoUrl: m.photoUrl || undefined,
+        };
       };
 
       const [{ data: d1 }, { data: d2 }] = await Promise.all([
@@ -253,42 +623,61 @@ export default function KomisiManagement() {
       if (err) throw err;
       const list = (data ?? []).map((r: any) => r.value as AbsenSession).filter(Boolean);
 
-      // One session per week, created automatically. Last weeks' sessions stay saved and feed the Laporan tab.
-      const weekDate = currentWeekSunday();
-      let current = list.find(x => x.date === weekDate);
-      if (!current) {
-        const dt = new Date(weekDate + 'T00:00:00');
-        current = {
-          id: `week-${weekDate}`, komisiId: activeKomisi, date: weekDate,
-          title: `Ibadah Minggu ${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`,
-          createdAt: new Date().toISOString(), presentIds: [], absentIds: [],
-        } as AbsenSession;
-        await supabaseAdmin.from(KV).insert({ key: `komisi:${activeKomisi}:absen:${current.id}`, value: current });
-        list.push(current);
-      }
-
-      // Tidy up: earlier versions pre-created a blank session for every Sunday of the year.
-      const blanks = list.filter(x => x.id.startsWith('week-') && x.date !== weekDate && x.presentIds.length + x.absentIds.length === 0);
+      // Tidy up: clean up old empty blank sessions
+      const blanks = list.filter(x => x.id.startsWith('week-') && (x.presentIds || []).length + (x.absentIds || []).length === 0);
       if (blanks.length > 0) {
         for (let i = 0; i < blanks.length; i += 10) {
           await Promise.all(blanks.slice(i, i + 10).map(x => supabaseAdmin.from(KV).delete().eq('key', `komisi:${activeKomisi}:absen:${x.id}`)));
         }
       }
       const kept = list.filter(x => !blanks.includes(x));
-
-      kept.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      kept.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       setSessions(kept);
-      setActiveSession(kept.find(x => x.date === weekDate) ?? null);
     } catch (e: any) { setError(e.message); }
     setLoadingSessions(false);
   }, [activeKomisi]);
 
+  const changeDateByDays = (days: number) => {
+    const parts = selectedDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(fmt(d));
+  };
+
   useEffect(() => { loadJemaat(); }, [loadJemaat]);
   useEffect(() => {
-    setActiveSession(null); setDraftPresentIds(new Set()); setAttendanceSaved(true); setSearch('');
+    setDraftPresentIds(new Set()); setAttendanceSaved(true); setSearch('');
     loadMembers(); loadSessions();
   }, [activeKomisi]);
-  useEffect(() => { setDraftPresentIds(new Set(activeSession?.presentIds || [])); setAttendanceSaved(true); }, [activeSession?.id]);
+
+  // Sync activeSession whenever selectedDate, sessions, or activeKomisi change
+  useEffect(() => {
+    if (loadingSessions) return;
+    const found = sessions.find(s => s.date === selectedDate);
+    if (found) {
+      setActiveSession(found);
+    } else {
+      const dt = new Date(selectedDate + 'T00:00:00');
+      const isSun = dt.getDay() === 0;
+      const title = isSun
+        ? `Ibadah Minggu ${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`
+        : `Kegiatan Komisi ${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
+      setActiveSession({
+        id: `session-${activeKomisi}-${selectedDate}`,
+        komisiId: activeKomisi,
+        date: selectedDate,
+        title,
+        createdAt: new Date().toISOString(),
+        presentIds: [],
+        absentIds: [],
+      });
+    }
+  }, [selectedDate, sessions, activeKomisi, loadingSessions]);
+
+  useEffect(() => { 
+    setDraftPresentIds(new Set(activeSession?.presentIds || [])); 
+    setAttendanceSaved(true); 
+  }, [activeSession?.id, activeSession?.date]);
 
   // ── Jemaat lookup map ─────────────────────────────────────────────────────
   const jemaatMap = useMemo(() => {
@@ -469,9 +858,55 @@ export default function KomisiManagement() {
     setSavingSession(false);
   };
 
-  const toggleAttendance = (id: string) => { if (!canEdit) return; setDraftPresentIds(old => { const next = new Set(old); next.has(id) ? next.delete(id) : next.add(id); return next; }); setAttendanceSaved(false); };
-  const markAll = (present: boolean) => { if (!canEdit) return; setDraftPresentIds(new Set(present ? members.map(m => m.id) : [])); setAttendanceSaved(false); };
-  const saveAttendance = async () => { if (!activeSession || !canEdit) return; setSavingAttendance(true); try { const presentIds = [...draftPresentIds]; const updated = { ...activeSession, presentIds, absentIds: members.map(m => m.id).filter(id => !draftPresentIds.has(id)), updatedAt: new Date().toISOString() }; const result = await supabaseAdmin.from(KV).update({ value: updated }).eq('key', 'komisi:' + activeKomisi + ':absen:' + activeSession.id); if (result.error) throw result.error; setActiveSession(updated); setSessions(old => old.map(x => x.id === updated.id ? updated : x)); setAttendanceSaved(true); } catch (e: any) { setError(e.message || 'Gagal menyimpan absensi'); } finally { setSavingAttendance(false); } };
+  const toggleAttendance = (id: string) => {
+    if (!canEdit) return;
+    setDraftPresentIds(old => {
+      const next = new Set(old);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+    setAttendanceSaved(false);
+  };
+
+  const markAll = (present: boolean) => {
+    if (!canEdit) return;
+    setDraftPresentIds(new Set(present ? members.map(m => m.id) : []));
+    setAttendanceSaved(false);
+  };
+
+  const saveAttendance = async () => {
+    if (!activeSession || !canEdit) return;
+    setSavingAttendance(true);
+    try {
+      const presentIds = [...draftPresentIds];
+      const absentIds = members.map(m => m.id).filter(id => !draftPresentIds.has(id));
+      const updated: AbsenSession = {
+        ...activeSession,
+        presentIds,
+        absentIds,
+      };
+      const result = await supabaseAdmin.from(KV).upsert({
+        key: `komisi:${activeKomisi}:absen:${activeSession.id}`,
+        value: updated,
+      });
+      if (result.error) throw result.error;
+      setActiveSession(updated);
+      setSessions(old => {
+        const idx = old.findIndex(x => x.id === updated.id || x.date === updated.date);
+        if (idx >= 0) {
+          const next = [...old];
+          next[idx] = updated;
+          return next;
+        }
+        return [updated, ...old].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      });
+      setAttendanceSaved(true);
+    } catch (e: any) {
+      setError(e.message || 'Gagal menyimpan absensi');
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
 
   const [deletingSession, setDeletingSession] = useState<AbsenSession | null>(null);
 
@@ -732,60 +1167,372 @@ export default function KomisiManagement() {
         />
       )}
 
-      {/* ── ABSENSI TAB: this week only ── */}
+      {/* ── ABSENSI TAB: Dynamic Date & Enhanced UI ── */}
       {tab === 'absensi' && (
-        <div>
+        <div className="space-y-4">
+          <KomisiCalendarModal
+            isOpen={calendarOpen}
+            onClose={() => setCalendarOpen(false)}
+            selectedDate={selectedDate}
+            onSelectDate={(newDate) => {
+              setSelectedDate(newDate);
+            }}
+            sessions={sessions}
+          />
+
           {loadingSessions || !activeSession ? (
-            <div className="text-center py-16 text-gray-400 text-sm">Memuat absensi minggu ini...</div>
+            <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center shadow-xs">
+              <RefreshCw size={28} className="animate-spin text-blue-600 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-slate-700">Memuat data absensi...</p>
+              <p className="text-xs text-slate-400 mt-1">Mengambil sesi untuk tanggal {formatDateLabel(selectedDate)}</p>
+            </div>
           ) : (
             <>
-              <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-                <div>
-                  <span className="inline-block text-[11px] font-bold uppercase tracking-widest text-blue-600 bg-blue-50 rounded-full px-2.5 py-1 mb-2">Minggu ini</span>
-                  <h3 className="font-bold text-gray-900 text-lg leading-tight">{activeSession.title}</h3>
-                  <p className="text-sm text-gray-400 mt-0.5">
-                    {activeSession.presentIds.length} hadir · {activeSession.absentIds.length} absen · {Math.max(0, members.length - activeSession.presentIds.length - activeSession.absentIds.length)} belum dicatat
-                  </p>
+              {/* Header Card: Calendar date picker, navigation & stats */}
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-6 shadow-xs space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  {/* Left: Date selector & Navigation */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-0.5">
+                        {selectedDate === fmt(new Date()) ? 'Hari Ini' : selectedDate === currentWeekSunday() ? 'Minggu Ini' : 'Sesi Terpilih'}
+                      </span>
+                      {sessions.some(s => s.date === selectedDate && (s.presentIds || []).length > 0) && (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5 flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Tersimpan di Database
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Big Interactive Calendar Button */}
+                      <button
+                        type="button"
+                        onClick={() => setCalendarOpen(true)}
+                        className="group flex items-center gap-2.5 bg-gradient-to-r from-slate-900 to-indigo-950 hover:from-slate-800 hover:to-indigo-900 text-white px-4 py-2.5 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer text-left"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-white/10 group-hover:bg-white/20 flex items-center justify-center text-indigo-200 transition-colors">
+                          <CalendarIcon size={17} />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-medium text-indigo-200/80 uppercase tracking-wider">Pilih Tanggal</div>
+                          <div className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">
+                            <span>{formatDateLabel(selectedDate)}</span>
+                            <ChevronDown size={15} className="text-indigo-300 group-hover:translate-y-0.5 transition-transform" />
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Quick Day Stepper */}
+                      <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
+                        <button
+                          type="button"
+                          onClick={() => changeDateByDays(-1)}
+                          title="Hari Sebelumnya"
+                          className="p-2 hover:bg-white text-slate-600 hover:text-slate-900 rounded-xl transition-all cursor-pointer"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDate(fmt(new Date()))}
+                          className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-white rounded-xl transition-all cursor-pointer"
+                        >
+                          Hari Ini
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => changeDateByDays(1)}
+                          title="Hari Selanjutnya"
+                          className="p-2 hover:bg-white text-slate-600 hover:text-slate-900 rounded-xl transition-all cursor-pointer"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Quick actions (Hadir Semua, Reset, Export) */}
+                  <div className="flex items-center gap-2 flex-wrap lg:justify-end">
+                    {canEdit && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => markAll(true)}
+                          className="text-xs font-bold px-3.5 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Check size={14} /> Hadir Semua
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => markAll(false)}
+                          className="text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => exportAttendance(activeSession)}
+                      className="flex items-center gap-1.5 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3.5 py-2.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Download size={14} /> Export Excel
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {canEdit && (
-                    <>
-                      <button onClick={() => markAll(true)} className="text-xs font-semibold px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50">Hadir Semua</button>
-                      <button onClick={() => markAll(false)} className="text-xs font-semibold px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">Reset</button>
-                    </>
-                  )}
-                  <button onClick={() => exportAttendance(activeSession)}
-                    className="flex items-center gap-1.5 text-xs font-semibold border border-gray-200 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50">
-                    <Download size={13} />Export
-                  </button>
+
+                {/* Progress bar and statistics */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <div className="flex items-center gap-3">
+                      <span className="text-emerald-700 flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                        <strong>{draftPresentIds.size}</strong> Hadir
+                      </span>
+                      <span className="text-slate-500 flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                        <strong>{Math.max(0, members.length - draftPresentIds.size)}</strong> Belum Hadir
+                      </span>
+                    </div>
+                    <span className="text-slate-600 font-bold">
+                      {members.length > 0 ? Math.round((draftPresentIds.size / members.length) * 100) : 0}% Kehadiran
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden p-0.5">
+                    <div
+                      className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${members.length > 0 ? Math.round((draftPresentIds.size / members.length) * 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Filter tabs & Member Search bar */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceFilter('all')}
+                      className={`flex-1 sm:flex-initial text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                        attendanceFilter === 'all'
+                          ? 'bg-white text-slate-900 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Semua ({members.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceFilter('present')}
+                      className={`flex-1 sm:flex-initial text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                        attendanceFilter === 'present'
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-emerald-700'
+                      }`}
+                    >
+                      Hadir ({draftPresentIds.size})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceFilter('absent')}
+                      className={`flex-1 sm:flex-initial text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                        attendanceFilter === 'absent'
+                          ? 'bg-rose-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-rose-700'
+                      }`}
+                    >
+                      Belum Hadir ({Math.max(0, members.length - draftPresentIds.size)})
+                    </button>
+                  </div>
+
+                  <div className="relative w-full sm:w-64">
+                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Cari nama anggota..."
+                      value={attendanceSearch}
+                      onChange={e => setAttendanceSearch(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-all"
+                    />
+                    {attendanceSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setAttendanceSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-blue-50/60 border border-blue-100 text-blue-700 text-xs rounded-xl px-3.5 py-2.5 mb-4">
-                Absensi minggu ini tersimpan setelah tombol <strong>Simpan Absensi</strong> ditekan. Minggu sebelumnya tetap tersedia di tab <strong>Laporan</strong>.
-              </div>
+              {/* Members Attendance List */}
+              {(() => {
+                const filteredMembers = members.filter(m => {
+                  if (attendanceFilter === 'present' && !draftPresentIds.has(m.id)) return false;
+                  if (attendanceFilter === 'absent' && draftPresentIds.has(m.id)) return false;
+                  if (attendanceSearch.trim()) {
+                    const q = attendanceSearch.toLowerCase();
+                    const nameMatch = m.name.toLowerCase().includes(q);
+                    const phoneMatch = m.phone.toLowerCase().includes(q);
+                    return nameMatch || phoneMatch;
+                  }
+                  return true;
+                });
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                {members.map(m => {
-                  const isPresent = draftPresentIds.has(m.id);
+                if (filteredMembers.length === 0) {
                   return (
-                    <div key={m.id} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                      <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold text-xs flex-shrink-0">
-                        {m.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 break-words">{m.name}</p>
-                        <p className="text-xs text-gray-400">
-                          {m.phone}
-                          {(() => { const bd = (m.jemaatId && jemaatMap[m.jemaatId]?.birthDate) || m.birthDate; const a = bd ? getAge(bd) : -1; return a >= 0 ? `${m.phone ? ' · ' : ''}${a} thn` : ''; })()}
-                        </p>
-                      </div>
-                      {canEdit ? <button type="button" onClick={() => toggleAttendance(m.id)} aria-label={'Tandai kehadiran: ' + m.name} aria-pressed={isPresent} className={'w-11 h-11 rounded-full border-2 flex items-center justify-center flex-shrink-0 ' + (isPresent ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 text-gray-300')} >{isPresent ? <Check size={20} /> : <Circle size={20} />}</button> : <span className={'text-xs font-semibold px-2 py-1 rounded-full ' + (isPresent ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400')}>{isPresent ? 'Hadir' : 'Absen'}</span>}
+                    <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center shadow-xs">
+                      <Users size={32} className="text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-bold text-slate-700">Tidak ada anggota yang cocok</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {attendanceSearch ? `Tidak ditemukan anggota dengan kata kunci "${attendanceSearch}"` : 'Belum ada data untuk filter ini.'}
+                      </p>
                     </div>
                   );
-                })}
-              </div>
-              {canEdit && <div className="sticky bottom-2 z-20 mt-4 flex justify-center px-2"><button onClick={saveAttendance} disabled={savingAttendance || attendanceSaved} className="flex items-center gap-2 rounded-xl px-6 py-3 font-semibold text-white shadow-lg bg-blue-600 disabled:bg-emerald-600">{savingAttendance ? <RefreshCw size={17} className="animate-spin" /> : attendanceSaved ? <Check size={17} /> : <Save size={17} />}{savingAttendance ? 'Menyimpan...' : attendanceSaved ? 'Absensi Tersimpan' : 'Simpan Absensi'}</button></div>}
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {filteredMembers.map(m => {
+                      const isPresent = draftPresentIds.has(m.id);
+                      const jMember = m.jemaatId ? jemaatMap[m.jemaatId] : undefined;
+                      const photoUrl = jMember?.photoUrl || m.photoUrl;
+                      const birthDate = jMember?.birthDate || m.birthDate;
+                      const age = birthDate ? getAge(birthDate) : -1;
+
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={() => {
+                            if (canEdit) toggleAttendance(m.id);
+                          }}
+                          className={`rounded-2xl p-3.5 flex items-center justify-between gap-3 border transition-all cursor-pointer ${
+                            isPresent
+                              ? 'bg-gradient-to-r from-emerald-50/80 to-teal-50/40 border-emerald-300/80 shadow-xs ring-1 ring-emerald-200'
+                              : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {/* Member Avatar (Photo or Initials) */}
+                            <MemberAvatar name={m.name} photoUrl={photoUrl} present={isPresent} />
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className={`text-sm font-bold truncate ${isPresent ? 'text-emerald-950' : 'text-slate-800'}`}>
+                                  {m.name}
+                                </h4>
+                                {m.role && m.role !== 'anggota' && (
+                                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                                    m.role === 'pengurus'
+                                      ? 'bg-purple-100 text-purple-700'
+                                      : 'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    {m.role === 'guru' ? 'Guru' : 'Pengurus'}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 flex-wrap">
+                                {m.phone && (
+                                  <span className="flex items-center gap-1">
+                                    <Phone size={11} className="text-slate-400" />
+                                    <span>{m.phone}</span>
+                                  </span>
+                                )}
+                                {age >= 0 && (
+                                  <>
+                                    <span>·</span>
+                                    <span>{age} thn</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Attendance Checkbox Button */}
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleAttendance(m.id);
+                              }}
+                              aria-label={`Tandai kehadiran: ${m.name}`}
+                              aria-pressed={isPresent}
+                              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex-shrink-0 ${
+                                isPresent
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200/80'
+                              }`}
+                            >
+                              {isPresent ? (
+                                <>
+                                  <Check size={15} strokeWidth={2.5} />
+                                  <span>Hadir</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Circle size={15} />
+                                  <span>Absen</span>
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              className={`text-xs font-bold px-3 py-1.5 rounded-xl ${
+                                isPresent ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-400'
+                              }`}
+                            >
+                              {isPresent ? 'Hadir' : 'Absen'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Sticky bottom save bar */}
+              {canEdit && (
+                <div className="sticky bottom-3 z-20 mt-6 flex justify-center px-4">
+                  <div className="bg-slate-900/90 backdrop-blur-md text-white rounded-2xl p-1.5 shadow-2xl border border-white/10 flex items-center gap-2 animate-in slide-in-from-bottom-2">
+                    <button
+                      type="button"
+                      onClick={saveAttendance}
+                      disabled={savingAttendance || attendanceSaved}
+                      className={`flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-xs transition-all cursor-pointer ${
+                        attendanceSaved
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                          : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md'
+                      } disabled:opacity-80`}
+                    >
+                      {savingAttendance ? (
+                        <RefreshCw size={15} className="animate-spin" />
+                      ) : attendanceSaved ? (
+                        <Check size={15} strokeWidth={2.5} />
+                      ) : (
+                        <Save size={15} />
+                      )}
+                      <span>
+                        {savingAttendance
+                          ? 'Menyimpan...'
+                          : attendanceSaved
+                          ? 'Absensi Tersimpan'
+                          : 'Simpan Absensi'}
+                      </span>
+                    </button>
+                    {!attendanceSaved && (
+                      <span className="text-[11px] text-amber-300 font-medium px-2 flex items-center gap-1">
+                        <AlertTriangle size={12} />
+                        Perubahan belum disimpan
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
