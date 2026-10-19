@@ -718,7 +718,7 @@ export default function CongregationManagement() {
         spouseName: formData.maritalStatus !== 'single' ? formData.spouseName.trim() || undefined : undefined,
         children: formData.maritalStatus !== 'single' ? formData.children.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), birthDate: c.birthDate || undefined })) : [],
         phones: [formData.phone.trim(), ...formData.additionalPhones.filter(p => p.trim())].filter(Boolean),
-        joinDate: formData.joinDate ? formData.joinDate : (editingMember?.joinDate || now),
+        joinDate: formData.joinDate?.trim() ? formData.joinDate.trim() : undefined,
         createdAt: editingMember?.createdAt || now,
         updatedAt: now,
       };
@@ -1403,9 +1403,12 @@ export default function CongregationManagement() {
                 </div>
                 {/* Tanggal Pertama Bergabung */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Tanggal Pertama Bergabung {formData.status === 'new' && <span className="text-blue-600 font-semibold">(Jemaat Baru)</span>}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Tanggal Bergabung {formData.status === 'new' && <span className="text-blue-600 font-semibold">(Jemaat Baru)</span>}
+                    </label>
+                    <span className="text-xs text-gray-400 font-normal">Opsional</span>
+                  </div>
                   <ModernDatePicker
                     value={formData.joinDate}
                     onChange={val => setFormData(p => ({ ...p, joinDate: val }))}
