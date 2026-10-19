@@ -23,6 +23,7 @@ function toMember(r: { key: string; value: unknown }): Member | null {
   return {
     id: m.id || r.key,
     name: m.name,
+    photoUrl: m.photoUrl || undefined,
     address: m.address,
     phone: m.phone || (Array.isArray(m.phones) && m.phones.length > 0 ? m.phones[0] : undefined),
     status: m.status,
@@ -36,6 +37,7 @@ function toMember(r: { key: string; value: unknown }): Member | null {
 interface Member {
   id: string;
   name: string;
+  photoUrl?: string;
   address?: string;
   phone?: string;
   status?: string;
@@ -168,8 +170,28 @@ function getWeekInfo(dateStr: string) {
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-function Avatar({ name, present }: { name: string; present: boolean }) {
+function Avatar({ name, photoUrl, present }: { name: string; photoUrl?: string; present: boolean }) {
+  const [imgError, setImgError] = useState(false);
   const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
+  if (photoUrl && !imgError) {
+    return (
+      <div className="relative flex-shrink-0">
+        <img
+          src={photoUrl}
+          alt={name}
+          onError={() => setImgError(true)}
+          className={`w-11 h-11 rounded-full object-cover border-2 transition-all ${
+            present ? 'border-emerald-500 shadow-xs' : 'border-gray-200'
+          }`}
+        />
+        {present && (
+          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 transition-colors ${present ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
       {initials}
@@ -808,7 +830,7 @@ function DailyInput({
               <div key={m.id}
                 onClick={() => toggle(m.id)}
                 className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors select-none ${i > 0 ? 'border-t border-gray-50' : ''} ${isPresent ? 'bg-emerald-50/60 hover:bg-emerald-50' : 'hover:bg-gray-50'}`}>
-                <Avatar name={m.name} present={isPresent} />
+                <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-900 truncate">{m.name}</p>
@@ -1404,9 +1426,17 @@ function ReportSummary({ members, sessions }: { members: Member[]; sessions: Ses
               return (
                 <div key={m.id} className="flex flex-col justify-between rounded-xl bg-white border border-amber-200/70 p-3 shadow-xs hover:border-amber-400 transition-colors">
                   <div className="flex items-start gap-2.5 min-w-0 mb-2">
-                    <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                      {m.name.slice(0, 2).toUpperCase()}
-                    </span>
+                    {m.photoUrl ? (
+                      <img
+                        src={m.photoUrl}
+                        alt={m.name}
+                        className="w-9 h-9 rounded-full object-cover border border-amber-300 flex-shrink-0"
+                      />
+                    ) : (
+                      <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                        {m.name.slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-gray-900 truncate" title={m.name}>
                         {m.name}
