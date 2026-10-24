@@ -41,6 +41,51 @@
   all the way to the top of the screen.
 */
 header.safe-header {
-  padding-top: calc(1rem + var(--sat));
+  padding-top: calc(0.75rem + var(--sat));
 }
+
+/* Floating bottom bar safe area helper (for sticky save buttons / bars) */
+.safe-bottom-floating {
+  margin-bottom: max(0.75rem, var(--sab)) !important;
+}
+
+/* ── Hide scrollbar but keep horizontal scrolling for mobile pill tabs ── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* ── Mobile Touch & Layout Optimizations for Android & iPhone ── */
+@media (max-width: 768px) {
+  /* Prevent default gray tap highlight on mobile WebKit / Chromium */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent text from overlapping or extending past containers */
+  body, p, span, h1, h2, h3, h4, h5, h6, label {
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  /* Smooth momentum scrolling on mobile */
+  .overflow-y-auto, .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Touch-friendly interactive buttons */
+  button, a[role="button"], input[type="button"], input[type="submit"] {
+    touch-action: manipulation;
+  }
+
+  /* Subtle active spring feedback for buttons on Android / iPhone */
+  button:active, a[role="button"]:active {
+    opacity: 0.88;
+    transform: scale(0.985);
+  }
+}
+
 

@@ -987,27 +987,27 @@ export default function KomisiManagement() {
       </div>
 
       {/* Stats bar */}
-      <div className="flex items-center gap-4 mb-6 flex-wrap text-sm">
+      <div className="flex items-center gap-2 sm:gap-4 mb-6 flex-wrap text-xs sm:text-sm">
         <KomisiBadge id={activeKomisi} />
-        <span className="flex items-center gap-1 text-gray-500"><Users size={13} />{members.length} anggota</span>
-        <span className="flex items-center gap-1 text-emerald-600"><Link size={13} />{linkedCount} terhubung ke jemaat umum</span>
+        <span className="flex items-center gap-1 text-gray-600 bg-gray-100 sm:bg-transparent px-2.5 sm:px-0 py-1 sm:py-0 rounded-lg"><Users size={13} />{members.length} anggota</span>
+        <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 sm:bg-transparent px-2.5 sm:px-0 py-1 sm:py-0 rounded-lg"><Link size={13} />{linkedCount} terhubung ke umum</span>
         {members.length - linkedCount > 0 && (
-          <span className="flex items-center gap-1 text-amber-600">
-            <AlertTriangle size={13} />{members.length - linkedCount} belum di database umum
+          <span className="flex items-center gap-1 text-amber-700 bg-amber-50 sm:bg-transparent px-2.5 sm:px-0 py-1 sm:py-0 rounded-lg">
+            <AlertTriangle size={13} />{members.length - linkedCount} belum di db umum
           </span>
         )}
         {!canEdit && (
-          <span className="flex items-center gap-1 text-gray-400 ml-auto"><Info size={12} />View only</span>
+          <span className="flex items-center gap-1 text-gray-400"><Info size={12} />View only</span>
         )}
-        <button onClick={() => { loadMembers(); loadSessions(); }} className="text-gray-400 hover:text-gray-600 p-1 ml-auto">
-          <RefreshCw size={14} />
+        <button onClick={() => { loadMembers(); loadSessions(); }} className="text-gray-400 hover:text-gray-600 p-2 sm:p-1 ml-auto min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl active:bg-gray-100 transition-colors" title="Segarkan Data">
+          <RefreshCw size={15} />
         </button>
       </div>
 
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
           <AlertTriangle size={15} />{error}
-          <button onClick={() => setError('')} className="ml-auto"><X size={14} /></button>
+          <button onClick={() => setError('')} className="ml-auto p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center"><X size={14} /></button>
         </div>
       )}
 
@@ -1018,15 +1018,15 @@ export default function KomisiManagement() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+      <div className="flex gap-1.5 bg-gray-100 rounded-2xl p-1.5 mb-6 w-full sm:w-fit overflow-x-auto no-scrollbar">
         {(['anggota', 'absensi', 'laporan'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+            className={`flex-1 sm:flex-none justify-center px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             {t === 'anggota'
-              ? <span className="flex items-center gap-1.5"><Users size={13} />Data Anggota</span>
+              ? <span className="flex items-center justify-center gap-1.5"><Users size={15} />Data Anggota</span>
               : t === 'absensi'
-                ? <span className="flex items-center gap-1.5"><ClipboardList size={13} />Absensi</span>
-                : <span className="flex items-center gap-1.5"><Calendar size={13} />Laporan</span>}
+                ? <span className="flex items-center justify-center gap-1.5"><ClipboardList size={15} />Absensi</span>
+                : <span className="flex items-center justify-center gap-1.5"><Calendar size={15} />Laporan</span>}
           </button>
         ))}
       </div>
@@ -1199,51 +1199,53 @@ export default function KomisiManagement() {
               <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-6 shadow-xs space-y-4">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   {/* Left: Date selector & Navigation */}
-                  <div className="space-y-2">
+                  <div className="space-y-2.5 w-full lg:w-auto">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-0.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1">
                         {selectedDate === fmt(new Date()) ? 'Hari Ini' : selectedDate === currentWeekSunday() ? 'Minggu Ini' : 'Sesi Terpilih'}
                       </span>
                       {sessions.some(s => s.date === selectedDate && (s.presentIds || []).length > 0) && (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5 flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 flex items-center gap-1">
                           <CheckCircle2 size={12} /> Tersimpan di Database
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       {/* Big Interactive Calendar Button */}
                       <button
                         type="button"
                         onClick={() => setCalendarOpen(true)}
-                        className="group flex items-center gap-2.5 bg-gradient-to-r from-slate-900 to-indigo-950 hover:from-slate-800 hover:to-indigo-900 text-white px-4 py-2.5 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer text-left"
+                        className="group flex items-center justify-between sm:justify-start gap-2.5 bg-gradient-to-r from-slate-900 to-indigo-950 hover:from-slate-800 hover:to-indigo-900 text-white px-4 py-3 min-h-[48px] rounded-2xl shadow-sm active:scale-[0.98] transition-all cursor-pointer text-left w-full sm:w-auto"
                       >
-                        <div className="w-8 h-8 rounded-xl bg-white/10 group-hover:bg-white/20 flex items-center justify-center text-indigo-200 transition-colors">
-                          <CalendarIcon size={17} />
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-medium text-indigo-200/80 uppercase tracking-wider">Pilih Tanggal</div>
-                          <div className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">
-                            <span>{formatDateLabel(selectedDate)}</span>
-                            <ChevronDown size={15} className="text-indigo-300 group-hover:translate-y-0.5 transition-transform" />
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-white/10 group-hover:bg-white/20 flex items-center justify-center text-indigo-200 shrink-0 transition-colors">
+                            <CalendarIcon size={17} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-medium text-indigo-200/80 uppercase tracking-wider">Pilih Tanggal</div>
+                            <div className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5 truncate">
+                              <span>{formatDateLabel(selectedDate)}</span>
+                              <ChevronDown size={15} className="text-indigo-300 group-hover:translate-y-0.5 transition-transform shrink-0" />
+                            </div>
                           </div>
                         </div>
                       </button>
 
                       {/* Quick Day Stepper */}
-                      <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
+                      <div className="flex items-center justify-between sm:justify-start bg-slate-100 p-1 rounded-2xl border border-slate-200/80 min-h-[44px]">
                         <button
                           type="button"
                           onClick={() => changeDateByDays(-1)}
                           title="Hari Sebelumnya"
-                          className="p-2 hover:bg-white text-slate-600 hover:text-slate-900 rounded-xl transition-all cursor-pointer"
+                          className="p-2.5 sm:p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-white active:bg-white text-slate-600 hover:text-slate-900 rounded-xl transition-all cursor-pointer"
                         >
-                          <ChevronLeft size={16} />
+                          <ChevronLeft size={18} />
                         </button>
                         <button
                           type="button"
                           onClick={() => setSelectedDate(fmt(new Date()))}
-                          className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-white rounded-xl transition-all cursor-pointer"
+                          className="flex-1 sm:flex-none text-center px-4 py-2 min-h-[40px] flex items-center justify-center text-xs font-bold text-slate-700 hover:bg-white active:bg-white rounded-xl transition-all cursor-pointer"
                         >
                           Hari Ini
                         </button>
@@ -1251,40 +1253,40 @@ export default function KomisiManagement() {
                           type="button"
                           onClick={() => changeDateByDays(1)}
                           title="Hari Selanjutnya"
-                          className="p-2 hover:bg-white text-slate-600 hover:text-slate-900 rounded-xl transition-all cursor-pointer"
+                          className="p-2.5 sm:p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-white active:bg-white text-slate-600 hover:text-slate-900 rounded-xl transition-all cursor-pointer"
                         >
-                          <ChevronRight size={16} />
+                          <ChevronRight size={18} />
                         </button>
                       </div>
                     </div>
                   </div>
 
                   {/* Right: Quick actions (Hadir Semua, Reset, Export) */}
-                  <div className="flex items-center gap-2 flex-wrap lg:justify-end">
+                  <div className="grid grid-cols-3 sm:flex items-center gap-2 w-full lg:w-auto">
                     {canEdit && (
                       <>
                         <button
                           type="button"
                           onClick={() => markAll(true)}
-                          className="text-xs font-bold px-3.5 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                          className="text-xs font-bold px-3 py-2.5 min-h-[44px] justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
                         >
-                          <Check size={14} /> Hadir Semua
+                          <Check size={14} className="shrink-0" /> <span className="truncate">Hadir Semua</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => markAll(false)}
-                          className="text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                          className="text-xs font-bold px-3 py-2.5 min-h-[44px] justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 active:scale-[0.98] transition-all cursor-pointer flex items-center"
                         >
-                          Reset
+                          <span>Reset</span>
                         </button>
                       </>
                     )}
                     <button
                       type="button"
                       onClick={() => exportAttendance(activeSession)}
-                      className="flex items-center gap-1.5 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3.5 py-2.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                      className={`flex items-center justify-center gap-1.5 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-2.5 min-h-[44px] rounded-xl active:scale-[0.98] transition-all cursor-pointer shadow-2xs ${!canEdit ? 'col-span-3' : ''}`}
                     >
-                      <Download size={14} /> Export Excel
+                      <Download size={14} className="shrink-0" /> <span className="truncate">Export Excel</span>
                     </button>
                   </div>
                 </div>
@@ -1468,15 +1470,15 @@ export default function KomisiManagement() {
                               }}
                               aria-label={`Tandai kehadiran: ${m.name}`}
                               aria-pressed={isPresent}
-                              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex-shrink-0 ${
+                              className={`flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[44px] min-w-[80px] rounded-xl font-bold text-xs transition-all cursor-pointer flex-shrink-0 active:scale-95 ${
                                 isPresent
                                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200/80'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 active:bg-slate-200'
                               }`}
                             >
                               {isPresent ? (
                                 <>
-                                  <Check size={15} strokeWidth={2.5} />
+                                  <Check size={16} strokeWidth={2.5} />
                                   <span>Hadir</span>
                                 </>
                               ) : (
@@ -1488,7 +1490,7 @@ export default function KomisiManagement() {
                             </button>
                           ) : (
                             <span
-                              className={`text-xs font-bold px-3 py-1.5 rounded-xl ${
+                              className={`text-xs font-bold px-3 py-2 min-h-[38px] flex items-center justify-center rounded-xl ${
                                 isPresent ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-400'
                               }`}
                             >
@@ -1504,24 +1506,24 @@ export default function KomisiManagement() {
 
               {/* Sticky bottom save bar */}
               {canEdit && (
-                <div className="sticky bottom-3 z-20 mt-6 flex justify-center px-4">
-                  <div className="bg-slate-900/90 backdrop-blur-md text-white rounded-2xl p-1.5 shadow-2xl border border-white/10 flex items-center gap-2 animate-in slide-in-from-bottom-2">
+                <div className="sticky bottom-3 z-20 mt-6 flex justify-center px-2 sm:px-4 safe-bottom-floating">
+                  <div className="w-full sm:w-auto bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-2 sm:p-1.5 shadow-2xl border border-white/10 flex flex-col sm:flex-row items-center gap-2 animate-in slide-in-from-bottom-2">
                     <button
                       type="button"
                       onClick={saveAttendance}
                       disabled={savingAttendance || attendanceSaved}
-                      className={`flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-xs transition-all cursor-pointer ${
+                      className={`w-full sm:w-auto justify-center flex items-center gap-2 rounded-xl px-6 py-3 min-h-[48px] font-bold text-sm transition-all active:scale-[0.98] cursor-pointer ${
                         attendanceSaved
                           ? 'bg-emerald-600 text-white hover:bg-emerald-500'
                           : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md'
                       } disabled:opacity-80`}
                     >
                       {savingAttendance ? (
-                        <RefreshCw size={15} className="animate-spin" />
+                        <RefreshCw size={16} className="animate-spin" />
                       ) : attendanceSaved ? (
-                        <Check size={15} strokeWidth={2.5} />
+                        <Check size={16} strokeWidth={2.5} />
                       ) : (
-                        <Save size={15} />
+                        <Save size={16} />
                       )}
                       <span>
                         {savingAttendance
@@ -1532,8 +1534,8 @@ export default function KomisiManagement() {
                       </span>
                     </button>
                     {!attendanceSaved && (
-                      <span className="text-[11px] text-amber-300 font-medium px-2 flex items-center gap-1">
-                        <AlertTriangle size={12} />
+                      <span className="text-xs text-amber-300 font-medium px-2 py-1 flex items-center justify-center gap-1 text-center">
+                        <AlertTriangle size={13} className="shrink-0" />
                         Perubahan belum disimpan
                       </span>
                     )}

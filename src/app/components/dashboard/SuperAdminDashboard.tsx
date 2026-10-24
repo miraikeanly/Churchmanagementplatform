@@ -252,17 +252,17 @@ export default function SuperAdminDashboard() {
               </div>
               <button
                 onClick={() => { setSidebarOpen(false); setMobileDrawerOpen(false); }}
-                className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"
+                className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl hover:bg-white/10 active:bg-white/20 flex-shrink-0"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </>
           ) : (
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-1.5 rounded-lg hover:bg-white/10 mx-auto"
+              className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl hover:bg-white/10 active:bg-white/20 mx-auto"
             >
-              <Menu size={18} />
+              <Menu size={20} />
             </button>
           )}
         </div>
@@ -277,7 +277,7 @@ export default function SuperAdminDashboard() {
                 key={item.key}
                 onClick={() => { setActiveTab(item.key); setMobileDrawerOpen(false); }}
                 title={(!sidebarOpen && !mobileDrawerOpen) ? item.label : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group
+                className={`w-full flex items-center gap-3 px-3 py-3 min-h-[46px] rounded-xl text-sm font-medium transition-all duration-150 group active:scale-[0.98]
                   ${active ? 'bg-white text-blue-900 shadow-sm' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
               >
                 <Icon size={18} className="flex-shrink-0" />
@@ -303,9 +303,9 @@ export default function SuperAdminDashboard() {
           <button
             onClick={handleSignOut}
             title={(!sidebarOpen && !mobileDrawerOpen) ? 'Keluar' : undefined}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+            className="flex items-center gap-2.5 w-full px-3 py-3 min-h-[46px] rounded-xl text-sm text-white/80 hover:bg-white/10 active:bg-white/20 hover:text-white transition-all cursor-pointer"
           >
-            <LogOut size={16} className="flex-shrink-0" />
+            <LogOut size={18} className="flex-shrink-0" />
             {(sidebarOpen || mobileDrawerOpen) && <span>Keluar</span>}
           </button>
         </div>
@@ -316,17 +316,18 @@ export default function SuperAdminDashboard() {
 
         {/* Topbar */}
         <header className="bg-white border-b border-gray-200 px-4 md:px-6 pb-4 flex items-center justify-between sticky top-0 z-30 safe-header">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             {/* Mobile hamburger */}
             <button
               onClick={() => setMobileDrawerOpen(true)}
-              className="md:hidden p-2 rounded-xl text-gray-600 hover:bg-gray-100"
+              className="md:hidden p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors"
+              aria-label="Buka Menu"
             >
-              <Menu size={20} />
+              <Menu size={22} />
             </button>
-            <div>
-              <h1 className="text-base md:text-lg font-bold text-gray-900 leading-tight">{currentLabel}</h1>
-              <p className="text-xs text-gray-400 hidden sm:block">Gereja Jelambar Timur</p>
+            <div className="min-w-0">
+              <h1 className="text-base md:text-lg font-bold text-gray-900 leading-tight truncate">{currentLabel}</h1>
+              <p className="text-xs text-gray-400 hidden sm:block truncate">Gereja Jelambar Timur</p>
             </div>
           </div>
           <div className="flex items-center gap-2 md:gap-3">
@@ -386,9 +387,9 @@ export default function SuperAdminDashboard() {
                     const Icon = NAV_ICONS[item.key] ?? LayoutDashboard;
                     return (
                       <button key={item.key} onClick={() => setActiveTab(item.key)}
-                        className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3.5 text-sm font-medium text-gray-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-all shadow-sm text-left">
+                        className="flex items-center gap-2.5 sm:gap-3 bg-white border border-gray-100 rounded-xl px-3.5 sm:px-4 py-3 min-h-[48px] text-xs sm:text-sm font-medium text-gray-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.98] transition-all shadow-sm text-left">
                         <Icon size={18} className="text-blue-600 flex-shrink-0" />
-                        {item.label}
+                        <span className="truncate">{item.label}</span>
                       </button>
                     );
                   })}

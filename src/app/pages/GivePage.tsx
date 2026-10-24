@@ -247,42 +247,42 @@ export default function GivePage() {
           <div className="lg:col-span-5 space-y-6">
             
             {/* Payment Method Switcher Tabs */}
-            <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl p-1.5 border border-slate-800 flex items-center">
+            <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl p-1.5 border border-slate-800 flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('bca')}
-                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-3 px-2 sm:px-3 min-h-[46px] rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 transition-all active:scale-[0.98] ${
                   activeTab === 'bca'
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
               >
-                <CreditCard size={16} />
-                <span>BCA Transfer</span>
+                <CreditCard size={16} className="shrink-0" />
+                <span className="truncate">BCA Transfer</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('qris')}
-                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-3 px-2 sm:px-3 min-h-[46px] rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 transition-all active:scale-[0.98] ${
                   activeTab === 'qris'
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
               >
-                <QrCode size={16} />
-                <span>QRIS</span>
+                <QrCode size={16} className="shrink-0" />
+                <span className="truncate">QRIS</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('emoney')}
-                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-3 px-2 sm:px-3 min-h-[46px] rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 transition-all active:scale-[0.98] ${
                   activeTab === 'emoney'
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
               >
-                <Wallet size={16} />
-                <span>E-Money</span>
+                <Wallet size={16} className="shrink-0" />
+                <span className="truncate">E-Money</span>
               </button>
             </div>
 
@@ -564,7 +564,7 @@ export default function GivePage() {
                     </label>
 
                     {/* Quick chips */}
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5 mb-3">
                       {PRESET_AMOUNTS.map((val) => {
                         const isSelected = amount === val;
                         return (
@@ -572,10 +572,10 @@ export default function GivePage() {
                             key={val}
                             type="button"
                             onClick={() => handleSelectPreset(val)}
-                            className={`py-2 px-1 text-center rounded-xl text-xs font-semibold border transition-all ${
+                            className={`py-3 px-2 min-h-[44px] flex items-center justify-center text-center rounded-xl text-xs sm:text-sm font-semibold border transition-all active:scale-95 cursor-pointer ${
                               isSelected
                                 ? 'bg-blue-600 border-blue-500 text-white shadow-md'
-                                : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 text-slate-300'
+                                : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 text-slate-300 active:bg-slate-800'
                             }`}
                           >
                             {val >= 1000000 ? `${val / 1000000} Jt` : `${val / 1000} Rb`}
@@ -687,7 +687,7 @@ export default function GivePage() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm sm:text-base shadow-xl shadow-blue-600/30 hover:shadow-blue-600/50 disabled:opacity-50 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                      className="w-full py-4 min-h-[52px] rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm sm:text-base shadow-xl shadow-blue-600/30 hover:shadow-blue-600/50 disabled:opacity-50 transition-all active:scale-[0.985] flex items-center justify-center gap-2 group cursor-pointer"
                     >
                       {isSubmitting ? (
                         <span>Mengirim Konfirmasi...</span>
@@ -701,7 +701,7 @@ export default function GivePage() {
                   ) : (
                     <Link
                       to="/akun"
-                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 text-center"
+                      className="w-full py-4 min-h-[52px] rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all active:scale-[0.985] flex items-center justify-center gap-2 text-center"
                     >
                       <LogIn size={18} />
                       <span>Daftar / Masuk Akun Jemaat untuk Mengonfirmasi</span>

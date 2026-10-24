@@ -668,23 +668,23 @@ function DailyInput({
   return (
     <div className="space-y-4">
       {/* Controls row */}
-      <div className="flex flex-wrap gap-3 items-end">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div className="w-full sm:w-auto">
           <label className="text-xs text-gray-500 font-medium block mb-1">Tanggal Absensi</label>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setCalendarOpen(true)}
-              className="flex items-center gap-2.5 px-3.5 py-2 bg-white border border-gray-200 hover:border-blue-500 hover:bg-blue-50/20 rounded-xl text-sm font-semibold text-gray-800 transition-colors shadow-xs cursor-pointer group"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2.5 px-4 py-2.5 min-h-[44px] bg-white border border-gray-200 hover:border-blue-500 hover:bg-blue-50/20 active:scale-[0.98] rounded-xl text-sm font-semibold text-gray-800 transition-all shadow-xs cursor-pointer group"
               title="Buka Kalender Kehadiran & Sesi"
             >
-              <CalendarIcon size={16} className="text-blue-600 group-hover:scale-110 transition-transform" />
-              <span>{formatDateLabel(date)}</span>
+              <CalendarIcon size={16} className="text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="truncate">{formatDateLabel(date)}</span>
             </button>
             <button
               type="button"
               onClick={() => setDate(todayStr)}
-              className={`text-xs px-2.5 py-2 rounded-xl border transition-colors cursor-pointer ${
+              className={`text-xs px-3.5 py-2.5 min-h-[44px] rounded-xl border transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center ${
                 date === todayStr ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'border-gray-200 hover:bg-gray-50 text-gray-600 font-medium'
               }`}
             >
@@ -693,12 +693,12 @@ function DailyInput({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 ml-auto flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end w-full sm:w-auto">
           {/* Status badge when saved */}
           {existingSession && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl font-medium inline-flex items-center gap-1">
-                <CheckCircle2 size={14} className="text-emerald-600" />
+            <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
+              <span className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-2 min-h-[40px] rounded-xl font-medium inline-flex items-center gap-1">
+                <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
                 <span>Sesi Tersimpan ({existingSession.presentIds?.length || 0} hadir)</span>
               </span>
 
@@ -706,7 +706,7 @@ function DailyInput({
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] bg-amber-50 hover:bg-amber-100 active:scale-[0.98] text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
                   title="Klik untuk mengedit/memperbaiki data absensi minggu ini atau minggu sebelumnya"
                 >
                   <Edit2 size={13} /> Edit Absensi
@@ -723,7 +723,7 @@ function DailyInput({
                 setIsEditing(false);
                 setSaved(true);
               }}
-              className="text-xs px-2.5 py-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer border border-gray-200"
+              className="text-xs px-3 py-2.5 min-h-[44px] text-gray-500 hover:text-gray-800 hover:bg-gray-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-gray-200"
             >
               Batal Edit
             </button>
@@ -734,7 +734,7 @@ function DailyInput({
               type="button"
               onClick={handleReset}
               disabled={resetting || saving}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 shadow-xs cursor-pointer disabled:opacity-50"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold transition-all active:scale-[0.98] border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 shadow-xs cursor-pointer disabled:opacity-50"
               title="Reset dan hapus data absensi tanggal ini"
             >
               {resetting ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
@@ -746,7 +746,7 @@ function DailyInput({
             <button
               onClick={handleSave}
               disabled={saving || resetting}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm cursor-pointer ${
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] shadow-sm cursor-pointer w-full sm:w-auto ${
                 saved && !isEditing
                   ? 'bg-emerald-600 text-white'
                   : 'bg-blue-700 text-white hover:bg-blue-800 ring-2 ring-blue-300'
@@ -790,29 +790,29 @@ function DailyInput({
 
       {/* Search + Sort + Filter */}
       <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-48">
+        <div className="relative flex-1 min-w-[160px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Cari nama jemaat..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
         </div>
         <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-          className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 bg-white cursor-pointer">
+          className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-2.5 min-h-[40px] text-sm text-gray-600 hover:bg-gray-50 active:scale-[0.98] bg-white cursor-pointer">
           {sortDir === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
           {sortDir === 'asc' ? 'Asc' : 'Desc'}
         </button>
         {(['all', 'hadir', 'absen'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${filter === f ? 'bg-blue-700 text-white border-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50 bg-white'}`}>
+            className={`px-3 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold border transition-all active:scale-[0.98] cursor-pointer ${filter === f ? 'bg-blue-700 text-white border-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50 bg-white'}`}>
             {f === 'all' ? 'Semua' : f === 'hadir' ? 'Hadir' : 'Absen'}
           </button>
         ))}
         {canEdit && (
-          <div className="flex items-center gap-2 ml-auto">
-            <button onClick={markAll} className="flex items-center gap-1.5 text-xs px-3 py-2 border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-50 bg-white cursor-pointer">
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+            <button onClick={markAll} className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 text-xs px-3.5 py-2.5 min-h-[40px] border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-50 active:scale-[0.98] bg-white cursor-pointer font-semibold">
               <CheckSquare size={14} /> Semua Hadir
             </button>
-            <button onClick={clearAll} className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 bg-white cursor-pointer">
+            <button onClick={clearAll} className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 text-xs px-3.5 py-2.5 min-h-[40px] border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 active:scale-[0.98] bg-white cursor-pointer font-semibold">
               <Square size={14} /> Clear
             </button>
           </div>
