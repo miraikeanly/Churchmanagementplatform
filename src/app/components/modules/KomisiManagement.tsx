@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { EdgeKV as supabaseAdmin } from '../../../lib/edgeKvClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { projectId } from '/utils/supabase/info';
 import { getAge, getAgeGroup, AGE_GROUP_STYLES } from '../../../lib/age';
 import KomisiReport from './KomisiReport';
@@ -669,6 +670,14 @@ export default function KomisiManagement() {
     loadMembers(); loadSessions();
   }, [activeKomisi]);
 
+  // Auto-refresh sessions and members every 15s so edits from other users show up
+  useAutoRefresh(() => {
+    loadSessions();
+  }, 15_000);
+
+  // Track if user currently has unsaved edits in draftPresentIds
+  const isAttendanceDirtyRef = useRef(false);
+
   // Sync activeSession whenever selectedDate, sessions, or activeKomisi change
   useEffect(() => {
     if (loadingSessions) return;
@@ -694,9 +703,11 @@ export default function KomisiManagement() {
   }, [selectedDate, sessions, activeKomisi, loadingSessions]);
 
   useEffect(() => { 
-    setDraftPresentIds(new Set(activeSession?.presentIds || [])); 
-    setAttendanceSaved(true); 
-  }, [activeSession?.id, activeSession?.date]);
+    if (!isAttendanceDirtyRef.current) {
+      setDraftPresentIds(new Set(activeSession?.presentIds || [])); 
+      setAttendanceSaved(true); 
+    }
+  }, [activeSession?.id, activeSession?.date, activeSession?.presentIds]);
 
   // ── Jemaat lookup map ─────────────────────────────────────────────────────
   const jemaatMap = useMemo(() => {
@@ -879,6 +890,7 @@ export default function KomisiManagement() {
 
   const toggleAttendance = (id: string) => {
     if (!canEdit) return;
+    isAttendanceDirtyRef.current = true;
     setDraftPresentIds(old => {
       const next = new Set(old);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -889,6 +901,7 @@ export default function KomisiManagement() {
 
   const markAll = (present: boolean) => {
     if (!canEdit) return;
+    isAttendanceDirtyRef.current = true;
     setDraftPresentIds(new Set(present ? members.map(m => m.id) : []));
     setAttendanceSaved(false);
   };
@@ -898,8 +911,19 @@ export default function KomisiManagement() {
     setSavingAttendance(true);
     setError('');
     try {
-      const presentIds = [...draftPresentIds];
-      const absentIds = members.map(m => m.id).filter(id => !draftPresentIds.has(id));
+      const kvKey = `komisi:${activeKomisi}:absen:${activeSession.id}`;
+      // Fetch latest server session to prevent overwriting inputs from concurrent users
+      const { data: latestRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', kvKey).maybeSingle();
+      const serverSession = latestRow?.value as AbsenSession | undefined;
+
+      // Smart merge: retain any present IDs registered by another user while adding local ones
+      const mergedPresentSet = new Set<string>([
+        ...(serverSession?.presentIds || []),
+        ...draftPresentIds,
+      ]);
+
+      const presentIds = [...mergedPresentSet];
+      const absentIds = members.map(m => m.id).filter(id => !mergedPresentSet.has(id));
       const updated: AbsenSession = {
         ...activeSession,
         presentIds,
@@ -908,14 +932,16 @@ export default function KomisiManagement() {
       const kv = supabaseAdmin.from(KV);
       const result = typeof (kv as any).upsert === 'function'
         ? await (kv as any).upsert({
-            key: `komisi:${activeKomisi}:absen:${activeSession.id}`,
+            key: kvKey,
             value: updated,
           })
         : await kv.insert({
-            key: `komisi:${activeKomisi}:absen:${activeSession.id}`,
+            key: kvKey,
             value: updated,
           });
       if (result.error) throw result.error;
+      isAttendanceDirtyRef.current = false;
+      setDraftPresentIds(mergedPresentSet);
       setActiveSession(updated);
       setSessions(old => {
         const idx = old.findIndex(x => x.id === updated.id || x.date === updated.date);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { EdgeKV as supabaseAdmin } from '../../../lib/edgeKvClient';
@@ -7,7 +7,7 @@ import {
   Search, SortAsc, SortDesc, CheckCircle2, Circle, CheckSquare, Square,
   Save, Download, Calendar as CalendarIcon, Users, TrendingDown, TrendingUp,
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
-  Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2
+  Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -555,17 +555,23 @@ function DailyInput({
   const [saved, setSaved] = useState<boolean>(() => !!existingSession);
   const [isEditing, setIsEditing] = useState<boolean>(() => !existingSession);
 
-  // Load session only when date changes (sessionId changes)
+  // Track if user has modified present state compared to last loaded server state
+  const isDirtyRef = useRef(false);
+
+  // Load session only when date changes (sessionId changes) or external session update arrives while not dirty
   useEffect(() => {
     const s = sessions.find(item => item.id === sessionId);
-    setPresent(new Set(s?.presentIds || []));
-    setSaved(!!s);
-    setIsEditing(!s);
+    if (!isDirtyRef.current) {
+      setPresent(new Set(s?.presentIds || []));
+      setSaved(!!s);
+      setIsEditing(!s);
+    }
     setSaveSuccessNotice('');
-  }, [sessionId]);
+  }, [sessionId, sessions]);
 
   const toggle = (id: string) => {
     if (!canEdit) return;
+    isDirtyRef.current = true;
     setIsEditing(true);
     setSaved(false);
     setSaveSuccessNotice('');
@@ -579,6 +585,7 @@ function DailyInput({
 
   const markAll = () => {
     if (!canEdit) return;
+    isDirtyRef.current = true;
     setIsEditing(true);
     setSaved(false);
     setSaveSuccessNotice('');
@@ -587,6 +594,7 @@ function DailyInput({
 
   const clearAll = () => {
     if (!canEdit) return;
+    isDirtyRef.current = true;
     setIsEditing(true);
     setSaved(false);
     setSaveSuccessNotice('');
@@ -608,16 +616,27 @@ function DailyInput({
     setSaving(true);
     try {
       const nowIso = new Date().toISOString();
+      const key = `attendance_session:${sessionId}`;
+      
+      // Fetch latest server session to prevent overwriting inputs from concurrent users
+      const { data: latestRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', key).maybeSingle();
+      const serverSession = latestRow?.value as Session | undefined;
+
+      // Smart merge: preserve any attendees added by another user while keeping current local attendees
+      const mergedPresent = new Set<string>([
+        ...(serverSession?.presentIds || []),
+        ...present,
+      ]);
+
       const session: Session = {
         id: sessionId,
         date,
         serviceType: SERVICE_TYPE,
-        presentIds: [...present],
+        presentIds: [...mergedPresent],
         savedAt: nowIso,
       };
-      const key = `attendance_session:${sessionId}`;
-      const { data: existing } = await supabaseAdmin.from(KV).select('key').eq('key', key).maybeSingle();
-      if (existing) {
+
+      if (latestRow) {
         await supabaseAdmin.from(KV).update({ value: session }).eq('key', key);
       } else {
         await supabaseAdmin.from(KV).insert({ key, value: session });
@@ -632,12 +651,14 @@ function DailyInput({
       await trackActivity(
         'SAVE_ATTENDANCE',
         'Absensi',
-        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${present.size} jemaat hadir)`
+        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${mergedPresent.size} jemaat hadir)`
       );
 
+      isDirtyRef.current = false;
+      setPresent(mergedPresent);
       setSaved(true);
       setIsEditing(false);
-      setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan! (${present.size} orang hadir)`);
+      setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan! (${mergedPresent.size} orang hadir)`);
       setTimeout(() => setSaveSuccessNotice(''), 4000);
       onSessionSaved();
     } catch (err: any) {
@@ -1663,9 +1684,12 @@ export default function AttendanceManagement() {
   const isSuperAdmin = user?.role === 'super_admin';
   const canEdit = isSuperAdmin || user?.permissions?.editAbsensi || user?.permissions?.editAbsen || user?.permissions?.manageAbsensi || false;
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const loadData = async (silent = false) => {
     try {
       if (!silent && members.length === 0) setLoading(true);
+      else if (!silent) setRefreshing(true);
       const [{ data: d1 }, { data: d2 }, { data: sessData }] = await Promise.all([
         supabaseAdmin.from(KV).select('key,value').like('key', 'congregation:member:%'),
         supabaseAdmin.from(KV).select('key,value').like('key', 'member:%'),
@@ -1688,11 +1712,16 @@ export default function AttendanceManagement() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => { loadData(); }, []);
-  // NOTE: AutoRefresh removed so that active inputs, scroll position, and selected dates are never wiped out
+
+  // Poll in the background every 15 seconds to sync data if another user enters attendance
+  useAutoRefresh(() => {
+    loadData(true);
+  }, 15_000);
 
   if (loading && members.length === 0) {
     return (
@@ -1705,12 +1734,23 @@ export default function AttendanceManagement() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Absensi Jemaat</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-xl font-bold text-gray-900">Absensi Jemaat</h2>
+            <button
+              type="button"
+              onClick={() => loadData(false)}
+              disabled={refreshing}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+              title="Sinkronkan & Segarkan Data Terbaru"
+            >
+              <RefreshCw size={15} className={refreshing ? 'animate-spin text-blue-600' : ''} />
+            </button>
+          </div>
           <p className="text-sm text-gray-500 mt-1">Catat kehadiran dan lihat laporan per minggu / bulan / tahun</p>
         </div>
-        <div className="flex bg-gray-100 rounded-xl p-1">
+        <div className="flex bg-gray-100 rounded-xl p-1 self-start">
           <button onClick={() => setTab('input')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${tab === 'input' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             <ClipboardList size={16} /> Input Absensi
