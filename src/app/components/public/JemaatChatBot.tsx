@@ -81,6 +81,7 @@ export default function JemaatChatBot() {
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
   const handleCopyBca = () => {
@@ -94,7 +95,15 @@ export default function JemaatChatBot() {
 
   useEffect(() => {
     if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (messages.length <= 1) {
+        // When first opening chat with only welcome message, always stay at the top
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = 0;
+        }
+      } else {
+        // When user asks question or bot replies, smoothly scroll down to the new message
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   }, [messages, isOpen]);
 
@@ -340,7 +349,7 @@ export default function JemaatChatBot() {
             </div>
 
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-4 bg-slate-50/70">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-4 bg-slate-50/70">
               {/* Quick Pills Carousel */}
               <div className="pb-1">
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
