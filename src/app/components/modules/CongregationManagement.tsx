@@ -3,7 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { EdgeKV as supabaseAdmin } from '../../../lib/edgeKvClient';
-import { Plus, Edit, Trash2, Users, Search, SortAsc, SortDesc, Download, ChevronDown, ChevronRight, X, Check, AlertTriangle, Upload } from 'lucide-react';
+import {
+  Plus, Edit, Trash2, Users, Search, SortAsc, SortDesc, Download, ChevronDown,
+  ChevronRight, X, Check, AlertTriangle, Upload, MapPin, Phone, Mail, Cake,
+  Heart, Baby, Calendar, HeartHandshake, Eye, CalendarCheck, CalendarX, Clock,
+  History, CheckCircle2, XCircle, UserCheck, Sparkles, ExternalLink, ShieldCheck,
+  Copy, Droplets, Church, MessageSquare, ArrowRight, User, Shield
+} from 'lucide-react';
 import { parseExcelFile, executeImport, ParsedMember, ImportPreview } from '../../../lib/congregationImport';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { useKomsels } from '../../../lib/komsel';
@@ -12,9 +18,6 @@ import { projectId } from '/utils/supabase/info';
 import { IBADAH_OPTIONS, IBADAH_LABEL } from '../../../lib/ibadahOptions';
 import ImagePicker from '../common/ImagePicker';
 import ModernDatePicker from '../common/ModernDatePicker';
-import { MapPin, Phone, Mail, Cake, Heart, Baby, Calendar, HeartHandshake } from 'lucide-react';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-561004a0`;
 const KV = 'kv_store_561004a0';
 
 // ibadah code → komisi ID(s) for auto-sync
@@ -218,18 +221,39 @@ function Avatar({ m, size = 56 }: { m: { name: string; photoUrl?: string }; size
 }
 
 /** One member, with every field fully visible (no truncation) so nothing is cut off on phones. */
-function MemberCard({ m, onEdit, onDelete }: { m: Member; onEdit?: (m: Member) => void; onDelete?: (id: string) => void }) {
+function MemberCard({
+  m,
+  onEdit,
+  onDelete,
+  onViewDetail,
+}: {
+  m: Member;
+  onEdit?: (m: Member) => void;
+  onDelete?: (id: string) => void;
+  onViewDetail?: (m: Member) => void;
+}) {
   const navigate = useNavigate();
   const age = getAge(m.birthDate);
   const ageGroup = getAgeGroup(m.birthDate);
   const phones = m.phones && m.phones.length > 0 ? m.phones : m.phone ? [m.phone] : [];
   const row = 'flex items-start gap-2 text-xs text-gray-600';
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3 h-full">
-      <div className="flex items-start gap-3">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3 h-full hover:border-blue-200 hover:shadow-md transition-all">
+      <div
+        className={`flex items-start gap-3 ${onViewDetail ? 'cursor-pointer group' : ''}`}
+        onClick={() => onViewDetail?.(m)}
+        title={onViewDetail ? `Klik untuk melihat detail profil lengkap & riwayat absensi ${m.name}` : undefined}
+      >
         <Avatar m={m} />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-gray-900 leading-snug break-words">{m.name}</p>
+          <p className="font-semibold text-gray-900 leading-snug break-words group-hover:text-blue-600 transition-colors flex items-center justify-between gap-1.5">
+            <span>{m.name}</span>
+            {onViewDetail && (
+              <span className="text-[11px] text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                Detail <ChevronRight size={12} />
+              </span>
+            )}
+          </p>
           {m.nickname && <p className="text-xs text-gray-400 break-words">({m.nickname})</p>}
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLE[m.status] || STATUS_STYLE.inactive}`}>{STATUS_LABEL[m.status] || m.status}</span>
@@ -349,17 +373,55 @@ function MemberCard({ m, onEdit, onDelete }: { m: Member; onEdit?: (m: Member) =
         </div>
       )}
 
-      {(onEdit || onDelete) && (
-        <div className="flex gap-2 pt-3 mt-auto border-t border-gray-50">
-          {onEdit && <button onClick={() => onEdit(m)} className="flex-1 flex items-center justify-center gap-1 text-xs px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium"><Edit size={12} />Edit</button>}
-          {onDelete && <button onClick={() => onDelete(m.id)} className="flex-1 flex items-center justify-center gap-1 text-xs px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium"><Trash2 size={12} />Hapus</button>}
-        </div>
-      )}
+      {/* Action Buttons: Lihat Detail, Edit, Hapus */}
+      <div className="flex flex-wrap sm:flex-nowrap gap-2 pt-3 mt-auto border-t border-gray-100">
+        {onViewDetail && (
+          <button
+            type="button"
+            onClick={() => onViewDetail(m)}
+            className="flex-1 min-w-[105px] flex items-center justify-center gap-1.5 text-xs px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+            title="Lihat Detail Profil Lengkap & Riwayat Absensi Jemaat"
+          >
+            <Eye size={13} className="text-blue-600" />
+            <span>Lihat Detail</span>
+          </button>
+        )}
+        {onEdit && (
+          <button
+            type="button"
+            onClick={() => onEdit(m)}
+            className="flex items-center justify-center gap-1 text-xs px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-all active:scale-95 cursor-pointer"
+          >
+            <Edit size={12} />
+            <span>Edit</span>
+          </button>
+        )}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(m.id)}
+            className="flex items-center justify-center gap-1 text-xs px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-medium transition-all active:scale-95 cursor-pointer"
+          >
+            <Trash2 size={12} />
+            <span>Hapus</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onCreateChild }: FamilyViewProps) {
+interface FamilyViewProps {
+  members: Member[];
+  expandedFamilies: Set<string>;
+  onToggle: (id: string) => void;
+  onEdit?: (m: Member) => void;
+  onDelete?: (id: string) => void;
+  onViewDetail?: (m: Member) => void;
+  onCreateChild?: (name: string, birthDate?: string) => void;
+}
+
+function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onViewDetail, onCreateChild }: FamilyViewProps) {
   const groups = useMemo(() => buildFamilyGroups(members), [members]);
 
   if (groups.length === 0) {
@@ -401,8 +463,8 @@ function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onC
                 <div className="px-5 py-3.5 bg-blue-50/40 border-b border-gray-100">
                   <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-3">Orang Tua</p>
                   <div className="space-y-3">
-                    <MemberCard m={parent} onEdit={onEdit} onDelete={onDelete} />
-                    {coParent && <MemberCard m={coParent} onEdit={onEdit} onDelete={onDelete} />}
+                    <MemberCard m={parent} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} />
+                    {coParent && <MemberCard m={coParent} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} />}
                   </div>
                 </div>
 
@@ -412,7 +474,7 @@ function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onC
                     <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-3">Anak-anak ({totalChildren})</p>
                     <div className="space-y-3">
                       {dbChildren.map(m => (
-                        <MemberCard key={m.id} m={m} onEdit={onEdit} onDelete={onDelete} />
+                        <MemberCard key={m.id} m={m} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} />
                       ))}
                       {nameOnlyChildren.map((c, i) => {
                         const birthYear = c.birthDate ? new Date(c.birthDate).getFullYear() : null;
@@ -447,6 +509,1029 @@ function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onC
   );
 }
 
+// ─── Riwayat Absensi Interface & Modal Detail Jemaat ─────────────────────────
+interface AttendanceHistoryItem {
+  id: string;
+  date: string;
+  formattedDate: string;
+  dayName: string;
+  serviceName: string;
+  category: 'Ibadah Raya' | 'Komisi';
+  status: 'present' | 'absent';
+  savedAt?: string;
+  komisiId?: string;
+}
+
+function MemberDetailModal({
+  member,
+  onClose,
+  onEdit,
+}: {
+  member: Member;
+  onClose: () => void;
+  onEdit?: (m: Member) => void;
+}) {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'profile' | 'attendance'>('profile');
+  const [loadingAttendance, setLoadingAttendance] = useState(true);
+  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceHistoryItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'absent'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'Ibadah Raya' | 'Komisi'>('all');
+  const [searchHistory, setSearchHistory] = useState('');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (text: string, keyName: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(keyName);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const age = getAge(member.birthDate);
+  const ageGroup = getAgeGroup(member.birthDate);
+  const phones = member.phones && member.phones.length > 0 ? member.phones : member.phone ? [member.phone] : [];
+  const primaryPhone = phones[0] || '';
+  const waLink = primaryPhone ? `https://wa.me/${primaryPhone.replace(/\D/g, '').replace(/^0/, '62')}` : '';
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchAttendance() {
+      setLoadingAttendance(true);
+      try {
+        const cleanId = (id: string) => String(id || '').replace(/^congregation:member:/, '').replace(/^member:/, '').trim().toLowerCase();
+        const cleanName = (name: string) => String(name || '').trim().toLowerCase();
+        const targetId = cleanId(member.id);
+        const targetStoreKey = cleanId(member._storeKey || '');
+        const targetName = cleanName(member.name);
+
+        const [
+          { data: generalSessionsData },
+          { data: komisiMembersData },
+          { data: komisiSessionsData },
+        ] = await Promise.all([
+          supabaseAdmin.from(KV).select('key,value').like('key', 'attendance_session:%'),
+          supabaseAdmin.from(KV).select('key,value').like('key', 'komisi:%:member:%'),
+          supabaseAdmin.from(KV).select('key,value').like('key', 'komisi:%:absen:%'),
+        ]);
+
+        // 1. Gather all linked komisi member IDs for this jemaat
+        const memberKomisiIds = new Set<string>();
+        const komisiIdMap = new Map<string, string>();
+        for (const row of (komisiMembersData || [])) {
+          const val = row.value as any;
+          if (!val) continue;
+          const kmId = cleanId(val.id || row.key);
+          const jId = cleanId(val.jemaatId || '');
+          const kName = cleanName(val.name || '');
+
+          if (jId === targetId || jId === targetStoreKey || (kName && kName === targetName)) {
+            memberKomisiIds.add(kmId);
+            if (val.id) memberKomisiIds.add(cleanId(val.id));
+            if (val.komisiId) komisiIdMap.set(kmId, val.komisiId);
+          }
+        }
+
+        const history: AttendanceHistoryItem[] = [];
+
+        // 2. Parse General Sessions
+        for (const row of (generalSessionsData || [])) {
+          const s = row.value as any;
+          if (!s || !s.date) continue;
+          const presentList: string[] = (s.presentIds || []).map((x: string) => cleanId(x));
+          const absentList: string[] = (s.absentIds || []).map((x: string) => cleanId(x));
+
+          const isPresent = presentList.includes(targetId) || presentList.includes(targetStoreKey);
+          const isAbsent = absentList.includes(targetId) || absentList.includes(targetStoreKey);
+
+          if (isPresent || isAbsent) {
+            const parts = s.date.split('-');
+            let dayName = '';
+            let formattedDate = s.date;
+            if (parts.length === 3) {
+              const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+              dayName = d.toLocaleDateString('id-ID', { weekday: 'long' });
+              formattedDate = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            }
+
+            history.push({
+              id: s.id || row.key,
+              date: s.date,
+              formattedDate,
+              dayName,
+              serviceName: s.serviceType || 'Ibadah Raya Umum',
+              category: 'Ibadah Raya',
+              status: isPresent ? 'present' : 'absent',
+              savedAt: s.savedAt,
+            });
+          }
+        }
+
+        // 3. Parse Komisi Sessions
+        for (const row of (komisiSessionsData || [])) {
+          const s = row.value as any;
+          if (!s || !s.date) continue;
+          const presentList: string[] = (s.presentIds || []).map((x: string) => cleanId(x));
+          const absentList: string[] = (s.absentIds || []).map((x: string) => cleanId(x));
+
+          const isPresent = presentList.some(id => memberKomisiIds.has(id) || id === targetId || id === targetStoreKey);
+          const isAbsent = absentList.some(id => memberKomisiIds.has(id) || id === targetId || id === targetStoreKey);
+
+          if (isPresent || isAbsent) {
+            const parts = s.date.split('-');
+            let dayName = '';
+            let formattedDate = s.date;
+            if (parts.length === 3) {
+              const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+              dayName = d.toLocaleDateString('id-ID', { weekday: 'long' });
+              formattedDate = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            }
+
+            const komisiId = s.komisiId || row.key.split(':')[1] || '';
+            const komisiTitle = s.title || (komisiId ? `Ibadah ${komisiId.toUpperCase()}` : 'Ibadah Komisi');
+
+            history.push({
+              id: s.id || row.key,
+              date: s.date,
+              formattedDate,
+              dayName,
+              serviceName: komisiTitle,
+              category: 'Komisi',
+              status: isPresent ? 'present' : 'absent',
+              savedAt: s.createdAt,
+              komisiId,
+            });
+          }
+        }
+
+        history.sort((a, b) => b.date.localeCompare(a.date));
+
+        if (isMounted) {
+          setAttendanceHistory(history);
+        }
+      } catch (err) {
+        console.error('Failed to load member attendance:', err);
+      } finally {
+        if (isMounted) setLoadingAttendance(false);
+      }
+    }
+
+    fetchAttendance();
+    return () => { isMounted = false; };
+  }, [member]);
+
+  // Statistics
+  const totalSessions = attendanceHistory.length;
+  const totalPresent = attendanceHistory.filter(h => h.status === 'present').length;
+  const attendanceRate = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0;
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const presentThisMonth = attendanceHistory.filter(h => h.status === 'present' && h.date.startsWith(currentMonthKey)).length;
+  const latestPresent = attendanceHistory.find(h => h.status === 'present');
+
+  // Filtered attendance list
+  const filteredHistory = useMemo(() => {
+    return attendanceHistory.filter(item => {
+      if (statusFilter === 'present' && item.status !== 'present') return false;
+      if (statusFilter === 'absent' && item.status !== 'absent') return false;
+      if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
+      if (searchHistory.trim()) {
+        const q = searchHistory.toLowerCase();
+        const matchDate = item.formattedDate.toLowerCase().includes(q) || item.dayName.toLowerCase().includes(q) || item.date.includes(q);
+        const matchService = item.serviceName.toLowerCase().includes(q);
+        if (!matchDate && !matchService) return false;
+      }
+      return true;
+    });
+  }, [attendanceHistory, statusFilter, categoryFilter, searchHistory]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-5">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[92vh] overflow-hidden border border-slate-100">
+        {/* ── Modal Header Banner ── */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 shrink-0 relative overflow-hidden">
+          {/* Background decorative glow */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex items-start justify-between gap-4 relative z-10">
+            <div className="flex items-center gap-4 min-w-0">
+              <Avatar m={member} size={64} />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg sm:text-2xl font-black text-white tracking-tight truncate leading-tight">
+                    {member.name}
+                  </h2>
+                  {member.nickname && (
+                    <span className="text-xs sm:text-sm font-semibold bg-white/15 px-2.5 py-0.5 rounded-full text-blue-200">
+                      ({member.nickname})
+                    </span>
+                  )}
+                </div>
+
+                {/* Subtitle Badges */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${STATUS_STYLE[member.status] || STATUS_STYLE.inactive}`}>
+                    {STATUS_LABEL[member.status] || member.status}
+                  </span>
+                  {age >= 0 && (
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${AGE_GROUP_STYLES[ageGroup]}`}>
+                      {ageGroup} · {age} thn
+                    </span>
+                  )}
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-slate-200 border border-white/10">
+                    {member.gender === 'female' ? 'Perempuan' : 'Laki-laki'}
+                  </span>
+                  {member.baptismStatus && (
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                      member.baptismStatus === 'sudah'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    }`}>
+                      {member.baptismStatus === 'sudah' ? 'Sudah Baptis' : 'Belum Baptis'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick action buttons & Close */}
+            <div className="flex items-center gap-2 shrink-0">
+              {waLink && (
+                <a
+                  href={waLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs"
+                >
+                  <MessageSquare size={13} />
+                  <span>Chat WA</span>
+                </a>
+              )}
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onEdit(member);
+                  }}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Edit size={13} />
+                  <span>Edit</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Tutup"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Tab Switcher Bar ── */}
+        <div className="px-5 sm:px-6 pt-3 bg-white border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('profile')}
+              className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                activeTab === 'profile'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <UserCheck size={16} />
+              <span>Biodata &amp; Data Lengkap</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('attendance')}
+              className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                activeTab === 'attendance'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <CalendarCheck size={16} />
+              <span>Riwayat Kehadiran Absensi</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === 'attendance' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {totalPresent} Hadir
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Tab Contents ── */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 bg-slate-50/60 space-y-6">
+          {/* TAB 1: DATA LENGKAP JEMAAT */}
+          {activeTab === 'profile' && (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. KARTU IDENTITAS PERSONAL */}
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+                  <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                      <User size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">Identitas Personal</h4>
+                      <p className="text-[10px] text-slate-400">Data pokok kependudukan jemaat</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Nama Lengkap</span>
+                      <p className="font-semibold text-slate-900 text-sm mt-0.5">{member.name}</p>
+                    </div>
+                    {member.nickname && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Nama Panggilan</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">{member.nickname}</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Jenis Kelamin</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">
+                          {member.gender === 'female' ? 'Perempuan' : 'Laki-laki'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Status Jemaat</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">
+                          {STATUS_LABEL[member.status] || member.status}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Tempat &amp; Tanggal Lahir</span>
+                      <p className="font-semibold text-slate-800 mt-0.5 flex items-center gap-1.5">
+                        <Cake size={13} className="text-pink-400 shrink-0" />
+                        <span>
+                          {member.birthPlace ? `${member.birthPlace}, ` : ''}
+                          {member.birthDate ? formatDate(member.birthDate) : '-'}
+                          {age >= 0 && ` (${age} Tahun · ${ageGroup})`}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. KARTU KONTAK & DOMISILI */}
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+                  <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                      <Phone size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">Kontak &amp; Domisili</h4>
+                      <p className="text-[10px] text-slate-400">Saluran komunikasi &amp; alamat tinggal</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">No. WhatsApp / Telepon Utama</span>
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <p className="font-semibold text-emerald-700 font-mono text-sm">
+                          {primaryPhone || '-'}
+                        </p>
+                        {primaryPhone && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(primaryPhone, 'phone')}
+                              className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold cursor-pointer"
+                            >
+                              {copiedKey === 'phone' ? 'Tersalin' : 'Salin'}
+                            </button>
+                            <a
+                              href={waLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center gap-1"
+                            >
+                              <MessageSquare size={10} /> WA
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {phones.length > 1 && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">No. Telepon Tambahan</span>
+                        <div className="space-y-1 mt-0.5">
+                          {phones.slice(1).map((ph, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-2 text-slate-600">
+                              <span className="font-mono">{ph}</span>
+                              <a
+                                href={`https://wa.me/${ph.replace(/\D/g, '').replace(/^0/, '62')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-emerald-600 hover:underline font-semibold"
+                              >
+                                Chat WA
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Alamat Email</span>
+                      <p className="font-semibold text-slate-800 mt-0.5">
+                        {member.email ? (
+                          <a href={`mailto:${member.email}`} className="text-blue-600 hover:underline">
+                            {member.email}
+                          </a>
+                        ) : (
+                          '-'
+                        )}
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Alamat Lengkap</span>
+                      <div className="flex items-start justify-between gap-2 mt-0.5">
+                        <p className="font-semibold text-slate-800 leading-relaxed flex items-start gap-1.5">
+                          <MapPin size={13} className="text-rose-500 shrink-0 mt-0.5" />
+                          <span>{member.address || '-'}</span>
+                        </p>
+                        {member.address && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(member.address, 'address')}
+                            className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold shrink-0 cursor-pointer"
+                          >
+                            {copiedKey === 'address' ? 'Tersalin' : 'Salin'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. KARTU KELUARGA & RELASI */}
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+                  <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                    <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
+                      <Heart size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">Keluarga &amp; Relasi</h4>
+                      <p className="text-[10px] text-slate-400">Status pernikahan &amp; anggota keluarga</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Status Pernikahan</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">
+                          {member.maritalStatus === 'married'
+                            ? 'Menikah'
+                            : member.maritalStatus === 'single'
+                            ? 'Single'
+                            : member.maritalStatus === 'divorced'
+                            ? 'Cerai'
+                            : member.maritalStatus === 'widowed'
+                            ? 'Duda / Janda'
+                            : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Tanggal Pernikahan</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">
+                          {member.marriageDate ? (
+                            <span>
+                              {formatDate(member.marriageDate)}
+                              {getAnniversaryYears(member.marriageDate) >= 0 && (
+                                <span className="text-[11px] text-pink-600 font-bold ml-1">
+                                  ({getAnniversaryYears(member.marriageDate)} thn)
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            '-'
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Nama Pasangan</span>
+                      <p className="font-semibold text-slate-800 mt-0.5 flex items-center gap-1.5">
+                        <HeartHandshake size={13} className="text-rose-400 shrink-0" />
+                        <span>{member.spouseName || '-'}</span>
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">
+                        Anak-anak ({member.children?.length || 0})
+                      </span>
+                      {member.children && member.children.length > 0 ? (
+                        <div className="space-y-1.5 mt-1">
+                          {member.children.map((c, idx) => {
+                            const cAge = c.birthDate ? getAge(c.birthDate) : -1;
+                            return (
+                              <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+                                <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                                  <Baby size={13} className="text-sky-500 shrink-0" />
+                                  <span>{c.name}</span>
+                                </span>
+                                {c.birthDate && (
+                                  <span className="text-[11px] text-slate-500 font-medium">
+                                    {formatDate(c.birthDate)}{cAge >= 0 && ` (${cAge} thn)`}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-slate-400 mt-0.5">-</p>
+                      )}
+                    </div>
+
+                    {member.parentName && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Nama Orang Tua</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">{member.parentName}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. KARTU KEANGGOTAAN & ROHANI */}
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+                  <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                      <Church size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">Keanggotaan &amp; Rohani</h4>
+                      <p className="text-[10px] text-slate-400">Komsel, komisi, dan pelayanan gereja</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Tanggal Bergabung</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">
+                          {member.joinDate ? formatDate(member.joinDate) : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Baptisan Kudus</span>
+                        <p className="font-semibold text-slate-800 mt-0.5">
+                          {member.baptismStatus === 'sudah' ? 'Sudah Baptis' : 'Belum Baptis'}
+                          {member.baptismDate && ` (${formatDate(member.baptismDate)})`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Komsel (PKS)</span>
+                      <div className="mt-1">
+                        {member.pksName ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              navigate(`/dashboard?tab=komsel&pks=${encodeURIComponent(member.pksName!)}`);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold border border-purple-200 cursor-pointer transition-colors"
+                          >
+                            <Users size={12} />
+                            <span>PKS {member.pksName}</span>
+                            <ChevronRight size={12} className="opacity-70" />
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">Belum tergabung komsel</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Komisi / Ibadah Rutin</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {member.ibadah && member.ibadah.length > 0 ? (
+                          member.ibadah.map((code) => {
+                            const komId = IBADAH_TO_KOMISI[code]?.[0];
+                            return (
+                              <button
+                                key={code}
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  if (komId) {
+                                    navigate(`/dashboard?tab=komisi&komisi=${encodeURIComponent(komId)}`);
+                                  } else if (code === 'IR') {
+                                    navigate('/dashboard?tab=absensi');
+                                  } else {
+                                    navigate('/dashboard?tab=komisi');
+                                  }
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer transition-colors"
+                              >
+                                {IBADAH_LABEL[code] || code}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <span className="text-slate-400">Belum ada komisi terpilih</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Bidang Pelayanan</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {member.pelayan && member.pelayan.length > 0 ? (
+                          member.pelayan.map((p, idx) => {
+                            const div = SCHEDULE_DIVISIONS.find((d) => d.key === p);
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  navigate(`/dashboard?tab=pelayan&bidang=${encodeURIComponent(p)}`);
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                                  div ? div.light : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                }`}
+                              >
+                                {div ? div.label : p}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <span className="text-slate-400">Bukan pelayan</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. METADATA SISTEM & DATABASE */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 text-xs space-y-2">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Informasi Database &amp; Teknis</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-400 block text-[9px]">ID JEMAAT</span>
+                    <div className="flex items-center justify-between gap-1 mt-0.5 font-mono font-semibold text-slate-700">
+                      <span className="truncate">{member.id}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(member.id, 'id')}
+                        className="text-blue-600 hover:text-blue-800 cursor-pointer shrink-0"
+                      >
+                        {copiedKey === 'id' ? 'Copied' : <Copy size={11} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-400 block text-[9px]">STORAGE KEY</span>
+                    <span className="font-mono font-semibold text-slate-700 truncate block mt-0.5">
+                      {member._storeKey || 'congregation:member:' + member.id}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-400 block text-[9px]">TANGGAL TERDAFTAR</span>
+                    <span className="font-semibold text-slate-700 block mt-0.5">
+                      {member.createdAt ? formatDate(member.createdAt) : '-'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: RIWAYAT KEHADIRAN ABSENSI */}
+          {activeTab === 'attendance' && (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {loadingAttendance ? (
+                <div className="py-16 text-center space-y-3">
+                  <span className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin inline-block" />
+                  <p className="text-sm font-semibold text-slate-700">
+                    Memeriksa riwayat kehadiran absensi Ibadah Raya &amp; Komisi...
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* KPI Summary Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* 1. Total Hadir */}
+                    <div className="p-4 rounded-2xl bg-white border border-emerald-100 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-emerald-600">Total Kehadiran</span>
+                        <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                          <CheckCircle2 size={14} />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-black text-slate-900 mt-2">{totalPresent} <span className="text-xs font-semibold text-slate-400">Sesi</span></p>
+                      <p className="text-[11px] text-emerald-600 mt-1 font-medium">Tercatat hadir resmi</p>
+                    </div>
+
+                    {/* 2. Hadir Bulan Ini */}
+                    <div className="p-4 rounded-2xl bg-white border border-blue-100 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-blue-600">Bulan Ini</span>
+                        <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                          <Calendar size={14} />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-black text-slate-900 mt-2">{presentThisMonth} <span className="text-xs font-semibold text-slate-400">Kali</span></p>
+                      <p className="text-[11px] text-blue-600 mt-1 font-medium">Bulan berjalan</p>
+                    </div>
+
+                    {/* 3. Rasio Kehadiran */}
+                    <div className="p-4 rounded-2xl bg-white border border-indigo-100 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-indigo-600">Rasio Kehadiran</span>
+                        <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                          <Clock size={14} />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-black text-slate-900 mt-2">{attendanceRate}%</p>
+                      <p className="text-[11px] text-indigo-600 mt-1 font-medium">Dari {totalSessions} sesi terdata</p>
+                    </div>
+
+                    {/* 4. Terakhir Datang */}
+                    <div className="p-4 rounded-2xl bg-white border border-amber-100 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-amber-600">Terakhir Hadir</span>
+                        <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                          <CalendarCheck size={14} />
+                        </div>
+                      </div>
+                      <p className="text-xs font-black text-slate-900 mt-2.5 truncate" title={latestPresent ? `${latestPresent.dayName}, ${latestPresent.formattedDate}` : 'Belum Ada'}>
+                        {latestPresent ? latestPresent.formattedDate : 'Belum Ada'}
+                      </p>
+                      <p className="text-[10px] text-amber-700 mt-1 truncate" title={latestPresent?.serviceName}>
+                        {latestPresent ? latestPresent.serviceName : 'Belum ada absensi'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Filter & Search Bar */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      {/* Category filters */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setCategoryFilter('all')}
+                          className={`px-3 py-1 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                            categoryFilter === 'all'
+                              ? 'bg-slate-900 text-white border-slate-900'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Semua Sesi ({attendanceHistory.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCategoryFilter('Ibadah Raya')}
+                          className={`px-3 py-1 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                            categoryFilter === 'Ibadah Raya'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Ibadah Raya Umum ({attendanceHistory.filter(h => h.category === 'Ibadah Raya').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCategoryFilter('Komisi')}
+                          className={`px-3 py-1 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                            categoryFilter === 'Komisi'
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Ibadah Komisi ({attendanceHistory.filter(h => h.category === 'Komisi').length})
+                        </button>
+                      </div>
+
+                      {/* Status filters */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter('all')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            statusFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          Semua
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter('present')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            statusFilter === 'present' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          Hadir ({totalPresent})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter('absent')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            statusFilter === 'absent' ? 'bg-red-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          Absen ({totalSessions - totalPresent})
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Search bar for attendance history */}
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={searchHistory}
+                        onChange={(e) => setSearchHistory(e.target.value)}
+                        placeholder="Cari berdasarkan tanggal (misal: 'Oktober' atau '18') atau nama ibadah..."
+                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Attendance History Timeline List */}
+                  {filteredHistory.length === 0 ? (
+                    <div className="py-12 bg-white rounded-2xl border border-slate-200/80 text-center p-6 space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                        <CalendarX size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800">
+                          {attendanceHistory.length === 0
+                            ? 'Belum Ada Riwayat Absensi Terdaftar'
+                            : 'Tidak Ada Riwayat yang Sesuai Filter'}
+                        </h4>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                          {attendanceHistory.length === 0
+                            ? 'Jemaat ini belum tercatat dalam sesi absensi yang tersimpan di sistem. Begitu nama jemaat dicentang di menu Absensi Ibadah Raya atau Komisi, tanggal kehadirannya akan langsung otomatis muncul di sini.'
+                            : 'Silakan reset filter status atau kata kunci pencarian tanggal di atas.'}
+                        </p>
+                      </div>
+                      {attendanceHistory.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            navigate('/dashboard?tab=absensi');
+                          }}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        >
+                          <CalendarCheck size={14} />
+                          <span>Buka Menu Absensi Sekarang</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-slate-500 px-1 uppercase tracking-wider">
+                        Log Tanggal Kehadiran Jemaat ({filteredHistory.length} Sesi Terdata):
+                      </p>
+                      {filteredHistory.map((item) => {
+                        const isPresent = item.status === 'present';
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-3.5 sm:p-4 rounded-2xl bg-white border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs ${
+                              isPresent
+                                ? 'border-emerald-100 hover:border-emerald-300'
+                                : 'border-slate-200/80 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-start sm:items-center gap-3 min-w-0">
+                              {/* Date badge */}
+                              <div className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center shrink-0 border ${
+                                isPresent
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-slate-100 text-slate-500 border-slate-200'
+                              }`}>
+                                <span className="text-[10px] font-bold uppercase leading-none">
+                                  {item.dayName.slice(0, 3)}
+                                </span>
+                                <span className="text-base font-black leading-tight mt-0.5">
+                                  {item.date.split('-')[2] || ''}
+                                </span>
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <h4 className="font-bold text-slate-900 text-xs sm:text-sm truncate">
+                                    {item.serviceName}
+                                  </h4>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    item.category === 'Ibadah Raya'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-purple-100 text-purple-800'
+                                  }`}>
+                                    {item.category}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {item.dayName}, {item.formattedDate}
+                                  {item.savedAt && (
+                                    <span className="text-slate-400 ml-1.5">
+                                      · Dicatat {new Date(item.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Status badge & Shortcut link */}
+                            <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-black ${
+                                isPresent
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-red-50 text-red-700 border border-red-200'
+                              }`}>
+                                {isPresent ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                                <span>{isPresent ? 'HADIR' : 'TIDAK HADIR'}</span>
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  if (item.category === 'Ibadah Raya') {
+                                    navigate('/dashboard?tab=absensi');
+                                  } else if (item.komisiId) {
+                                    navigate(`/dashboard?tab=komisi&komisi=${encodeURIComponent(item.komisiId)}`);
+                                  } else {
+                                    navigate('/dashboard?tab=komisi');
+                                  }
+                                }}
+                                className="text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>Buka Absensi</span>
+                                <ExternalLink size={11} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Modal Footer ── */}
+        <div className="px-5 sm:px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between gap-3 shrink-0">
+          <p className="text-xs text-slate-400 hidden sm:block">
+            {activeTab === 'profile'
+              ? 'Data jemaat tersinkronisasi otomatis dengan komsel, komisi, dan jadwal pelayanan.'
+              : `Total ${totalPresent} kehadiran terhubung langsung dari sistem absensi.`}
+          </p>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEdit(member);
+                }}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+              >
+                Edit Data
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CongregationManagement() {
   const { accessToken, user } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
@@ -460,10 +1545,15 @@ export default function CongregationManagement() {
 
   const [openDialog, setOpenDialog] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [detailMember, setDetailMember] = useState<Member | null>(null);
   const [formData, setFormData] = useState({ ...BLANK_FORM });
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cleaningOld, setCleaningOld] = useState(false);
+
+  const handleOpenDetail = (m: Member) => {
+    setDetailMember(m);
+  };
 
   // Old-format records (member: prefix) that have not been migrated
   const oldFormatMembers = useMemo(
@@ -1258,6 +2348,7 @@ export default function CongregationManagement() {
           onToggle={id => setExpandedFamilies(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; })}
           onEdit={canEdit ? handleOpenDialog : undefined}
           onDelete={canDelete ? handleDelete : undefined}
+          onViewDetail={handleOpenDetail}
           onCreateChild={canEdit ? (name, birthDate) => {
             setEditingMember(null);
             setFormData({ ...BLANK_FORM, name, birthDate: birthDate || '' });
@@ -1272,7 +2363,13 @@ export default function CongregationManagement() {
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {filteredMembers.map(m => (
-              <MemberCard key={m.id} m={m} onEdit={canEdit ? handleOpenDialog : undefined} onDelete={canDelete ? handleDelete : undefined} />
+              <MemberCard
+                key={m.id}
+                m={m}
+                onEdit={canEdit ? handleOpenDialog : undefined}
+                onDelete={canDelete ? handleDelete : undefined}
+                onViewDetail={handleOpenDetail}
+              />
             ))}
           </div>
         </>
@@ -1631,6 +2728,15 @@ export default function CongregationManagement() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Detail Member & Riwayat Absensi Modal ── */}
+      {detailMember && (
+        <MemberDetailModal
+          member={detailMember}
+          onClose={() => setDetailMember(null)}
+          onEdit={canEdit ? handleOpenDialog : undefined}
+        />
       )}
     </div>
   );
