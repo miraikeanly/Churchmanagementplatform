@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { ShieldAlert, Lock, Eye, EyeOff, Loader2, X, ArrowRight } from 'lucide-react';
@@ -72,10 +73,14 @@ export default function AdminPinModal({ isOpen, onClose, onSuccess }: AdminPinMo
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+  const modalContent = (
+    <div 
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
+      onClick={onClose}
+    >
       <div 
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100"
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 my-auto"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -167,4 +172,6 @@ export default function AdminPinModal({ isOpen, onClose, onSuccess }: AdminPinMo
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 }
