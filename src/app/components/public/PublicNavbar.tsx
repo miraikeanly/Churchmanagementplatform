@@ -216,16 +216,18 @@ export default function PublicNavbar() {
 
         {/* CTA + mobile toggle */}
         <div className="flex items-center gap-2 md:gap-3">
+          {/* Subtle discreet admin access (no label, looks like clean security badge/icon) */}
           <button
             type="button"
             onClick={handleOpenAdmin}
-            className={`hidden md:inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 lg:px-4 py-2 rounded-full transition-all cursor-pointer ${
-              solid ? 'text-blue-700 hover:bg-blue-50' : 'text-white hover:bg-white/15'
+            aria-label="Akses Internal"
+            className={`p-2 rounded-full transition-all cursor-pointer opacity-70 hover:opacity-100 ${
+              solid ? 'text-gray-400 hover:text-blue-700 hover:bg-gray-100' : 'text-white/70 hover:text-white hover:bg-white/10'
             }`}
-            title="Masuk ke Portal Admin"
           >
-            <ShieldCheck size={16} /> <span>Portal Admin</span>
+            <ShieldCheck size={16} />
           </button>
+
           <Link
             to="/lokasi"
             className={`hidden lg:inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2 rounded-full transition-all duration-200 ${
@@ -321,23 +323,13 @@ export default function PublicNavbar() {
               )}
             </AnimatePresence>
 
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                handleOpenAdmin();
-              }}
-              className="w-full flex items-center justify-center gap-2 mt-2 py-3 min-h-[46px] border border-blue-200 text-blue-700 rounded-xl font-semibold text-sm active:scale-[0.98] cursor-pointer"
-            >
-              <ShieldCheck size={17} /> Portal Admin
-            </button>
             <Link
               to="/lokasi"
               onClick={() => {
                 setMenuOpen(false);
                 window.scrollTo({ top: 0, behavior: 'instant' });
               }}
-              className="flex items-center justify-center mt-2 py-3 min-h-[46px] bg-blue-600 text-white rounded-xl font-semibold text-sm active:scale-[0.98]"
+              className="flex items-center justify-center mt-3 py-3 min-h-[46px] bg-blue-600 text-white rounded-xl font-semibold text-sm active:scale-[0.98]"
             >
               Hubungi Kami
             </Link>

@@ -1,6 +1,8 @@
-import { Link } from 'react-router-dom';
-import { MapPin, Phone } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { MapPin, Phone, Lock } from 'lucide-react';
 import { CHURCH } from '../../../lib/church';
+import AdminPinModal from '../auth/AdminPinModal';
 
 const LINKS = [
   { to: '/', label: 'Beranda' },
@@ -9,11 +11,22 @@ const LINKS = [
   { to: '/lokasi', label: 'Lokasi' },
   { to: '/service', label: 'Program Ibadah' },
   { to: '/give', label: 'Persembahan' },
-  { to: '/admin', label: 'Portal Admin' },
 ];
 
 /** Shared footer for every public page. */
 export default function PublicFooter() {
+  const [showPinModal, setShowPinModal] = useState(false);
+  const navigate = useNavigate();
+
+  const handleOpenAdmin = () => {
+    const isUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
+    if (isUnlocked) {
+      navigate('/admin');
+    } else {
+      setShowPinModal(true);
+    }
+  };
+
   return (
     <footer className="bg-gray-950 text-gray-400 py-12">
       <div className="max-w-6xl mx-auto px-6">
@@ -38,7 +51,19 @@ export default function PublicFooter() {
           </div>
         </div>
         <div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-600">
-          <p>© {new Date().getFullYear()} {CHURCH.name}. All rights reserved.</p>
+          <div className="flex items-center gap-2 text-xs sm:text-sm">
+            <p>© {new Date().getFullYear()} {CHURCH.name}. All rights reserved.</p>
+            {/* Very discreet admin lock trigger */}
+            <button
+              type="button"
+              onClick={handleOpenAdmin}
+              className="text-gray-700 hover:text-gray-500 transition-colors p-1 rounded cursor-pointer opacity-60 hover:opacity-100"
+              title=""
+              aria-label="System"
+            >
+              <Lock size={12} />
+            </button>
+          </div>
           <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3">
             {/* WhatsApp */}
             <a
@@ -78,6 +103,11 @@ export default function PublicFooter() {
           </div>
         </div>
       </div>
+      <AdminPinModal
+        isOpen={showPinModal}
+        onClose={() => setShowPinModal(false)}
+        onSuccess={() => navigate('/admin')}
+      />
     </footer>
   );
 }
