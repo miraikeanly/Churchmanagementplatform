@@ -55,6 +55,14 @@ export const EdgeKV = {
           return { error };
         }
       },
+      upsert: async (payload: { key: string, value: any }) => {
+        try {
+          await api.put(`/api/kv/${encodeURIComponent(payload.key)}`, payload.value);
+          return { error: null };
+        } catch (error: any) {
+          return { error };
+        }
+      },
       delete: () => {
         return {
           eq: async (col: string, key: string) => {

@@ -877,6 +877,7 @@ export default function KomisiManagement() {
   const saveAttendance = async () => {
     if (!activeSession || !canEdit) return;
     setSavingAttendance(true);
+    setError('');
     try {
       const presentIds = [...draftPresentIds];
       const absentIds = members.map(m => m.id).filter(id => !draftPresentIds.has(id));
@@ -885,10 +886,16 @@ export default function KomisiManagement() {
         presentIds,
         absentIds,
       };
-      const result = await supabaseAdmin.from(KV).upsert({
-        key: `komisi:${activeKomisi}:absen:${activeSession.id}`,
-        value: updated,
-      });
+      const kv = supabaseAdmin.from(KV);
+      const result = typeof (kv as any).upsert === 'function'
+        ? await (kv as any).upsert({
+            key: `komisi:${activeKomisi}:absen:${activeSession.id}`,
+            value: updated,
+          })
+        : await kv.insert({
+            key: `komisi:${activeKomisi}:absen:${activeSession.id}`,
+            value: updated,
+          });
       if (result.error) throw result.error;
       setActiveSession(updated);
       setSessions(old => {
