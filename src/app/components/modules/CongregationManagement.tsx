@@ -1090,17 +1090,39 @@ function MemberDetailModal({
 
                     {/* Orang Tua / Anak Dari (Bidirectional Sync) */}
                     {(() => {
-                      const detectedParents = members.filter(
+                      // 1. Kumpulkan semua orang tua yang benar-benar TERDAFTAR di data jemaat
+                      const registeredParentsMap = new Map<string, Member>();
+
+                      // A. Dari parentId yang tercatat
+                      if (member.parentId) {
+                        const p = members.find(m => m.id === member.parentId);
+                        if (p) registeredParentsMap.set(p.id, p);
+                      }
+
+                      // B. Dari daftar anak yang didaftarkan oleh anggota jemaat
+                      const parentsFromChildren = members.filter(
                         m => m.id !== member.id && (m.children || []).some(
                           c => c.name.toLowerCase().trim() === member.name.toLowerCase().trim()
                         )
                       );
-                      const parentNames = Array.from(new Set([
-                        ...(member.parentName ? [member.parentName] : []),
-                        ...detectedParents.map(p => p.name)
-                      ])).filter(Boolean);
+                      for (const p of parentsFromChildren) {
+                        registeredParentsMap.set(p.id, p);
+                      }
 
-                      if (parentNames.length === 0) return null;
+                      // C. Dari kecocokan nama parentName dengan jemaat terdaftar
+                      if (member.parentName) {
+                        const p = members.find(
+                          m => m.id !== member.id && m.name.toLowerCase().trim() === member.parentName?.toLowerCase().trim()
+                        );
+                        if (p) registeredParentsMap.set(p.id, p);
+                      }
+
+                      const registeredParents = Array.from(registeredParentsMap.values());
+
+                      // Jika tidak ada orang tua yang terdaftar sama sekali, tampilkan parentName mentah (jika ada)
+                      const rawParentName = (!registeredParents.length && member.parentName) ? member.parentName : null;
+
+                      if (registeredParents.length === 0 && !rawParentName) return null;
 
                       return (
                         <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/80 border border-blue-100 space-y-2 mt-2">
@@ -1109,32 +1131,37 @@ function MemberDetailModal({
                             Anak Dari (Tersinkronisasi)
                           </span>
                           <div className="space-y-1.5">
-                            {parentNames.map((pName, idx) => {
-                              const parentObj = members.find(
-                                m => m.name.toLowerCase().trim() === pName.toLowerCase().trim()
-                              );
-                              return (
-                                <div key={idx} className="flex items-center justify-between gap-2 bg-white/80 p-2 rounded-lg border border-blue-50 shadow-2xs">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
-                                      {pName.charAt(0)}
-                                    </div>
-                                    <span className="font-bold text-slate-800 text-xs">{pName}</span>
+                            {registeredParents.map((parentObj) => (
+                              <div key={parentObj.id} className="flex items-center justify-between gap-2 bg-white/90 p-2.5 rounded-xl border border-blue-100 shadow-2xs hover:border-blue-300 transition-all">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
+                                    {parentObj.name.charAt(0)}
                                   </div>
-                                  {parentObj && (
-                                    <button
-                                      type="button"
-                                      onClick={() => onViewMember?.(parentObj)}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
-                                      title={`Buka profil orang tua: ${pName}`}
-                                    >
-                                      <span>Lihat Orang Tua</span>
-                                      <ArrowUpRight size={11} />
-                                    </button>
-                                  )}
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-800 text-xs sm:text-sm truncate">{parentObj.name}</p>
+                                    {parentObj.phone && (
+                                      <p className="text-[11px] text-slate-400 font-mono">{parentObj.phone}</p>
+                                    )}
+                                  </div>
                                 </div>
-                              );
-                            })}
+                                <button
+                                  type="button"
+                                  onClick={() => onViewMember?.(parentObj)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-all shadow-2xs shrink-0 cursor-pointer"
+                                  title={`Buka profil orang tua: ${parentObj.name}`}
+                                >
+                                  <span>Lihat Orang Tua</span>
+                                  <ArrowUpRight size={11} />
+                                </button>
+                              </div>
+                            ))}
+
+                            {rawParentName && (
+                              <div className="flex items-center justify-between gap-2 bg-white/80 p-2 rounded-lg border border-blue-50">
+                                <span className="font-bold text-slate-800 text-xs">{rawParentName}</span>
+                                <span className="text-[10px] text-slate-400 italic">Belum terdaftar sebagai jemaat</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
