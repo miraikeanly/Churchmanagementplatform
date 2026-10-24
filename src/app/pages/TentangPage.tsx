@@ -264,7 +264,7 @@ export default function TentangPage() {
               <Link to="/lokasi" className="inline-flex items-center justify-center gap-2 bg-blue-700 text-white font-semibold px-7 py-3.5 rounded-full hover:bg-blue-800 hover:shadow-lg transition-all">
                 Temukan Lokasi Kami <ArrowRight size={18} />
               </Link>
-              <Link to="/jemaat" className="inline-flex items-center justify-center gap-2 border border-gray-200 text-gray-700 font-medium px-7 py-3.5 rounded-full hover:bg-gray-50 transition-all">
+              <Link to="/service" className="inline-flex items-center justify-center gap-2 border border-gray-200 text-gray-700 font-medium px-7 py-3.5 rounded-full hover:bg-gray-50 transition-all">
                 Lihat Jadwal Ibadah
               </Link>
             </div>
