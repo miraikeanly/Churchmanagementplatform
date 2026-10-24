@@ -55,6 +55,22 @@ interface Session {
   savedAt: string;
 }
 
+export const STATUS_STYLE: Record<string, string> = {
+  active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  new: 'bg-blue-50 text-blue-700 border-blue-200',
+  inactive: 'bg-gray-100 text-gray-500 border-gray-200',
+  visitor: 'bg-amber-50 text-amber-800 border-amber-200',
+  visitors: 'bg-amber-50 text-amber-800 border-amber-200',
+};
+
+export const STATUS_LABEL: Record<string, string> = {
+  active: 'Aktif',
+  new: 'Jemaat Baru',
+  inactive: 'Tidak Aktif',
+  visitor: 'Visitors',
+  visitors: 'Visitors',
+};
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const fmt = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -832,10 +848,15 @@ function DailyInput({
                 className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors select-none ${i > 0 ? 'border-t border-gray-50' : ''} ${isPresent ? 'bg-emerald-50/60 hover:bg-emerald-50' : 'hover:bg-gray-50'}`}>
                 <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-gray-900 truncate">{m.name}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                      {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                    </span>
                     {m.pksName && (
-                      <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">PKS: {m.pksName}</span>
+                      <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-medium border border-purple-100">
+                        PKS: {m.pksName}
+                      </span>
                     )}
                   </div>
                   <p className={`text-sm mt-0.5 ${isPresent ? 'text-emerald-600' : 'text-gray-400'}`}>
@@ -1546,8 +1567,11 @@ function ReportSummary({ members, sessions }: { members: Member[]; sessions: Ses
                   <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}>
                     <td className="sticky left-0 bg-inherit px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
                     <td className="sticky left-10 bg-inherit px-4 py-3 font-medium text-gray-900">
-                      <div className="flex items-center gap-2">
-                        {m.name}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{m.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                          {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                        </span>
                         {pct < 0.5 && dateCols.length >= 2 && (
                           <span title="Jarang hadir"><TrendingDown size={13} className="text-amber-500" /></span>
                         )}
@@ -1593,7 +1617,15 @@ function ReportSummary({ members, sessions }: { members: Member[]; sessions: Ses
         {filteredMembers.length === 0 ? <div className="text-center text-sm text-gray-400 py-8">Belum ada data</div> : filteredMembers.map(m => {
           const total = totalByMember(m.id);
           return <article key={m.id} className="bg-white border border-gray-200 rounded-xl p-3">
-            <div className="flex items-center justify-between gap-3"><p className="font-semibold text-sm text-gray-900 break-words">{m.name}</p><span className="text-sm font-bold text-blue-700 flex-shrink-0">{total} hadir</span></div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="font-semibold text-sm text-gray-900 break-words">{m.name}</p>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                  {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                </span>
+              </div>
+              <span className="text-sm font-bold text-blue-700 flex-shrink-0">{total} hadir</span>
+            </div>
             <div className="flex gap-2 mt-2 overflow-x-auto pb-1">{dateCols.map(d => <div key={d} className="min-w-14 text-center rounded-lg bg-gray-50 px-2 py-1.5"><p className="text-[10px] text-gray-400">{d.slice(5)}</p><p className={getPresentSet(d).includes(m.id) ? 'text-emerald-600 font-bold' : 'text-gray-300'}>{getPresentSet(d).includes(m.id) ? '✓' : '–'}</p></div>)}</div>
           </article>;
         })}

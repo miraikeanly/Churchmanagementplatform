@@ -37,6 +37,7 @@ export interface KomisiMember {
   address?: string;
   birthDate?: string;
   role?: 'anggota' | 'pengurus' | 'guru';
+  status?: string;
   joinedAt: string;
   jemaatId?: string;
   komisiId: KomisiId;
@@ -61,7 +62,24 @@ interface JemaatMember {
   birthDate?: string;
   photoUrl?: string;
   role?: 'anggota' | 'pengurus' | 'guru';
+  status?: string;
 }
+
+const STATUS_STYLE: Record<string, string> = {
+  active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  inactive: 'bg-gray-100 text-gray-500 border-gray-200',
+  new: 'bg-blue-50 text-blue-700 border-blue-200',
+  visitor: 'bg-amber-50 text-amber-800 border-amber-200',
+  visitors: 'bg-amber-50 text-amber-800 border-amber-200',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Aktif',
+  inactive: 'Tidak Aktif',
+  new: 'Jemaat Baru',
+  visitor: 'Visitors',
+  visitors: 'Visitors',
+};
 
 interface MatchResult {
   jemaat: JemaatMember;
@@ -579,6 +597,7 @@ export default function KomisiManagement() {
           address: m.address || '', 
           birthDate: m.birthDate || '',
           photoUrl: m.photoUrl || undefined,
+          status: m.status || 'active',
         };
       };
 
@@ -1064,6 +1083,8 @@ export default function KomisiManagement() {
               {filteredMembers.map(m => {
                 const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
                 const notInDb = !linked;
+                const jMember = linked || jemaatList.find(j => j.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+                const memberStatus = jMember?.status || m.status || 'active';
                 // Linked members always follow Data Jemaat; the age is computed today, so it rolls over on each birthday.
                 const birthDate = linked?.birthDate || m.birthDate || '';
                 const age = birthDate ? getAge(birthDate) : -1;
@@ -1080,6 +1101,9 @@ export default function KomisiManagement() {
                           {/* Nama & Status Terhubung */}
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-bold text-gray-900 text-sm sm:text-base leading-tight break-words">{m.name}</h4>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[memberStatus] || STATUS_STYLE.active}`}>
+                              {STATUS_LABEL[memberStatus] || memberStatus}
+                            </span>
                             {linked ? (
                               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
                                 <Link size={11} className="text-emerald-600" /> Terhubung ke Jemaat Umum
@@ -1406,7 +1430,8 @@ export default function KomisiManagement() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     {filteredMembers.map(m => {
                       const isPresent = draftPresentIds.has(m.id);
-                      const jMember = m.jemaatId ? jemaatMap[m.jemaatId] : undefined;
+                      const jMember = (m.jemaatId ? jemaatMap[m.jemaatId] : undefined) || jemaatList.find(j => j.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+                      const memberStatus = jMember?.status || m.status || 'active';
                       const photoUrl = jMember?.photoUrl || m.photoUrl;
                       const birthDate = jMember?.birthDate || m.birthDate;
                       const age = birthDate ? getAge(birthDate) : -1;
@@ -1432,6 +1457,9 @@ export default function KomisiManagement() {
                                 <h4 className={`text-sm font-bold truncate ${isPresent ? 'text-emerald-950' : 'text-slate-800'}`}>
                                   {m.name}
                                 </h4>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[memberStatus] || STATUS_STYLE.active}`}>
+                                  {STATUS_LABEL[memberStatus] || memberStatus}
+                                </span>
                                 {m.role && m.role !== 'anggota' && (
                                   <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
                                     m.role === 'pengurus'
