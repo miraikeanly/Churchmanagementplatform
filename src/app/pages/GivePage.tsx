@@ -60,51 +60,57 @@ export default function GivePage() {
           <div className="absolute -right-16 -top-16 w-56 h-56 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Header BCA */}
-          <div className="flex items-center justify-between pb-6 border-b border-slate-800/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80">
             <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-black text-xl tracking-tight">
-                BCA
+              <div className="h-12 w-auto max-w-[130px] rounded-xl bg-white/10 p-1.5 border border-white/10 flex items-center justify-center shrink-0 shadow-inner">
+                <img
+                  src="/bca-logo.png"
+                  alt="Bank Central Asia (BCA)"
+                  className="h-full w-auto object-contain rounded-lg"
+                />
               </div>
               <div>
                 <h2 className="font-bold text-white text-lg sm:text-xl">Bank Central Asia (BCA)</h2>
                 <p className="text-xs sm:text-sm text-slate-400">Rekening Resmi Persembahan & Persepuluhan</p>
               </div>
             </div>
-            <span className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 shrink-0">
+            <span className="self-start sm:self-auto px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 shrink-0">
               <ShieldCheck size={14} />
               Resmi Terverifikasi
             </span>
           </div>
 
           {/* Account Details Box */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-slate-950/70 rounded-2xl p-5 border border-slate-800/80 flex flex-col justify-between">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-7 bg-slate-950/70 rounded-2xl p-4 sm:p-5 border border-slate-800/80 flex flex-col justify-between">
               <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Nomor Rekening BCA</p>
-              <div className="flex items-center justify-between mt-2.5 gap-2">
-                <span className="text-2xl sm:text-3xl font-mono font-black text-white tracking-wider">
+              <div className="flex items-center justify-between mt-2 gap-3 flex-nowrap">
+                <span className="text-xl sm:text-2xl lg:text-3xl font-mono font-black text-white tracking-wider whitespace-nowrap">
                   7020 908 500
                 </span>
                 <button
                   type="button"
                   onClick={handleCopyBca}
-                  className={`px-4 py-2.5 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold active:scale-95 cursor-pointer shrink-0 ${
+                  className={`px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold active:scale-95 cursor-pointer shrink-0 ${
                     copiedBca
                       ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                       : 'bg-blue-600/20 border-blue-500/30 text-blue-300 hover:bg-blue-600 hover:text-white'
                   }`}
                   title="Salin Nomor Rekening"
                 >
-                  {copiedBca ? <Check size={16} /> : <Copy size={16} />}
+                  {copiedBca ? <Check size={15} /> : <Copy size={15} />}
                   <span>{copiedBca ? 'Tersalin' : 'Salin'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="bg-slate-950/70 rounded-2xl p-5 border border-slate-800/80 flex flex-col justify-between">
+            <div className="md:col-span-5 bg-slate-950/70 rounded-2xl p-4 sm:p-5 border border-slate-800/80 flex flex-col justify-between">
               <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Atas Nama Rekening</p>
-              <p className="text-lg sm:text-xl font-bold text-slate-100 tracking-wide mt-2.5">
-                GEREJA BETHEL INDONESIA
-              </p>
+              <div className="flex items-center mt-2 min-h-[38px]">
+                <p className="text-base sm:text-lg font-bold text-slate-100 tracking-wide break-words">
+                  GEREJA BETHEL INDONESIA
+                </p>
+              </div>
             </div>
           </div>
 
