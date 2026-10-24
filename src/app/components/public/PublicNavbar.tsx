@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Menu, X, ChevronDown, Users, Heart, Star, BookOpen, Sparkles, UserRound } from 'lucide-react';
+import { Menu, X, ChevronDown, Crown, Flame, Rocket, HandHeart, UserRound } from 'lucide-react';
 import gbiLogo from '../../../imports/pngegg__1_-1.png';
 
 /* ── Service sub-items ── */
@@ -11,32 +11,40 @@ const SERVICE_ITEMS = [
     to: '/service?tab=adult',
     label: 'Adult',
     sub: 'Dewasa & Pasangan',
-    icon: Users,
-    color: 'text-blue-500',
+    icon: Crown,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
+    border: 'border-blue-100',
   },
   {
     tab: 'nxtgen',
     to: '/service?tab=nxtgen',
     label: 'NXT GEN',
     sub: 'Pemuda & Remaja',
-    icon: Star,
-    color: 'text-violet-500',
+    icon: Flame,
+    color: 'text-purple-600',
+    bg: 'bg-purple-50',
+    border: 'border-purple-100',
   },
   {
     tab: 'kids',
     to: '/service?tab=kids',
     label: 'Kids',
     sub: 'Anak-anak',
-    icon: Heart,
-    color: 'text-rose-400',
+    icon: Rocket,
+    color: 'text-amber-500',
+    bg: 'bg-amber-50',
+    border: 'border-amber-100',
   },
   {
     tab: 'layanan',
     to: '/service?tab=layanan',
     label: 'Layanan',
     sub: 'Baptis, Konseling & Lainnya',
-    icon: Heart,
-    color: 'text-emerald-500',
+    icon: HandHeart,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-100',
   },
 ];
 
@@ -164,14 +172,14 @@ export default function PublicNavbar() {
                           setServiceOpen(false);
                           window.scrollTo({ top: 0, behavior: 'instant' });
                         }}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group"
+                        className="flex items-center gap-3.5 px-4 py-3 hover:bg-gray-50/80 transition-all group"
                       >
-                        <div className={`w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center group-hover:scale-110 transition-transform ${item.color}`}>
-                          <Icon size={15} />
+                        <div className={`w-9 h-9 rounded-2xl ${item.bg} ${item.border} border flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-2xs ${item.color}`}>
+                          <Icon size={17} strokeWidth={2.3} />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-gray-800">{item.label}</p>
-                          <p className="text-xs text-gray-400">{item.sub}</p>
+                          <p className="text-sm font-bold text-gray-800 leading-tight">{item.label}</p>
+                          <p className="text-xs text-gray-400 mt-0.5 leading-tight">{item.sub}</p>
                         </div>
                       </Link>
                     );
@@ -281,12 +289,14 @@ export default function PublicNavbar() {
                           setMobileServiceOpen(false);
                           window.scrollTo({ top: 0, behavior: 'instant' });
                         }}
-                        className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                        className="flex items-center gap-3.5 px-3 py-3 rounded-2xl text-gray-700 hover:bg-blue-50/70 hover:text-blue-700 active:scale-[0.98] transition-all"
                       >
-                        <Icon size={15} className={item.color} />
-                        <div>
-                          <span className="text-sm font-semibold">{item.label}</span>
-                          <span className="text-xs text-gray-400 ml-2">{item.sub}</span>
+                        <div className={`w-10 h-10 rounded-2xl ${item.bg} ${item.border} border flex items-center justify-center shrink-0 shadow-2xs ${item.color}`}>
+                          <Icon size={19} strokeWidth={2.3} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-900 leading-tight">{item.label}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 leading-tight">{item.sub}</p>
                         </div>
                       </Link>
                     );

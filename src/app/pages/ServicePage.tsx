@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { apiBase } from '../../lib/api';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
-import { Clock, MapPin, ChevronRight, X, CheckCircle, Loader2 } from 'lucide-react';
+import { Clock, MapPin, ChevronRight, X, CheckCircle, Loader2, Crown, Flame, Rocket, HandHeart } from 'lucide-react';
 import PublicNavbar from '../components/public/PublicNavbar';
 import PublicFooter from '../components/public/PublicFooter';
 import { supabase } from '../../lib/supabaseClient';
@@ -464,10 +464,10 @@ function KidsCard({ m }: { m: Ministry }) {
 
 /* ─────────── MAIN PAGE ─────────── */
 const TABS = [
-  { id: 'adult',   label: 'Adult',   sub: 'Dewasa & Pasangan' },
-  { id: 'nxtgen',  label: 'NXT GEN', sub: 'Pemuda & Remaja' },
-  { id: 'kids',    label: 'Kids',    sub: 'Anak-anak' },
-  { id: 'layanan', label: 'Layanan', sub: 'Sakramen & Khusus' },
+  { id: 'adult',   label: 'Adult',   sub: 'Dewasa & Pasangan', icon: Crown,     color: 'text-blue-400' },
+  { id: 'nxtgen',  label: 'NXT GEN', sub: 'Pemuda & Remaja',   icon: Flame,     color: 'text-purple-400' },
+  { id: 'kids',    label: 'Kids',    sub: 'Anak-anak',         icon: Rocket,    color: 'text-amber-400' },
+  { id: 'layanan', label: 'Layanan', sub: 'Sakramen & Khusus', icon: HandHeart, color: 'text-emerald-400' },
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
@@ -526,16 +526,23 @@ export default function ServicePage() {
       {/* Sticky tabs */}
       <div id="service-tabs" className="sticky top-16 z-40 border-b border-white/6" style={{ background: 'rgba(10,15,30,0.94)', backdropFilter: 'blur(16px)' }}>
         <div className="max-w-5xl mx-auto px-6 flex overflow-x-auto">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => handleTab(t.id)}
-              className={`relative flex-shrink-0 flex-1 min-w-[90px] py-4 text-center transition-colors duration-200 ${activeTab === t.id ? 'text-white' : 'text-white/45 hover:text-white/70'}`}>
-              <span className="block text-sm font-bold">{t.label}</span>
-              <span className="block text-[10px] mt-0.5 opacity-45 hidden sm:block">{t.sub}</span>
-              {activeTab === t.id && (
-                <motion.div layoutId="svc-tab" className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-blue-400" />
-              )}
-            </button>
-          ))}
+          {TABS.map(t => {
+            const Icon = t.icon;
+            const active = activeTab === t.id;
+            return (
+              <button key={t.id} onClick={() => handleTab(t.id)}
+                className={`relative flex-shrink-0 flex-1 min-w-[90px] py-3.5 text-center transition-colors duration-200 ${active ? 'text-white' : 'text-white/45 hover:text-white/70'}`}>
+                <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                  <Icon size={14} className={active ? t.color : 'opacity-60'} />
+                  <span className="text-sm font-bold">{t.label}</span>
+                </div>
+                <span className="block text-[10px] opacity-45 hidden sm:block">{t.sub}</span>
+                {active && (
+                  <motion.div layoutId="svc-tab" className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-blue-400" />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
