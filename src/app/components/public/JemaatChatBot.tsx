@@ -260,13 +260,25 @@ export default function JemaatChatBot() {
             aria-label="Buka Chat Asisten Jemaat"
             title="Tanya Asisten GBI Jelambar Timur"
           >
-            {/* Avatar & Online / Chat Badge */}
-            <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-white/10 p-1 flex items-center justify-center border border-white/20 shrink-0 group-hover:scale-105 transition-transform duration-300">
-              <img src={gbiLogo} alt="GBI Logo" className="w-full h-full object-contain" />
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-blue-600 rounded-full border border-slate-900 flex items-center justify-center text-white shadow-xs">
-                <MessageSquare size={9} />
-              </span>
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse" />
+            {/* Avatar & Online Dot Container (dot is outside the clipping frame) */}
+            <div className="relative shrink-0">
+              {/* Inner Circle Frame */}
+              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-white/10 border border-white/20 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
+                {/* 1. Default State: Chat Icon (Image 2 style with 3 dots) */}
+                <div className="absolute inset-0 flex items-center justify-center transition-all duration-300 opacity-100 scale-100 group-hover:opacity-0 group-hover:scale-75">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                    <path d="M12 3C6.477 3 2 6.94 2 11.8c0 2.766 1.455 5.244 3.738 6.843-.164.97-.678 2.37-1.705 3.327-.234.218-.088.618.228.63 2.148.082 4.148-.77 5.347-1.637.76.155 1.56.237 2.392.237 5.523 0 10-3.94 10-8.8S17.523 3 12 3zm-4.5 10a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm4.5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm4.5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                  </svg>
+                </div>
+
+                {/* 2. Hover State: GBI Logo (Revealed on hover) */}
+                <div className="absolute inset-0 p-1 flex items-center justify-center transition-all duration-300 opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100">
+                  <img src={gbiLogo} alt="GBI Logo" className="w-full h-full object-contain rounded-full" />
+                </div>
+              </div>
+
+              {/* Online Green Dot (Outside the inner clipping frame so it's NEVER cut off) */}
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-900 shadow-xs animate-pulse z-20 pointer-events-none" />
             </div>
 
             {/* Expandable Text: Hidden by default, smoothly expands on hover */}
