@@ -8,7 +8,7 @@ import {
   ChevronRight, X, Check, AlertTriangle, Upload, MapPin, Phone, Mail, Cake,
   Heart, Baby, Calendar, HeartHandshake, Eye, CalendarCheck, CalendarX, Clock,
   History, CheckCircle2, XCircle, UserCheck, Sparkles, ExternalLink, ShieldCheck,
-  Copy, Droplets, Church, MessageSquare, ArrowRight, User, Shield
+  Copy, Droplets, Church, MessageSquare, ArrowRight, ArrowUpRight, User, Shield
 } from 'lucide-react';
 import { parseExcelFile, executeImport, ParsedMember, ImportPreview } from '../../../lib/congregationImport';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
@@ -281,6 +281,12 @@ function MemberCard({
           </div>
         )}
         {m.maritalStatus && m.maritalStatus !== 'single' && m.children && m.children.length > 0 && <div className={row}><Baby size={13} className="mt-0.5 text-sky-400 flex-shrink-0" /><span className="break-words">{m.children.map(c => c.name).join(', ')}</span></div>}
+        {m.parentName && (
+          <div className={row}>
+            <Users size={13} className="mt-0.5 text-blue-500 flex-shrink-0" />
+            <span className="break-words">Anak dari: <strong className="text-gray-800">{m.parentName}</strong></span>
+          </div>
+        )}
       </div>
 
       {(m.pksName || (m.ibadah && m.ibadah.length > 0) || (m.pelayan && m.pelayan.length > 0)) && (
@@ -526,10 +532,14 @@ function MemberDetailModal({
   member,
   onClose,
   onEdit,
+  members = [],
+  onViewMember,
 }: {
   member: Member;
   onClose: () => void;
   onEdit?: (m: Member) => void;
+  members?: Member[];
+  onViewMember?: (m: Member) => void;
 }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'profile' | 'attendance'>('profile');
@@ -1042,12 +1052,28 @@ function MemberDetailModal({
                         <div className="space-y-1.5 mt-1">
                           {member.children.map((c, idx) => {
                             const cAge = c.birthDate ? getAge(c.birthDate) : -1;
+                            const matchedChildMember = members.find(
+                              m => m.id !== member.id && m.name.toLowerCase().trim() === c.name.toLowerCase().trim()
+                            );
                             return (
-                              <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                                <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-                                  <Baby size={13} className="text-sky-500 shrink-0" />
-                                  <span>{c.name}</span>
-                                </span>
+                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100 gap-1 sm:gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-slate-800 flex items-center gap-1.5 text-xs sm:text-sm">
+                                    <Baby size={13} className="text-sky-500 shrink-0" />
+                                    <span>{c.name}</span>
+                                  </span>
+                                  {matchedChildMember && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onViewMember?.(matchedChildMember)}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200 transition-colors cursor-pointer"
+                                      title="Klik untuk membuka data profil jemaat anak ini"
+                                    >
+                                      <span>Tersinkron Jemaat</span>
+                                      <ArrowUpRight size={10} />
+                                    </button>
+                                  )}
+                                </div>
                                 {c.birthDate && (
                                   <span className="text-[11px] text-slate-500 font-medium">
                                     {formatDate(c.birthDate)}{cAge >= 0 && ` (${cAge} thn)`}
@@ -1062,12 +1088,57 @@ function MemberDetailModal({
                       )}
                     </div>
 
-                    {member.parentName && (
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400">Nama Orang Tua</span>
-                        <p className="font-semibold text-slate-800 mt-0.5">{member.parentName}</p>
-                      </div>
-                    )}
+                    {/* Orang Tua / Anak Dari (Bidirectional Sync) */}
+                    {(() => {
+                      const detectedParents = members.filter(
+                        m => m.id !== member.id && (m.children || []).some(
+                          c => c.name.toLowerCase().trim() === member.name.toLowerCase().trim()
+                        )
+                      );
+                      const parentNames = Array.from(new Set([
+                        ...(member.parentName ? [member.parentName] : []),
+                        ...detectedParents.map(p => p.name)
+                      ])).filter(Boolean);
+
+                      if (parentNames.length === 0) return null;
+
+                      return (
+                        <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/80 border border-blue-100 space-y-2 mt-2">
+                          <span className="text-[10px] uppercase font-bold text-blue-700 flex items-center gap-1.5">
+                            <Users size={12} className="text-blue-600" />
+                            Anak Dari (Tersinkronisasi)
+                          </span>
+                          <div className="space-y-1.5">
+                            {parentNames.map((pName, idx) => {
+                              const parentObj = members.find(
+                                m => m.name.toLowerCase().trim() === pName.toLowerCase().trim()
+                              );
+                              return (
+                                <div key={idx} className="flex items-center justify-between gap-2 bg-white/80 p-2 rounded-lg border border-blue-50 shadow-2xs">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
+                                      {pName.charAt(0)}
+                                    </div>
+                                    <span className="font-bold text-slate-800 text-xs">{pName}</span>
+                                  </div>
+                                  {parentObj && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onViewMember?.(parentObj)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                                      title={`Buka profil orang tua: ${pName}`}
+                                    >
+                                      <span>Lihat Orang Tua</span>
+                                      <ArrowUpRight size={11} />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -1826,7 +1897,7 @@ export default function CongregationManagement() {
         }
 
         // ── Auto-link family (bidirectional) ─────────────────────────────────────
-        if (record.spouseName || (record.children || []).length > 0) {
+        if (record.spouseName || (record.children || []).length > 0 || (editingMember?.children || []).length > 0) {
           const byName = new Map(members.filter(m => m.id !== id).map(m => [m.name.toLowerCase().trim(), m]));
           if (record.spouseName) {
             const spouse = byName.get(record.spouseName.toLowerCase().trim());
@@ -1847,12 +1918,40 @@ export default function CongregationManagement() {
               }
             }
           }
+
+          // Bidirectional sync for children: set parentName & parentId on matched member
+          const currentChildNames = new Set((record.children || []).map(c => c.name.toLowerCase().trim()));
           for (const child of record.children || []) {
             const childMember = byName.get(child.name.toLowerCase().trim());
-            if (childMember && !childMember.parentName) {
-              const childKey = childMember._storeKey || `congregation:member:${childMember.id}`;
-              const updatedChild = { ...childMember, parentName: record.name, parentId: id, updatedAt: now };
-              await supabaseAdmin.from(KV).update({ value: updatedChild }).eq('key', childKey);
+            if (childMember) {
+              if (childMember.parentName !== record.name || childMember.parentId !== id) {
+                const childKey = childMember._storeKey || `congregation:member:${childMember.id}`;
+                const updatedChild = { ...childMember, parentName: record.name, parentId: id, updatedAt: now };
+                await supabaseAdmin.from(KV).update({ value: updatedChild }).eq('key', childKey);
+                const pKey = `congregation:member:${childMember.id}`;
+                if (childKey !== pKey) {
+                  const { data: ex } = await supabaseAdmin.from(KV).select('key').eq('key', pKey).maybeSingle();
+                  if (ex) await supabaseAdmin.from(KV).update({ value: updatedChild }).eq('key', pKey);
+                  else await supabaseAdmin.from(KV).insert({ key: pKey, value: updatedChild });
+                }
+              }
+            }
+          }
+
+          // Unlink if child was removed from this parent's list
+          for (const oldChild of (editingMember?.children || [])) {
+            const oldName = oldChild.name.toLowerCase().trim();
+            if (!currentChildNames.has(oldName)) {
+              const childMember = byName.get(oldName);
+              if (childMember && (childMember.parentId === id || childMember.parentName === editingMember.name)) {
+                const childKey = childMember._storeKey || `congregation:member:${childMember.id}`;
+                const updatedChild = { ...childMember, parentName: '', parentId: '', updatedAt: now };
+                await supabaseAdmin.from(KV).update({ value: updatedChild }).eq('key', childKey);
+                const pKey = `congregation:member:${childMember.id}`;
+                if (childKey !== pKey) {
+                  await supabaseAdmin.from(KV).update({ value: updatedChild }).eq('key', pKey);
+                }
+              }
             }
           }
         }
@@ -1881,14 +1980,33 @@ export default function CongregationManagement() {
             const spouse = byName.get(record.spouseName.toLowerCase().trim());
             if (spouse) {
               const spouseKey = spouse._storeKey || `congregation:member:${spouse.id}`;
-              await supabaseAdmin.from(KV).update({
-                value: {
-                  ...spouse,
-                  spouseName: record.name,
-                  marriageDate: record.marriageDate || spouse.marriageDate,
-                  updatedAt: now,
-                }
-              }).eq('key', spouseKey);
+              const updatedSpouse = {
+                ...spouse,
+                spouseName: record.name,
+                marriageDate: record.marriageDate || spouse.marriageDate,
+                updatedAt: now,
+              };
+              await supabaseAdmin.from(KV).update({ value: updatedSpouse }).eq('key', spouseKey);
+              const primarySpouseKey = `congregation:member:${spouse.id}`;
+              if (spouseKey !== primarySpouseKey) {
+                const { data: ex } = await supabaseAdmin.from(KV).select('key').eq('key', primarySpouseKey).maybeSingle();
+                if (ex) await supabaseAdmin.from(KV).update({ value: updatedSpouse }).eq('key', primarySpouseKey);
+                else await supabaseAdmin.from(KV).insert({ key: primarySpouseKey, value: updatedSpouse });
+              }
+            }
+          }
+          for (const child of record.children || []) {
+            const childMember = byName.get(child.name.toLowerCase().trim());
+            if (childMember) {
+              const childKey = childMember._storeKey || `congregation:member:${childMember.id}`;
+              const updatedChild = { ...childMember, parentName: record.name, parentId: id, updatedAt: now };
+              await supabaseAdmin.from(KV).update({ value: updatedChild }).eq('key', childKey);
+              const pKey = `congregation:member:${childMember.id}`;
+              if (childKey !== pKey) {
+                const { data: ex } = await supabaseAdmin.from(KV).select('key').eq('key', pKey).maybeSingle();
+                if (ex) await supabaseAdmin.from(KV).update({ value: updatedChild }).eq('key', pKey);
+                else await supabaseAdmin.from(KV).insert({ key: pKey, value: updatedChild });
+              }
             }
           }
         }
@@ -2604,45 +2722,91 @@ export default function CongregationManagement() {
                   {/* Anak-anak */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-medium text-gray-600">Anak-anak</label>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700">Anak-anak</label>
+                        <p className="text-[11px] text-gray-400">Pilih dari data jemaat atau ketik nama anak secara manual</p>
+                      </div>
                       <button type="button"
                         onClick={() => setFormData(p => ({ ...p, children: [...(p.children || []), { name: '', birthDate: '' }] }))}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1">
-                        <Plus size={12} /> Tambah Anak
+                        className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer">
+                        <Plus size={13} /> Tambah Anak
                       </button>
                     </div>
                     {(formData.children || []).length === 0 && (
-                      <p className="text-xs text-gray-400 italic py-1">Belum ada data anak</p>
+                      <p className="text-xs text-gray-400 italic py-2 px-3 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-center">
+                        Belum ada data anak. Klik <strong>+ Tambah Anak</strong> di atas untuk menambahkan.
+                      </p>
                     )}
-                    <div className="space-y-2">
-                      {(formData.children || []).map((child, idx) => (
-                        <div key={idx} className="flex gap-2 items-center">
-                          <input type="text" placeholder={`Nama anak ${idx + 1}`} value={child.name}
-                            onChange={e => setFormData(p => ({
-                              ...p,
-                              children: (p.children || []).map((c, i) => i === idx ? { ...c, name: e.target.value } : c)
-                            }))}
-                            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
-                          <div className="w-44 sm:w-52 flex-shrink-0">
-                            <ModernDatePicker
-                              value={child.birthDate || ''}
-                              onChange={val => setFormData(p => ({
-                                ...p,
-                                children: (p.children || []).map((c, i) => i === idx ? { ...c, birthDate: val } : c)
-                              }))}
-                              placeholder="Tgl lahir anak"
-                              minYear={1950}
-                              maxYear={new Date().getFullYear()}
-                              showAge={true}
-                            />
+                    <div className="space-y-2.5">
+                      {(formData.children || []).map((child, idx) => {
+                        const matchedMember = members.find(m => m.name.toLowerCase().trim() === child.name.toLowerCase().trim() && (!editingMember || m.id !== editingMember.id));
+                        return (
+                          <div key={idx} className="p-2.5 bg-white border border-gray-200/90 rounded-2xl shadow-2xs space-y-1.5">
+                            <div className="flex gap-2 items-center">
+                              <div className="flex-1 relative">
+                                <input
+                                  type="text"
+                                  list={`member-children-list-${idx}`}
+                                  placeholder={`Ketik nama anak ${idx + 1}...`}
+                                  value={child.name}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    const selected = members.find(m => m.name.toLowerCase().trim() === val.toLowerCase().trim() && (!editingMember || m.id !== editingMember.id));
+                                    setFormData(p => ({
+                                      ...p,
+                                      children: (p.children || []).map((c, i) => {
+                                        if (i !== idx) return c;
+                                        return {
+                                          ...c,
+                                          name: val,
+                                          birthDate: selected?.birthDate ? selected.birthDate : c.birthDate,
+                                        };
+                                      }),
+                                    }));
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                                />
+                                <datalist id={`member-children-list-${idx}`}>
+                                  {members
+                                    .filter(m => !editingMember || m.id !== editingMember.id)
+                                    .map(m => (
+                                      <option key={m.id} value={m.name}>
+                                        {m.birthDate ? `${m.name} (${getAge(m.birthDate)} thn)` : m.name}
+                                      </option>
+                                    ))}
+                                </datalist>
+                              </div>
+                              <div className="w-40 sm:w-48 flex-shrink-0">
+                                <ModernDatePicker
+                                  value={child.birthDate || ''}
+                                  onChange={val => setFormData(p => ({
+                                    ...p,
+                                    children: (p.children || []).map((c, i) => i === idx ? { ...c, birthDate: val } : c)
+                                  }))}
+                                  placeholder="Tgl lahir anak"
+                                  minYear={1950}
+                                  maxYear={new Date().getFullYear()}
+                                  showAge={true}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setFormData(p => ({ ...p, children: (p.children || []).filter((_, i) => i !== idx) }))}
+                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0 cursor-pointer"
+                                title="Hapus anak ini"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                            {matchedMember && (
+                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 font-medium">
+                                <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                <span>Terhubung dengan data jemaat: <strong>{matchedMember.name}</strong> (Otomatis tersinkronisasi sebagai anak)</span>
+                              </div>
+                            )}
                           </div>
-                          <button type="button"
-                            onClick={() => setFormData(p => ({ ...p, children: (p.children || []).filter((_, i) => i !== idx) }))}
-                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0">
-                            <X size={15} />
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>}
@@ -2736,6 +2900,8 @@ export default function CongregationManagement() {
           member={detailMember}
           onClose={() => setDetailMember(null)}
           onEdit={canEdit ? handleOpenDialog : undefined}
+          members={members}
+          onViewMember={(m) => setDetailMember(m)}
         />
       )}
     </div>
