@@ -155,7 +155,7 @@ export default function ActivityLogManagement() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       {/* ── Top Header & Stats ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -645,7 +645,7 @@ export default function ActivityLogManagement() {
 
             {/* Pagination */}
             {totalLogs > 40 && (
-              <div className="flex items-center justify-between px-4 py-3 bg-gray-50/80 border-t border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gray-50/80 border-t border-gray-200 pr-20 sm:pr-24">
                 <span className="text-xs text-gray-500">
                   Menampilkan {displayedLogs.length} dari {totalLogs} riwayat
                 </span>
@@ -653,7 +653,7 @@ export default function ActivityLogManagement() {
                   <button
                     disabled={page <= 1}
                     onClick={() => setPage(p => Math.max(1, p - 1))}
-                    className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer shadow-2xs"
                   >
                     <ChevronLeft size={16} />
                   </button>
@@ -661,7 +661,7 @@ export default function ActivityLogManagement() {
                   <button
                     disabled={displayedLogs.length < 40}
                     onClick={() => setPage(p => p + 1)}
-                    className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer shadow-2xs"
                   >
                     <ChevronRight size={16} />
                   </button>

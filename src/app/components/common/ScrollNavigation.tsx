@@ -63,7 +63,7 @@ export default function ScrollNavigation() {
   return (
     <aside
       aria-label="Navigasi Scroll Halaman"
-      className={`fixed right-5 bottom-6 z-50 flex flex-col gap-2.5 transition-opacity duration-300 ${
+      className={`fixed right-4 sm:right-5 bottom-6 z-50 flex flex-col gap-2.5 transition-opacity duration-300 ${
         canScroll ? 'opacity-100' : 'opacity-80 hover:opacity-100'
       }`}
     >
