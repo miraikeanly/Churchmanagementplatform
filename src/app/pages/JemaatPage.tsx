@@ -371,7 +371,7 @@ export default function JemaatPage() {
             { to: '/give', label: 'Persembahan', icon: Heart, color: 'from-emerald-500 to-teal-600' },
             { to: '/lokasi', label: 'Lokasi', icon: MapPin, color: 'from-sky-500 to-blue-600' },
             { to: '/service', label: 'Layanan', icon: CalendarHeart, color: 'from-rose-500 to-orange-500' },
-            { to: '/akun', label: 'Akun', icon: UserRound, color: 'from-purple-500 to-pink-600' },
+            { to: '/galeri', label: 'Galeri', icon: Images, color: 'from-amber-500 to-amber-600' },
           ].map(item => {
             const inner = (
               <>

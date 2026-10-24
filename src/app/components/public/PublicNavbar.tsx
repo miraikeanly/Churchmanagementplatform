@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Menu, X, ChevronDown, Crown, Flame, Rocket, HandHeart, UserRound } from 'lucide-react';
+import { Menu, X, ChevronDown, Crown, Flame, Rocket, HandHeart, ShieldCheck } from 'lucide-react';
 import gbiLogo from '../../../imports/pngegg__1_-1.png';
+import AdminPinModal from '../auth/AdminPinModal';
 
 /* ── Service sub-items ── */
 const SERVICE_ITEMS = [
@@ -61,8 +62,19 @@ export default function PublicNavbar() {
   const [serviceOpen, setServiceOpen] = useState(false);
   const [mobileServiceOpen, setMobileServiceOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenAdmin = () => {
+    const isUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
+    if (isUnlocked) {
+      navigate('/admin');
+    } else {
+      setShowPinModal(true);
+    }
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -204,12 +216,16 @@ export default function PublicNavbar() {
 
         {/* CTA + mobile toggle */}
         <div className="flex items-center gap-2 md:gap-3">
-          <Link
-            to="/akun"
-            className={`hidden md:inline-flex items-center gap-1.5 text-sm font-semibold px-3 lg:px-4 py-2 rounded-full transition-all ${solid ? 'text-blue-700 hover:bg-blue-50' : 'text-white hover:bg-white/15'}`}
+          <button
+            type="button"
+            onClick={handleOpenAdmin}
+            className={`hidden md:inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 lg:px-4 py-2 rounded-full transition-all cursor-pointer ${
+              solid ? 'text-blue-700 hover:bg-blue-50' : 'text-white hover:bg-white/15'
+            }`}
+            title="Masuk ke Portal Admin"
           >
-            <UserRound size={15} /> <span className="hidden lg:inline">Akun</span>
-          </Link>
+            <ShieldCheck size={16} /> <span>Portal Admin</span>
+          </button>
           <Link
             to="/lokasi"
             className={`hidden lg:inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2 rounded-full transition-all duration-200 ${
@@ -305,16 +321,16 @@ export default function PublicNavbar() {
               )}
             </AnimatePresence>
 
-            <Link
-              to="/akun"
+            <button
+              type="button"
               onClick={() => {
                 setMenuOpen(false);
-                window.scrollTo({ top: 0, behavior: 'instant' });
+                handleOpenAdmin();
               }}
-              className="flex items-center justify-center gap-2 mt-2 py-3 min-h-[46px] border border-blue-200 text-blue-700 rounded-xl font-semibold text-sm active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-2 mt-2 py-3 min-h-[46px] border border-blue-200 text-blue-700 rounded-xl font-semibold text-sm active:scale-[0.98] cursor-pointer"
             >
-              <UserRound size={16} /> Masuk Akun
-            </Link>
+              <ShieldCheck size={17} /> Portal Admin
+            </button>
             <Link
               to="/lokasi"
               onClick={() => {
@@ -328,6 +344,12 @@ export default function PublicNavbar() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AdminPinModal
+        isOpen={showPinModal}
+        onClose={() => setShowPinModal(false)}
+        onSuccess={() => navigate('/admin')}
+      />
     </motion.header>
   );
 }

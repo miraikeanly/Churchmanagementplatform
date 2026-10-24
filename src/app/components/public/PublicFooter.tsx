@@ -9,7 +9,7 @@ const LINKS = [
   { to: '/lokasi', label: 'Lokasi' },
   { to: '/service', label: 'Program Ibadah' },
   { to: '/give', label: 'Persembahan' },
-  { to: '/akun', label: 'Akun Jemaat' },
+  { to: '/admin', label: 'Portal Admin' },
 ];
 
 /** Shared footer for every public page. */
