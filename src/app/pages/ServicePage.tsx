@@ -481,13 +481,26 @@ export default function ServicePage() {
 
   useEffect(() => {
     const t = (searchParams.get('tab') as TabId) ?? 'adult';
-    if (TABS.find(x => x.id === t)) setActiveTab(t);
+    if (TABS.find(x => x.id === t)) {
+      setActiveTab(t);
+      // Always reset scroll to top on tab change via URL to prevent landing at bottom/footer
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
   }, [searchParams]);
 
   const handleTab = (t: TabId) => {
     setActiveTab(t);
     setSearchParams({ tab: t });
     if (t === 'adult') setSelected(ADULT[0]);
+
+    // If user is scrolled down on mobile, smoothly scroll up to the top of tab content
+    const tabsEl = document.getElementById('service-tabs');
+    if (tabsEl) {
+      const targetTop = tabsEl.getBoundingClientRect().top + window.scrollY - 70;
+      if (window.scrollY > targetTop) {
+        window.scrollTo({ top: targetTop, behavior: 'smooth' });
+      }
+    }
   };
 
   return (
@@ -511,7 +524,7 @@ export default function ServicePage() {
       </section>
 
       {/* Sticky tabs */}
-      <div className="sticky top-16 z-40 border-b border-white/6" style={{ background: 'rgba(10,15,30,0.94)', backdropFilter: 'blur(16px)' }}>
+      <div id="service-tabs" className="sticky top-16 z-40 border-b border-white/6" style={{ background: 'rgba(10,15,30,0.94)', backdropFilter: 'blur(16px)' }}>
         <div className="max-w-5xl mx-auto px-6 flex overflow-x-auto">
           {TABS.map(t => (
             <button key={t.id} onClick={() => handleTab(t.id)}

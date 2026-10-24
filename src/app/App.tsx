@@ -19,6 +19,7 @@ import GivePage from "./pages/GivePage";
 import NativeBackHandler from "./components/common/NativeBackHandler";
 import AdminPinGate from "./components/auth/AdminPinGate";
 import ScrollNavigation from "./components/common/ScrollNavigation";
+import ScrollToTop from "./components/common/ScrollToTop";
 
 // Protected Route — redirects to /login if not authenticated
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -72,6 +73,7 @@ function AdminRoute() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <NativeBackHandler />
       <ScrollNavigation />
       <AuthProvider>

@@ -160,6 +160,10 @@ export default function PublicNavbar() {
                       <Link
                         key={item.tab}
                         to={item.to}
+                        onClick={() => {
+                          setServiceOpen(false);
+                          window.scrollTo({ top: 0, behavior: 'instant' });
+                        }}
                         className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group"
                       >
                         <div className={`w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center group-hover:scale-110 transition-transform ${item.color}`}>
@@ -173,7 +177,14 @@ export default function PublicNavbar() {
                     );
                   })}
                   <div className="px-4 py-3 border-t border-gray-50">
-                    <Link to="/service" className="block text-center text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+                    <Link
+                      to="/service"
+                      onClick={() => {
+                        setServiceOpen(false);
+                        window.scrollTo({ top: 0, behavior: 'instant' });
+                      }}
+                      className="block text-center text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                    >
                       Lihat semua program →
                     </Link>
                   </div>
@@ -226,6 +237,10 @@ export default function PublicNavbar() {
                 <Link
                   key={link.to}
                   to={link.to}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'instant' });
+                  }}
                   className={`flex items-center px-4 py-3 rounded-xl font-medium transition-colors ${
                     active ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-blue-50 hover:text-blue-700'
                   }`}
@@ -261,6 +276,11 @@ export default function PublicNavbar() {
                       <Link
                         key={item.tab}
                         to={item.to}
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setMobileServiceOpen(false);
+                          window.scrollTo({ top: 0, behavior: 'instant' });
+                        }}
                         className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                       >
                         <Icon size={15} className={item.color} />
@@ -275,10 +295,24 @@ export default function PublicNavbar() {
               )}
             </AnimatePresence>
 
-            <Link to="/akun" className="flex items-center justify-center gap-2 mt-2 py-3 min-h-[46px] border border-blue-200 text-blue-700 rounded-xl font-semibold text-sm active:scale-[0.98]">
+            <Link
+              to="/akun"
+              onClick={() => {
+                setMenuOpen(false);
+                window.scrollTo({ top: 0, behavior: 'instant' });
+              }}
+              className="flex items-center justify-center gap-2 mt-2 py-3 min-h-[46px] border border-blue-200 text-blue-700 rounded-xl font-semibold text-sm active:scale-[0.98]"
+            >
               <UserRound size={16} /> Masuk Akun
             </Link>
-            <Link to="/lokasi" className="flex items-center justify-center mt-2 py-3 min-h-[46px] bg-blue-600 text-white rounded-xl font-semibold text-sm active:scale-[0.98]">
+            <Link
+              to="/lokasi"
+              onClick={() => {
+                setMenuOpen(false);
+                window.scrollTo({ top: 0, behavior: 'instant' });
+              }}
+              className="flex items-center justify-center mt-2 py-3 min-h-[46px] bg-blue-600 text-white rounded-xl font-semibold text-sm active:scale-[0.98]"
+            >
               Hubungi Kami
             </Link>
           </motion.div>
