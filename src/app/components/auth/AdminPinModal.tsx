@@ -67,7 +67,15 @@ export default function AdminPinModal({ isOpen, onClose, onSuccess }: AdminPinMo
         onClose();
         return;
       }
-      setError(err?.message?.includes('500') ? 'PIN tidak sesuai. Gunakan PIN Master (2506).' : (err.message || 'Gagal memverifikasi PIN. Silakan coba lagi.'));
+      
+      const errMsg = String(err?.message || '');
+      if (errMsg.toLowerCase().includes('load failed') || errMsg.toLowerCase().includes('failed to fetch') || errMsg.toLowerCase().includes('network')) {
+        setError('PIN akses tidak sesuai. Silakan periksa kembali atau gunakan PIN Master yang valid.');
+      } else if (errMsg.includes('500')) {
+        setError('PIN akses tidak sesuai. Silakan hubungi Super Admin.');
+      } else {
+        setError(errMsg || 'PIN akses tidak sesuai. Silakan hubungi Super Admin.');
+      }
     } finally {
       setLoading(false);
     }
