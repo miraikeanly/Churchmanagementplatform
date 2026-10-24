@@ -128,6 +128,7 @@ const HOME_SCHEDULES = [
     id: 'vessel',
     title: 'Vessel',
     time: 'Sabtu 18.30 · Setiap minggu pertama',
+    shortTime: 'Sabtu 18.30 (Minggu I)',
     location: 'Ruang Vessel Lantai 2',
     icon: Flame,
     color: 'from-rose-500 to-pink-600',
@@ -442,18 +443,27 @@ export default function JemaatPage() {
                       <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br ${s.color} flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
                         <s.icon size={24} className="text-white" />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <h3 className="text-lg sm:text-xl font-bold text-gray-900">{s.title}</h3>
-                          <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full">{s.tag}</span>
+                          <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full shrink-0">{s.tag}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-700 text-sm font-medium mb-1.5">
-                          <Clock size={15} className="text-blue-600 flex-shrink-0" />
-                          <span>{s.time}</span>
+                        <div className="flex items-start gap-2 text-gray-700 text-sm font-medium mb-1.5">
+                          <Clock size={15} className="text-blue-600 shrink-0 mt-0.5" />
+                          <span className="leading-snug">
+                            {(s as any).shortTime ? (
+                              <>
+                                <span className="sm:hidden">{(s as any).shortTime}</span>
+                                <span className="hidden sm:inline">{s.time}</span>
+                              </>
+                            ) : (
+                              s.time
+                            )}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-500 text-xs sm:text-sm">
-                          <MapPin size={15} className="text-gray-400 flex-shrink-0" />
-                          <span>{s.location}</span>
+                        <div className="flex items-start gap-2 text-gray-500 text-xs sm:text-sm">
+                          <MapPin size={15} className="text-gray-400 shrink-0 mt-0.5" />
+                          <span className="leading-snug">{s.location}</span>
                         </div>
                       </div>
                     </div>
@@ -645,13 +655,14 @@ export default function JemaatPage() {
                   href={CHURCH.mapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 bg-white/95 hover:bg-white text-gray-900 font-bold text-xs sm:text-sm px-6 py-3 rounded-full shadow-2xl border border-gray-200 hover:shadow-blue-500/25 hover:border-blue-500 transition-all duration-300 hover:scale-105 active:scale-95 group/mapbtn backdrop-blur-md cursor-pointer"
+                  className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-2.5 bg-white/95 hover:bg-white text-gray-900 font-bold text-xs sm:text-sm px-4 sm:px-6 py-2.5 sm:py-3 rounded-2xl sm:rounded-full shadow-xl border border-gray-200/90 hover:shadow-blue-500/25 hover:border-blue-500 transition-all duration-300 hover:scale-105 active:scale-95 group/mapbtn backdrop-blur-md cursor-pointer whitespace-nowrap max-w-[92%]"
                 >
-                  <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover/mapbtn:bg-blue-600 group-hover/mapbtn:text-white transition-colors duration-300">
+                  <div className="w-7 h-7 rounded-xl sm:rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover/mapbtn:bg-blue-600 group-hover/mapbtn:text-white transition-colors duration-300 shrink-0">
                     <MapPin size={15} />
                   </div>
-                  <span>Buka Petunjuk Arah di Google Maps</span>
-                  <ArrowRight size={14} className="text-gray-400 group-hover/mapbtn:text-blue-600 group-hover/mapbtn:translate-x-1 transition-all" />
+                  <span className="sm:hidden">Petunjuk Arah</span>
+                  <span className="hidden sm:inline">Buka Petunjuk Arah di Google Maps</span>
+                  <ArrowRight size={13} className="text-gray-400 group-hover/mapbtn:text-blue-600 group-hover/mapbtn:translate-x-1 transition-all shrink-0" />
                 </a>
               </div>
             </div>

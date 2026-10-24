@@ -693,8 +693,9 @@ export default function GivePage() {
                         <span>Mengirim Konfirmasi...</span>
                       ) : (
                         <>
-                          <Send size={18} className="group-hover:translate-x-1 transition-transform" />
-                          <span>Konfirmasi Telah Ditransfer</span>
+                          <Send size={18} className="group-hover:translate-x-1 transition-transform shrink-0" />
+                          <span className="sm:hidden">Konfirmasi Transfer</span>
+                          <span className="hidden sm:inline">Konfirmasi Telah Ditransfer</span>
                         </>
                       )}
                     </button>
@@ -703,8 +704,9 @@ export default function GivePage() {
                       to="/akun"
                       className="w-full py-4 min-h-[52px] rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all active:scale-[0.985] flex items-center justify-center gap-2 text-center"
                     >
-                      <LogIn size={18} />
-                      <span>Daftar / Masuk Akun Jemaat untuk Mengonfirmasi</span>
+                      <LogIn size={18} className="shrink-0" />
+                      <span className="sm:hidden">Masuk Akun Jemaat</span>
+                      <span className="hidden sm:inline">Daftar / Masuk Akun Jemaat untuk Mengonfirmasi</span>
                     </Link>
                   )}
 

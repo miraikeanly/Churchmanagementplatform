@@ -61,15 +61,18 @@ export default function LokasiPage() {
           href={CHURCH.mapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 bg-white/95 hover:bg-white text-gray-900 font-bold text-sm sm:text-base px-6 py-3.5 rounded-full shadow-2xl border border-gray-200/80 hover:shadow-blue-500/25 hover:border-blue-500/50 transition-all duration-300 hover:scale-105 active:scale-95 group/btn cursor-pointer backdrop-blur-md"
+          className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-2.5 bg-white/95 hover:bg-white text-gray-900 font-bold text-xs sm:text-base px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-2xl sm:rounded-full shadow-xl border border-gray-200/80 hover:shadow-blue-500/25 hover:border-blue-500/50 transition-all duration-300 hover:scale-105 active:scale-95 group/btn cursor-pointer backdrop-blur-md whitespace-nowrap max-w-[92%]"
         >
-          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover/btn:bg-blue-600 group-hover/btn:text-white transition-colors duration-300">
-            <Navigation size={17} />
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl sm:rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover/btn:bg-blue-600 group-hover/btn:text-white transition-colors duration-300 shrink-0">
+            <Navigation size={15} />
           </div>
-          <span className="bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent group-hover/btn:from-blue-600 group-hover/btn:to-indigo-600 transition-all">
+          <span className="bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent group-hover/btn:from-blue-600 group-hover/btn:to-indigo-600 transition-all sm:hidden">
+            Google Maps
+          </span>
+          <span className="bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent group-hover/btn:from-blue-600 group-hover/btn:to-indigo-600 transition-all hidden sm:inline">
             Buka di Google Maps
           </span>
-          <ArrowRight size={16} className="text-gray-400 group-hover/btn:text-blue-600 group-hover/btn:translate-x-1 transition-all" />
+          <ArrowRight size={14} className="text-gray-400 group-hover/btn:text-blue-600 group-hover/btn:translate-x-1 transition-all shrink-0" />
         </a>
       </motion.section>
 
@@ -80,17 +83,17 @@ export default function LokasiPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-4"
+          className="bg-gray-50 rounded-2xl p-5 sm:p-6 border border-gray-100 mb-4"
         >
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-start gap-3.5 sm:gap-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
               <MapPin size={18} className="text-white" />
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <h3 className="font-bold text-gray-900">Alamat</h3>
-              <p className="text-gray-500 text-sm break-words">{CHURCH.address}</p>
+              <p className="text-gray-600 text-sm break-words leading-relaxed">{CHURCH.address}</p>
             </div>
-            <ArrowRight size={18} className="text-gray-300 ml-auto" />
+            <ArrowRight size={18} className="text-gray-300 ml-auto shrink-0 mt-1 hidden sm:block" />
           </div>
         </motion.div>
 
