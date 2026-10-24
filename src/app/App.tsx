@@ -20,6 +20,7 @@ import NativeBackHandler from "./components/common/NativeBackHandler";
 import AdminPinGate from "./components/auth/AdminPinGate";
 import ScrollNavigation from "./components/common/ScrollNavigation";
 import ScrollToTop from "./components/common/ScrollToTop";
+import JemaatChatBot from "./components/public/JemaatChatBot";
 
 // Protected Route — redirects to /login if not authenticated
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -76,6 +77,7 @@ export default function App() {
       <ScrollToTop />
       <NativeBackHandler />
       <ScrollNavigation />
+      <JemaatChatBot />
       <AuthProvider>
         <Routes>
           {/* Login */}
