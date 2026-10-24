@@ -248,27 +248,36 @@ export default function JemaatChatBot() {
   return (
     <>
       {/* ── Floating Chat Bot Trigger Button ── */}
-      <div className="fixed bottom-36 right-5 z-40 flex items-center gap-2">
+      <div className="fixed bottom-36 right-5 z-40 flex items-center">
         {!isOpen && (
           <motion.button
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.85 }}
-            whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsOpen(true)}
-            className="group relative flex items-center gap-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white pl-3.5 pr-4 py-2.5 rounded-full shadow-2xl border border-white/20 hover:border-blue-400/60 cursor-pointer backdrop-blur-md transition-all"
+            className="group relative flex items-center bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-2.5 rounded-full shadow-2xl border border-white/20 hover:border-blue-400/60 cursor-pointer backdrop-blur-md transition-all duration-300 ease-out hover:pr-4.5 hover:shadow-blue-900/30 hover:shadow-xl"
             aria-label="Buka Chat Asisten Jemaat"
+            title="Tanya Asisten GBI Jelambar Timur"
           >
-            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-white/10 p-1 flex items-center justify-center border border-white/20 group-hover:scale-105 transition-transform">
+            {/* Avatar & Online / Chat Badge */}
+            <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-white/10 p-1 flex items-center justify-center border border-white/20 shrink-0 group-hover:scale-105 transition-transform duration-300">
               <img src={gbiLogo} alt="GBI Logo" className="w-full h-full object-contain" />
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-blue-600 rounded-full border border-slate-900 flex items-center justify-center text-white shadow-xs">
+                <MessageSquare size={9} />
+              </span>
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse" />
             </div>
-            <div className="text-left hidden sm:block">
-              <p className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors">Tanya Asisten</p>
-              <p className="text-[10px] text-blue-200/80">Siap melayani 24/7</p>
+
+            {/* Expandable Text: Hidden by default, smoothly expands on hover */}
+            <div className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out group-hover:max-w-[220px] group-hover:opacity-100 group-hover:ml-2.5 flex flex-col text-left pointer-events-none group-hover:pointer-events-auto">
+              <p className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors leading-tight">
+                Tanya Asisten
+              </p>
+              <p className="text-[10px] text-blue-200/80 leading-tight mt-0.5">
+                Siap melayani 24/7
+              </p>
             </div>
-            <span className="sm:hidden text-xs font-bold text-white pr-1">Tanya Asisten</span>
           </motion.button>
         )}
       </div>
