@@ -520,10 +520,20 @@ export default function KomisiManagement() {
 
   // Which komisi this user can see
   const visibleKomisi = useMemo(() => {
-    if (isSuperAdmin || permissions?.editKomisi || permissions?.viewKomisi) return [...KOMISI_LIST];
-    const leaderOf = permissions?.komisiLeaderOf || [];
-    const visible = KOMISI_LIST.filter(k => leaderOf.includes(k.id));
-    return visible;
+    if (isSuperAdmin) return [...KOMISI_LIST];
+
+    const allowed = permissions?.allowedKomisi || permissions?.komisiLeaderOf;
+    if (Array.isArray(allowed) && allowed.length > 0) {
+      if (allowed.includes('*') || allowed.includes('all')) return [...KOMISI_LIST];
+      const filtered = KOMISI_LIST.filter(k => allowed.includes(k.id));
+      return filtered;
+    }
+
+    if (permissions?.editKomisi || permissions?.viewKomisi) {
+      return [...KOMISI_LIST];
+    }
+
+    return [];
   }, [isSuperAdmin, permissions]);
 
   const [searchParams] = useSearchParams();
@@ -531,25 +541,31 @@ export default function KomisiManagement() {
 
   const [activeKomisi, setActiveKomisi] = useState<KomisiId>(() => {
     if (komisiParam) {
-      const match = KOMISI_LIST.find(k => k.id === komisiParam || k.label.toLowerCase() === komisiParam.toLowerCase());
+      const match = visibleKomisi.find(k => k.id === komisiParam || k.label.toLowerCase() === komisiParam.toLowerCase());
       if (match) return match.id as KomisiId;
     }
     return (visibleKomisi[0]?.id as KomisiId) ?? 'sekolah-minggu';
   });
 
   useEffect(() => {
+    if (visibleKomisi.length === 0) return;
     if (komisiParam) {
-      const match = KOMISI_LIST.find(k => k.id === komisiParam || k.label.toLowerCase() === komisiParam.toLowerCase());
+      const match = visibleKomisi.find(k => k.id === komisiParam || k.label.toLowerCase() === komisiParam.toLowerCase());
       if (match) {
         setActiveKomisi(match.id as KomisiId);
+        return;
       }
     }
-  }, [komisiParam]);
+    if (!visibleKomisi.some(k => k.id === activeKomisi)) {
+      setActiveKomisi(visibleKomisi[0].id as KomisiId);
+    }
+  }, [komisiParam, visibleKomisi, activeKomisi]);
 
   const [tab, setTab] = useState<Tab>('anggota');
 
   const canEdit = isSuperAdmin || permissions?.editKomisi ||
-    (permissions?.komisiLeaderOf || []).includes(activeKomisi);
+    (permissions?.allowedKomisi || permissions?.komisiLeaderOf || []).includes(activeKomisi) ||
+    (permissions?.allowedKomisi || []).includes('*');
 
   const [members, setMembers] = useState<KomisiMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);

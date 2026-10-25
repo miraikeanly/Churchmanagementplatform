@@ -21,10 +21,20 @@ const MODULES = [
   { key: 'Pelayan', label: 'Pelayan' },
   { key: 'Pengumuman', label: 'Pengumuman' },
   { key: 'Galeri', label: 'Galeri Foto' },
-  { key: 'Komisi', label: 'Komisi' },
+  { key: 'Komisi', label: 'Komisi (Per-Komisi)' },
   { key: 'Jadwal', label: 'Jadwal Pelayanan' },
   { key: 'Tim', label: 'Tim Pelayanan' },
   { key: 'Pendaftaran', label: 'Pendaftaran' }
+];
+
+export const KOMISI_OPTIONS = [
+  { id: 'sekolah-minggu', label: 'Sekolah Minggu (Anak)', badgeColor: 'bg-yellow-100 text-yellow-800' },
+  { id: 'teens', label: 'Teens (Remaja)', badgeColor: 'bg-purple-100 text-purple-800' },
+  { id: 'wbi', label: 'Wanita Bethel Indonesia (WBI)', badgeColor: 'bg-pink-100 text-pink-800' },
+  { id: 'vessel', label: 'Vessel Youth Community (Pemuda)', badgeColor: 'bg-indigo-100 text-indigo-800' },
+  { id: 'koemas', label: 'Koemas (Lansia)', badgeColor: 'bg-orange-100 text-orange-800' },
+  { id: 'kompas', label: 'Komunitas Pasutri (KOMPAS)', badgeColor: 'bg-emerald-100 text-emerald-800' },
+  { id: 'kowari', label: 'Komunitas Wanita Mandiri (KOWARI)', badgeColor: 'bg-rose-100 text-rose-800' },
 ];
 
 export default function UserManagement() {
@@ -210,6 +220,12 @@ export default function UserManagement() {
   const openAccessModal = (user: AppUser) => {
     setEditingUser(user);
     const p = user.permissions || {};
+    const rawAllowed = p.allowedKomisi || p.komisiLeaderOf;
+    const isAll = !rawAllowed || (Array.isArray(rawAllowed) && (rawAllowed.includes('*') || rawAllowed.length === 0));
+    const initialAllowedList = isAll
+      ? KOMISI_OPTIONS.map(k => k.id)
+      : (Array.isArray(rawAllowed) ? rawAllowed : []);
+
     setTempPermissions({
       ...p,
       viewAbsensi: !!(p.viewAbsensi || p.viewAbsen),
@@ -224,6 +240,8 @@ export default function UserManagement() {
       editKomisi: !!p.editKomisi,
       viewPelayan: !!p.viewPelayan,
       editPelayan: !!p.editPelayan,
+      allKomisi: isAll,
+      allowedKomisi: initialAllowedList,
     });
   };
 
@@ -276,6 +294,17 @@ export default function UserManagement() {
       p.editRegistrasi = !!p.editPendaftaran;
 
       p.deleteJemaat = !!p.editJemaat;
+
+      // Handle komisi permissions
+      if (p.allKomisi) {
+        p.allowedKomisi = ['*'];
+        p.komisiLeaderOf = KOMISI_OPTIONS.map(k => k.id);
+      } else {
+        const selected = Array.isArray(tempPermissions.allowedKomisi) ? tempPermissions.allowedKomisi : [];
+        p.allowedKomisi = selected;
+        p.komisiLeaderOf = selected;
+      }
+      delete p.allKomisi;
 
       await api.put(`/api/admin/users/${editingUser.id}`, { permissions: p });
       setEditingUser(null);
@@ -483,12 +512,32 @@ export default function UserManagement() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {u.role === 'admin' ? (
-                        <button
-                          onClick={() => openAccessModal(u)}
-                          className="text-blue-600 hover:text-blue-900 flex items-center justify-end w-full gap-1"
-                        >
-                          <Edit2 className="w-4 h-4" /> Kelola Akses
-                        </button>
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            onClick={() => openAccessModal(u)}
+                            className="text-blue-600 hover:text-blue-900 flex items-center justify-end gap-1 cursor-pointer font-bold text-xs"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" /> Kelola Akses
+                          </button>
+                          {(() => {
+                            const p = u.permissions || {};
+                            if (!p.viewKomisi && !p.editKomisi) return null;
+                            const allowed = p.allowedKomisi || p.komisiLeaderOf;
+                            if (!allowed || allowed.includes('*') || allowed.length === KOMISI_OPTIONS.length) {
+                              return (
+                                <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                  Komisi: Semua
+                                </span>
+                              );
+                            }
+                            const labels = KOMISI_OPTIONS.filter(k => allowed.includes(k.id)).map(k => k.label.split(' ')[0]);
+                            return (
+                              <span className="text-[10px] text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 font-semibold truncate max-w-[150px]" title={labels.join(', ')}>
+                                Komisi: {labels.join(', ')}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       ) : u.role === 'super_admin' ? (
                         <span className="text-gray-400">Akses Penuh</span>
                       ) : (
@@ -636,32 +685,149 @@ export default function UserManagement() {
                   const canEdit = !!tempPermissions[editKey];
                   
                   return (
-                    <div key={mod.key} className="border rounded-lg p-4">
-                      <p className="font-semibold text-gray-900 mb-3">{mod.label}</p>
+                    <div key={mod.key} className={`border rounded-xl p-4 transition-all ${
+                      mod.key === 'Komisi' && (canView || canEdit)
+                        ? 'col-span-1 sm:col-span-2 bg-gradient-to-br from-white to-blue-50/30 border-blue-200 ring-1 ring-blue-100 shadow-2xs'
+                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <p className="font-bold text-gray-900 text-sm">{mod.label}</p>
+                        {mod.key === 'Komisi' && (canView || canEdit) && (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                            {tempPermissions.allKomisi ? 'Semua Komisi' : `${(tempPermissions.allowedKomisi || []).length} Komisi Terpilih`}
+                          </span>
+                        )}
+                      </div>
+
                       <div className="flex gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
                           <input 
                             type="checkbox"
                             checked={canView}
                             onChange={() => handleTogglePermission(mod.key, 'view')}
-                            className="rounded text-blue-600 focus:ring-blue-500"
+                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                           />
-                          <span className="text-sm text-gray-700 flex items-center gap-1">
-                            <Eye className="w-4 h-4" /> Lihat
+                          <span className="text-sm text-gray-700 flex items-center gap-1 font-medium">
+                            <Eye className="w-4 h-4 text-slate-500" /> Lihat
                           </span>
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
                           <input 
                             type="checkbox"
                             checked={canEdit}
                             onChange={() => handleTogglePermission(mod.key, 'edit')}
-                            className="rounded text-blue-600 focus:ring-blue-500"
+                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                           />
-                          <span className="text-sm text-gray-700 flex items-center gap-1">
-                            <Edit2 className="w-4 h-4" /> Edit
+                          <span className="text-sm text-gray-700 flex items-center gap-1 font-medium">
+                            <Edit2 className="w-4 h-4 text-slate-500" /> Edit
                           </span>
                         </label>
                       </div>
+
+                      {/* Sub-selector khusus Komisi: batasan per komisi */}
+                      {mod.key === 'Komisi' && (canView || canEdit) && (
+                        <div className="mt-3 pt-3 border-t border-blue-100 space-y-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-800">Cakupan Komisi yang Diizinkan:</span>
+                            <div className="inline-flex rounded-lg p-0.5 bg-slate-100 border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => setTempPermissions((prev: any) => ({
+                                  ...prev,
+                                  allKomisi: true,
+                                  allowedKomisi: KOMISI_OPTIONS.map(k => k.id)
+                                }))}
+                                className={`text-[11px] font-bold px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                                  tempPermissions.allKomisi ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Semua Komisi
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTempPermissions((prev: any) => ({
+                                  ...prev,
+                                  allKomisi: false
+                                }))}
+                                className={`text-[11px] font-bold px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                                  !tempPermissions.allKomisi ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Pilih Komisi Tertentu
+                              </button>
+                            </div>
+                          </div>
+
+                          {!tempPermissions.allKomisi ? (
+                            <div className="bg-white/90 p-3 rounded-xl border border-slate-200/90 space-y-2.5">
+                              <p className="text-[11px] text-slate-500">
+                                Centang hanya komisi yang boleh diakses oleh admin ini (misal: hanya <strong>Sekolah Minggu</strong>):
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {KOMISI_OPTIONS.map(kom => {
+                                  const isChecked = (tempPermissions.allowedKomisi || []).includes(kom.id);
+                                  return (
+                                    <label
+                                      key={kom.id}
+                                      className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                                        isChecked
+                                          ? 'bg-blue-50/60 border-blue-300 ring-1 ring-blue-200'
+                                          : 'bg-white border-slate-200 hover:border-slate-300'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          setTempPermissions((prev: any) => {
+                                            const current = prev.allowedKomisi || [];
+                                            const next = isChecked
+                                              ? current.filter((id: string) => id !== kom.id)
+                                              : [...current, kom.id];
+                                            return { ...prev, allowedKomisi: next, allKomisi: false };
+                                          });
+                                        }}
+                                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                      />
+                                      <div className="min-w-0">
+                                        <p className="font-bold text-slate-800 text-xs truncate">{kom.label}</p>
+                                      </div>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+                                <span className="text-slate-400 font-medium">
+                                  Terpilih: <strong>{(tempPermissions.allowedKomisi || []).length}</strong> dari {KOMISI_OPTIONS.length} komisi
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setTempPermissions((p: any) => ({ ...p, allowedKomisi: KOMISI_OPTIONS.map(k => k.id) }))}
+                                    className="text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
+                                  >
+                                    Pilih Semua
+                                  </button>
+                                  <span className="text-slate-300">•</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTempPermissions((p: any) => ({ ...p, allowedKomisi: [] }))}
+                                    className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                                  >
+                                    Kosongkan
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200/80 text-[11px] text-emerald-800 font-medium flex items-center gap-2">
+                              <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                              <span>Admin ini dapat melihat dan mengelola seluruh komisi gereja tanpa pembatasan.</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

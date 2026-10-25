@@ -176,7 +176,7 @@ export default function SuperAdminDashboard() {
     { label: 'Pelayan',           key: 'pelayan',          visible: isSuperAdmin || Boolean(permissions.viewPelayan || permissions.editPelayan) },
     { label: 'Pengumuman',        key: 'pengumuman',       visible: isSuperAdmin || Boolean(permissions.viewPengumuman || permissions.editPengumuman) },
     { label: 'Galeri Foto',       key: 'galeri',           visible: isSuperAdmin || Boolean(permissions.viewGaleri || permissions.editGaleri) },
-    { label: 'Komisi',            key: 'komisi',           visible: isSuperAdmin || Boolean(permissions.viewKomisi || permissions.editKomisi || (permissions.komisiLeaderOf && permissions.komisiLeaderOf.length > 0)) },
+    { label: 'Komisi',            key: 'komisi',           visible: isSuperAdmin || Boolean(permissions.viewKomisi || permissions.editKomisi || (permissions.allowedKomisi && permissions.allowedKomisi.length > 0) || (permissions.komisiLeaderOf && permissions.komisiLeaderOf.length > 0)) },
     { label: 'Jadwal Pelayanan',  key: 'jadwal',           visible: isSuperAdmin || Boolean(permissions.viewJadwal || permissions.editJadwal) },
     { label: 'Tim Pelayanan',     key: 'tim',              visible: isSuperAdmin || Boolean(permissions.viewTim || permissions.viewTeam || permissions.editTim || permissions.editTeam) },
     { label: 'Pendaftaran',       key: 'registrasi',       visible: isSuperAdmin || Boolean(permissions.viewPendaftaran || permissions.editPendaftaran || permissions.viewRegistrasi || permissions.editRegistrasi) },
