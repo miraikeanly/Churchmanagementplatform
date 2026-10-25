@@ -21,6 +21,7 @@ import KomisiManagement from '../modules/KomisiManagement';
 import ScheduleManagement from '../modules/ScheduleManagement';
 import ActivityLogManagement from '../modules/ActivityLogManagement';
 import ErrorBoundary from '../common/ErrorBoundary';
+import AdminChatDrawer from './AdminChatDrawer';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { sendHeartbeat } from '../../../lib/auditLogger';
 // @ts-ignore
@@ -29,7 +30,7 @@ import {
   LayoutDashboard, Users, ClipboardCheck, CalendarCheck, Group,
   Wallet, Package, HandHelping, Megaphone, ShieldCheck, Menu, X,
   LogOut, ChevronRight, Cake, Gift, Images, UserRound, Activity,
-  HeartHandshake, Heart, Phone
+  HeartHandshake, Heart, Phone, MessageSquare
 } from 'lucide-react';
 
 
@@ -156,6 +157,8 @@ export default function SuperAdminDashboard() {
     todayAttendance: 0,
   });
   const [members, setMembers] = useState<any[]>([]);
+  const [adminChatOpen, setAdminChatOpen] = useState(false);
+  const [pendingTaskCount, setPendingTaskCount] = useState(0);
 
   const isSuperAdmin = user?.role === 'super_admin';
   const permissions = user?.permissions || {};
@@ -338,6 +341,28 @@ export default function SuperAdminDashboard() {
                 {stats.pendingApprovals} Pending
               </button>
             )}
+
+            {/* Admin Internal Chat & Task Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setAdminChatOpen(prev => !prev)}
+              className={`relative flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none active:scale-95 ${
+                adminChatOpen
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300 shadow-2xs'
+              }`}
+              title="Chat & Tugas Khusus Admin"
+              aria-label="Buka Chat & Tugas Admin"
+            >
+              <MessageSquare size={15} className={adminChatOpen ? 'text-white' : 'text-blue-600'} />
+              <span className="hidden sm:inline">Chat &amp; Tugas</span>
+              {pendingTaskCount > 0 && (
+                <span className="bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight animate-pulse">
+                  {pendingTaskCount}
+                </span>
+              )}
+            </button>
+
             <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white text-xs font-bold">
               {user?.name?.[0]?.toUpperCase()}
             </div>
@@ -639,6 +664,13 @@ export default function SuperAdminDashboard() {
           </ErrorBoundary>
         </main>
       </div>
+
+      {/* ── Admin Chat & Task Drawer ── */}
+      <AdminChatDrawer
+        isOpen={adminChatOpen}
+        onClose={() => setAdminChatOpen(false)}
+        pendingTaskCountChange={setPendingTaskCount}
+      />
     </div>
   );
 }
