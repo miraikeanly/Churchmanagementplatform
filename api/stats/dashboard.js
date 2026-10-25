@@ -33,12 +33,21 @@ export default async function handler(req, res) {
     for (const r of komselRows) { const n = normPks(r.value?.pksName || r.value?.name); if (n) pksSet.add(n); }
     for (const n of Array.isArray(pksConfig[0]?.value) ? pksConfig[0].value : []) { const k = normPks(n); if (k) pksSet.add(k); }
 
-    // Today's attendance (Jakarta date): everyone marked present in any session held today.
+    // Today's attendance (Jakarta date)
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
-    let todayAttendance = 0;
+    let todayAttendance = 0; // Ibadah Umum
+    let todayKomisiAttendance = 0; // Komisi sessions
     for (const r of absenRows) {
-      if (r.value?.date === today && Array.isArray(r.value.presentIds)) todayAttendance += r.value.presentIds.length;
+      if (r.value?.date === today && Array.isArray(r.value.presentIds)) {
+        const count = r.value.presentIds.length;
+        if (r.key.startsWith('attendance_session:')) {
+          todayAttendance += count;
+        } else if (r.key.startsWith('komisi:')) {
+          todayKomisiAttendance += count;
+        }
+      }
     }
+    const totalTodayAttendance = todayAttendance + todayKomisiAttendance;
 
     // Same member may exist under both key formats; count each id once.
     const byId = new Map();
@@ -73,7 +82,9 @@ export default async function handler(req, res) {
         newRegistrations,
         totalKomsel: pksSet.size,
         pendingApprovals: parseInt(pendingUsers[0]?.c || 0),
-        todayAttendance,
+        todayAttendance, // Ibadah Umum (matches 193 in user screenshot)
+        todayKomisiAttendance, // Komisi (matches 38)
+        totalTodayAttendance, // 231 (total across both)
         attendanceTrends: [],
         komisiDemographics: [...perKomisi.entries()].map(([id, set]) => ({
           name: KOMISI_NAMES[id] || id,

@@ -155,6 +155,8 @@ export default function SuperAdminDashboard() {
     totalKomsel: 0,
     pendingApprovals: 0,
     todayAttendance: 0,
+    todayKomisiAttendance: 0,
+    totalTodayAttendance: 0,
   });
   const [members, setMembers] = useState<any[]>([]);
   const [adminChatOpen, setAdminChatOpen] = useState(false);
@@ -393,17 +395,40 @@ export default function SuperAdminDashboard() {
               {/* Stats grid */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: 'Total Jemaat',    value: stats.totalMembers,    color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200',   icon: Users },
-                  { label: 'Komsel Aktif',    value: stats.totalKomsel,     color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: Group },
-                  { label: 'Pending Approval',value: stats.pendingApprovals,color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200', icon: ClipboardCheck },
-                  { label: 'Absensi Hari Ini',value: stats.todayAttendance, color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', icon: CalendarCheck },
+                  { label: 'Total Jemaat',    value: stats.totalMembers,    sub: 'Jemaat terdaftar', color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200',   icon: Users, tab: 'jemaat' },
+                  { label: 'Komsel Aktif',    value: stats.totalKomsel,     sub: 'Kelompok sel',     color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: Group, tab: 'komsel' },
+                  { label: 'Pending Approval',value: stats.pendingApprovals,sub: 'Menunggu konfirmasi', color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200', icon: ClipboardCheck, tab: 'pendingApprovals' },
+                  { 
+                    label: 'Absensi Hari Ini',
+                    value: stats.todayAttendance, 
+                    sub: stats.todayKomisiAttendance > 0 
+                      ? `Umum: ${stats.todayAttendance} • Komisi: ${stats.todayKomisiAttendance} (Total ${stats.totalTodayAttendance || (stats.todayAttendance + stats.todayKomisiAttendance)})`
+                      : 'Ibadah Umum', 
+                    color: 'text-purple-700', 
+                    bg: 'bg-purple-50', 
+                    border: 'border-purple-200', 
+                    icon: CalendarCheck, 
+                    tab: 'absensi' 
+                  },
                 ].map(s => (
-                  <div key={s.label} className={`${s.bg} border ${s.border} rounded-2xl p-5`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-medium text-gray-500">{s.label}</p>
-                      <s.icon size={16} className={s.color} />
+                  <div 
+                    key={s.label} 
+                    onClick={() => s.tab && setActiveTab(s.tab)}
+                    className={`${s.bg} border ${s.border} rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all active:scale-[0.99] flex flex-col justify-between`}
+                    title="Klik untuk membuka menu terkait"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-semibold text-gray-600">{s.label}</p>
+                        <s.icon size={16} className={s.color} />
+                      </div>
+                      <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
                     </div>
-                    <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
+                    {s.sub && (
+                      <p className="text-[11px] text-gray-500 mt-2 font-medium truncate" title={s.sub}>
+                        {s.sub}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

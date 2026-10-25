@@ -532,6 +532,7 @@ function DailyInput({
   canEdit,
   date,
   setDate,
+  onGoToReport,
 }: {
   members: Member[];
   sessions: Session[];
@@ -540,6 +541,7 @@ function DailyInput({
   canEdit: boolean;
   date: string;
   setDate: (d: string) => void;
+  onGoToReport?: () => void;
 }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -617,7 +619,7 @@ function DailyInput({
     return list;
   }, [members, search, filter, sortDir, present]);
 
-  const handleSave = async () => {
+  const handleSave = async (goToReport = false) => {
     if (!canEdit) return;
     setSaving(true);
     try {
@@ -662,6 +664,10 @@ function DailyInput({
       setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan! (${presentIdsList.length} orang hadir)`);
       setTimeout(() => setSaveSuccessNotice(''), 4000);
       onSessionSaved();
+
+      if (goToReport && onGoToReport) {
+        onGoToReport();
+      }
     } catch (err: any) {
       alert(`Gagal menyimpan absensi: ${err.message || 'Terjadi kesalahan'}`);
     } finally {
@@ -781,18 +787,30 @@ function DailyInput({
           )}
 
           {canEdit && (
-            <button
-              onClick={handleSave}
-              disabled={saving || resetting}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] shadow-sm cursor-pointer w-full sm:w-auto ${
-                saved && !isEditing
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-blue-700 text-white hover:bg-blue-800 ring-2 ring-blue-300'
-              } disabled:opacity-50`}
-            >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              <span>{saving ? 'Menyimpan...' : (saved && !isEditing) ? 'Tersimpan ✓' : existingSession ? 'Simpan Perubahan' : 'Simpan Absensi'}</span>
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => handleSave(false)}
+                disabled={saving || resetting}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] shadow-sm cursor-pointer ${
+                  saved && !isEditing
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-blue-700 text-white hover:bg-blue-800 ring-2 ring-blue-300'
+                } disabled:opacity-50`}
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{saving ? 'Menyimpan...' : (saved && !isEditing) ? 'Tersimpan ✓' : existingSession ? 'Simpan' : 'Simpan Absensi'}</span>
+              </button>
+
+              <button
+                onClick={() => handleSave(true)}
+                disabled={saving || resetting}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-semibold transition-all active:scale-[0.98] border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-xs cursor-pointer disabled:opacity-50"
+                title="Simpan absensi hari ini dan langsung buka halaman Laporan (absensi tetap bisa diedit di laporan)"
+              >
+                <BarChart3 size={15} />
+                <span>Simpan ke Laporan</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1854,6 +1872,7 @@ export default function AttendanceManagement() {
           canEdit={canEdit}
           date={selectedDate}
           setDate={setSelectedDate}
+          onGoToReport={() => setTab('report')}
         />
       ) : (
         <ReportSummary
