@@ -27,6 +27,20 @@ export default function ScrollNavigation() {
     };
   }, []);
 
+  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const checkDrawer = () => {
+      const open = document.querySelector('[data-admin-chat-open="true"]') !== null;
+      setChatDrawerOpen(open);
+    };
+    checkDrawer();
+    const interval = setInterval(checkDrawer, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (chatDrawerOpen) return null;
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });

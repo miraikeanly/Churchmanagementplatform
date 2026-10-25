@@ -5,10 +5,10 @@ import { sendJson, sendError, getBody } from '../http.js';
 import { logActivity } from '../audit.js';
 
 export default async function handler(req, res) {
-  const admin = await requireUser(req, res, { role: 'super_admin' });
-  if (!admin) return;
-
   if (req.method === 'GET') {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
     try {
       const users = await sql`
         SELECT id, name, email, role, status, auth_provider, created_at, permissions
@@ -32,6 +32,8 @@ export default async function handler(req, res) {
 
   // Add a user directly (approved immediately, since a super admin is creating it)
   if (req.method === 'POST') {
+    const admin = await requireUser(req, res, { role: 'super_admin' });
+    if (!admin) return;
     const { name, email: rawEmail, password, role = 'admin', status = 'approved', permissions } = getBody(req);
     if (!name || !String(name).trim() || !rawEmail || !password) {
       return sendError(res, 400, 'Nama, email, dan password wajib diisi');
