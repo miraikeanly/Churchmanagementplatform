@@ -21,6 +21,8 @@ import AdminPinGate from "./components/auth/AdminPinGate";
 import ScrollNavigation from "./components/common/ScrollNavigation";
 import ScrollToTop from "./components/common/ScrollToTop";
 import JemaatChatBot from "./components/public/JemaatChatBot";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import { safeSessionStorage } from "../lib/storage";
 
 // Protected Route — redirects to /login if not authenticated
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -52,8 +54,7 @@ function AdminRoute() {
   const { user } = useAuth();
   const [showSignup, setShowSignup] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return sessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
+    return safeSessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
   });
 
   if (user) {
@@ -73,41 +74,43 @@ function AdminRoute() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <ScrollToTop />
-      <NativeBackHandler />
-      <ScrollNavigation />
-      <JemaatChatBot />
-      <AuthProvider>
-        <Routes>
-          {/* Login */}
-          <Route path="/login" element={<AdminRoute />} />
-          <Route path="/admin" element={<AdminRoute />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ScrollToTop />
+        <NativeBackHandler />
+        <ScrollNavigation />
+        <JemaatChatBot />
+        <AuthProvider>
+          <Routes>
+            {/* Login */}
+            <Route path="/login" element={<AdminRoute />} />
+            <Route path="/admin" element={<AdminRoute />} />
 
-          {/* Protected Admin / SuperAdmin Dashboard */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <SuperAdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+            {/* Protected Admin / SuperAdmin Dashboard */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <SuperAdminDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Public church website (jemaat) */}
-          <Route path="/" element={<JemaatPage />} />
-          <Route path="/jemaat" element={<JemaatPage />} />
-          <Route path="/tentang" element={<TentangPage />} />
-          <Route path="/galeri" element={<GaleriPage />} />
-          <Route path="/lokasi" element={<LokasiPage />} />
-          <Route path="/service" element={<ServicePage />} />
-          <Route path="/give" element={<GivePage />} />
-          <Route path="/persembahan" element={<GivePage />} />
-          <Route path="/akun" element={<AkunPage />} />
+            {/* Public church website (jemaat) */}
+            <Route path="/" element={<JemaatPage />} />
+            <Route path="/jemaat" element={<JemaatPage />} />
+            <Route path="/tentang" element={<TentangPage />} />
+            <Route path="/galeri" element={<GaleriPage />} />
+            <Route path="/lokasi" element={<LokasiPage />} />
+            <Route path="/service" element={<ServicePage />} />
+            <Route path="/give" element={<GivePage />} />
+            <Route path="/persembahan" element={<GivePage />} />
+            <Route path="/akun" element={<AkunPage />} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

@@ -3,22 +3,28 @@ import { useAuth } from '../../contexts/AuthContext';
 import { User, Mail, Lock, AlertCircle, Clock, Eye, EyeOff } from 'lucide-react';
 import { registerPlugin } from '@capacitor/core';
 import AdminAuthShell from './AdminAuthShell';
+import { safeLocalStorage, safeSessionStorage } from '../../../lib/storage';
 
 interface NativeGoogleAuthPlugin {
   signIn(options?: { clientId?: string }): Promise<{ credential: string; email?: string; name?: string }>;
 }
 
-const NativeGoogleAuth = registerPlugin<NativeGoogleAuthPlugin>('NativeGoogleAuth');
+let NativeGoogleAuth: NativeGoogleAuthPlugin | null = null;
+try {
+  NativeGoogleAuth = registerPlugin<NativeGoogleAuthPlugin>('NativeGoogleAuth');
+} catch (e) {
+  // Plugin not available or web
+}
 
 export default function SignupPage({ onSwitchToLogin }: { onSwitchToLogin?: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState(() => {
-    return typeof window !== 'undefined' ? localStorage.getItem('gjt_admin_remember_email') || '' : '';
+    return safeLocalStorage.getItem('gjt_admin_remember_email') || '';
   });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => {
-    return typeof window !== 'undefined' ? !!localStorage.getItem('gjt_admin_remember_email') : false;
+    return !!safeLocalStorage.getItem('gjt_admin_remember_email');
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,6 +42,31 @@ export default function SignupPage({ onSwitchToLogin }: { onSwitchToLogin?: () =
   useEffect(() => {
     if (isNative) return;
 
+    let isMounted = true;
+
+    const initGoogleButton = () => {
+      try {
+        // @ts-ignore
+        if (window.google?.accounts?.id && googleButtonRef.current && isMounted) {
+          // @ts-ignore
+          window.google.accounts.id.initialize({
+            client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '647511928995-cp3lvq3pap1pg1am24qfouenodnuh1ne.apps.googleusercontent.com',
+            callback: handleGoogleCredentialResponse,
+          });
+          // @ts-ignore
+          window.google.accounts.id.renderButton(googleButtonRef.current, {
+            theme: 'outline',
+            size: 'large',
+            width: 340,
+            text: 'signup_with',
+            shape: 'rectangular',
+          });
+        }
+      } catch (err) {
+        console.warn('Google GIS button init error in signup:', err);
+      }
+    };
+
     const loadGoogleScript = () => {
       if ((window as any).google?.accounts?.id && googleButtonRef.current) {
         initGoogleButton();
@@ -49,32 +80,17 @@ export default function SignupPage({ onSwitchToLogin }: { onSwitchToLogin?: () =
       script.onload = () => {
         initGoogleButton();
       };
+      script.onerror = () => {
+        console.warn('Failed to load Google GIS script in signup');
+      };
       document.body.appendChild(script);
       return () => {
+        isMounted = false;
         if (script.parentNode) script.parentNode.removeChild(script);
       };
     };
 
-    const initGoogleButton = () => {
-      // @ts-ignore
-      if (window.google && googleButtonRef.current) {
-        // @ts-ignore
-        window.google.accounts.id.initialize({
-          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '647511928995-cp3lvq3pap1pg1am24qfouenodnuh1ne.apps.googleusercontent.com',
-          callback: handleGoogleCredentialResponse,
-        });
-        // @ts-ignore
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: 'outline',
-          size: 'large',
-          width: 340,
-          text: 'signup_with',
-          shape: 'rectangular',
-        });
-      }
-    };
-
-    loadGoogleScript();
+    return loadGoogleScript();
   }, [isNative]);
 
   const handleNativeGoogleSignIn = async () => {
@@ -122,12 +138,12 @@ export default function SignupPage({ onSwitchToLogin }: { onSwitchToLogin?: () =
     setLoading(true);
 
     if (rememberMe) {
-      localStorage.setItem('gjt_admin_remember_email', email);
+      safeLocalStorage.setItem('gjt_admin_remember_email', email);
     } else {
-      localStorage.removeItem('gjt_admin_remember_email');
+      safeLocalStorage.removeItem('gjt_admin_remember_email');
     }
 
-    const pin = typeof window !== 'undefined' ? sessionStorage.getItem('gjt_admin_portal_pin') || undefined : undefined;
+    const pin = safeSessionStorage.getItem('gjt_admin_portal_pin') || undefined;
     const result = await signUp({ email, password, name, pin });
     if (result.success) {
       if (result.status !== 'approved') {

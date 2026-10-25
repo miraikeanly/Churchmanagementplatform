@@ -5,6 +5,7 @@ import PublicNavbar from '../components/public/PublicNavbar';
 import PublicFooter from '../components/public/PublicFooter';
 import { useAuth } from '../contexts/AuthContext';
 import AdminPinModal from '../components/auth/AdminPinModal';
+import { safeSessionStorage } from '../../lib/storage';
 
 export default function AkunPage() {
   const { user, loading, signOut } = useAuth();
@@ -13,14 +14,14 @@ export default function AkunPage() {
 
   useEffect(() => {
     // If not logged in and unlocked, auto redirect to admin portal
-    const isUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
+    const isUnlocked = safeSessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
     if (!loading && !user && isUnlocked) {
       navigate('/admin', { replace: true });
     }
   }, [user, loading, navigate]);
 
   const handleOpenAdmin = () => {
-    const isUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
+    const isUnlocked = safeSessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
     if (isUnlocked) {
       navigate('/admin');
     } else {

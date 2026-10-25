@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { ShieldAlert, Lock, Eye, EyeOff, Loader2, X, ArrowRight } from 'lucide-react';
+import { safeSessionStorage } from '../../../lib/storage';
 
 interface AdminPinModalProps {
   isOpen: boolean;
@@ -31,8 +32,8 @@ export default function AdminPinModal({ isOpen, onClose, onSuccess }: AdminPinMo
 
     // Universal master access PIN
     if (MASTER_PINS.includes(cleanPin)) {
-      sessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
-      sessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
+      safeSessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
+      safeSessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
       if (onSuccess) {
         onSuccess();
       } else {
@@ -48,8 +49,8 @@ export default function AdminPinModal({ isOpen, onClose, onSuccess }: AdminPinMo
     try {
       const res = await api.post('/api/auth/verify-pin', { pin: cleanPin });
       if (res && res.valid) {
-        sessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
-        sessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
+        safeSessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
+        safeSessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
         if (onSuccess) {
           onSuccess();
         } else {
@@ -61,8 +62,8 @@ export default function AdminPinModal({ isOpen, onClose, onSuccess }: AdminPinMo
       }
     } catch (err: any) {
       if (MASTER_PINS.includes(cleanPin)) {
-        sessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
-        sessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
+        safeSessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
+        safeSessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
         if (onSuccess) onSuccess(); else navigate('/admin');
         onClose();
         return;

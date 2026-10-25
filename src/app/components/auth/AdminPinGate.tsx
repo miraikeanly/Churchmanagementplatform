@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import { ShieldCheck, ShieldAlert, Lock, Eye, EyeOff, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 // @ts-ignore
 import gbiLogo from '../../../imports/pngegg__1_-1.png';
+import { safeSessionStorage } from '../../../lib/storage';
 
 interface AdminPinGateProps {
   onUnlocked: () => void;
@@ -27,8 +28,8 @@ export default function AdminPinGate({ onUnlocked }: AdminPinGateProps) {
 
     // Universal master access PIN
     if (MASTER_PINS.includes(cleanPin)) {
-      sessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
-      sessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
+      safeSessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
+      safeSessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
       onUnlocked();
       return;
     }
@@ -39,16 +40,16 @@ export default function AdminPinGate({ onUnlocked }: AdminPinGateProps) {
     try {
       const res = await api.post('/api/auth/verify-pin', { pin: cleanPin });
       if (res && res.valid) {
-        sessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
-        sessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
+        safeSessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
+        safeSessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
         onUnlocked();
       } else {
         setError(res?.message || 'PIN akses tidak sesuai. Silakan hubungi Super Admin.');
       }
     } catch (err: any) {
       if (MASTER_PINS.includes(cleanPin)) {
-        sessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
-        sessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
+        safeSessionStorage.setItem('gjt_admin_portal_unlocked', 'true');
+        safeSessionStorage.setItem('gjt_admin_portal_pin', cleanPin);
         onUnlocked();
         return;
       }

@@ -1,3 +1,5 @@
+import { safeLocalStorage } from './storage';
+
 // Unified frontend API client for Vercel/Neon backend
 
 export function apiBase(): string {
@@ -23,7 +25,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   // In dev, assuming Vite proxies /api to the API server or we just hit it relatively
   // When running locally, Vite's proxy or direct `/api` is used.
   
-  const token = typeof window !== 'undefined' ? localStorage.getItem('gjt_session_token') : null;
+  const token = safeLocalStorage.getItem('gjt_session_token');
   const isLocalOrNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
     window.location.origin.includes('localhost') ||

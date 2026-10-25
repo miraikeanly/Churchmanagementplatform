@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../../lib/api';
+import { safeLocalStorage } from '../../lib/storage';
 
 type User = {
   id: string;
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.post('/api/auth/login', { email, password });
       if (res.success) {
-        if (res.token) localStorage.setItem('gjt_session_token', res.token);
+        if (res.token) safeLocalStorage.setItem('gjt_session_token', res.token);
         setUser(res.user);
         return { success: true };
       }
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.post('/api/auth/google', { credential });
       if (res.success) {
-        if (res.token) localStorage.setItem('gjt_session_token', res.token);
+        if (res.token) safeLocalStorage.setItem('gjt_session_token', res.token);
         setUser(res.user);
         return { success: true };
       }
@@ -99,12 +100,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await api.post('/api/auth/logout');
     } catch (e) {}
-    localStorage.removeItem('gjt_session_token');
+    safeLocalStorage.removeItem('gjt_session_token');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, accessToken: (typeof window !== 'undefined' ? localStorage.getItem('gjt_session_token') : null), loading, signIn, signInWithGoogle, signUp, signOut, refreshSession }}>
+    <AuthContext.Provider value={{ user, accessToken: safeLocalStorage.getItem('gjt_session_token'), loading, signIn, signInWithGoogle, signUp, signOut, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );

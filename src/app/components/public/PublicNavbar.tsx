@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Menu, X, ChevronDown, Crown, Flame, Rocket, HandHeart, ShieldCheck } from 'lucide-react';
 import gbiLogo from '../../../imports/pngegg__1_-1.png';
 import AdminPinModal from '../auth/AdminPinModal';
+import { safeSessionStorage } from '../../../lib/storage';
 
 /* ── Service sub-items ── */
 const SERVICE_ITEMS = [
@@ -68,7 +69,7 @@ export default function PublicNavbar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleOpenAdmin = () => {
-    const isUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
+    const isUnlocked = safeSessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
     if (isUnlocked) {
       navigate('/admin');
     } else {

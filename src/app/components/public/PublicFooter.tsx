@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, Phone, Lock } from 'lucide-react';
 import { CHURCH } from '../../../lib/church';
 import AdminPinModal from '../auth/AdminPinModal';
+import { safeSessionStorage } from '../../../lib/storage';
 
 const LINKS = [
   { to: '/', label: 'Beranda' },
@@ -19,7 +20,7 @@ export default function PublicFooter() {
   const navigate = useNavigate();
 
   const handleOpenAdmin = () => {
-    const isUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
+    const isUnlocked = safeSessionStorage.getItem('gjt_admin_portal_unlocked') === 'true';
     if (isUnlocked) {
       navigate('/admin');
     } else {
