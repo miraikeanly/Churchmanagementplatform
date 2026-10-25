@@ -650,27 +650,22 @@ export default function KomisiManagement() {
   }, [activeKomisi]);
 
   // ── Load attendance sessions ──────────────────────────────────────────────
-  const loadSessions = useCallback(async () => {
-    setLoadingSessions(true);
+  const loadSessions = useCallback(async (silent = false) => {
+    if (!silent) setLoadingSessions(true);
     try {
       const { data, error: err } = await supabaseAdmin
         .from(KV).select('key, value')
         .like('key', `komisi:${activeKomisi}:absen:%`);
       if (err) throw err;
       const list = (data ?? []).map((r: any) => r.value as AbsenSession).filter(Boolean);
-
-      // Tidy up: clean up old empty blank sessions
-      const blanks = list.filter(x => x.id.startsWith('week-') && (x.presentIds || []).length + (x.absentIds || []).length === 0);
-      if (blanks.length > 0) {
-        for (let i = 0; i < blanks.length; i += 10) {
-          await Promise.all(blanks.slice(i, i + 10).map(x => supabaseAdmin.from(KV).delete().eq('key', `komisi:${activeKomisi}:absen:${x.id}`)));
-        }
-      }
-      const kept = list.filter(x => !blanks.includes(x));
-      kept.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      setSessions(kept);
-    } catch (e: any) { setError(e.message); }
-    setLoadingSessions(false);
+      list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      setSessions(list);
+      setError('');
+    } catch (e: any) {
+      if (!silent) setError(e.message || 'Gagal memuat data absensi');
+    } finally {
+      if (!silent) setLoadingSessions(false);
+    }
   }, [activeKomisi]);
 
   const changeDateByDays = (days: number) => {
@@ -686,17 +681,24 @@ export default function KomisiManagement() {
     loadMembers(); loadSessions();
   }, [activeKomisi]);
 
-  // Auto-refresh sessions and members every 15s so edits from other users show up
+  // Auto-refresh sessions in background silently every 30s
   useAutoRefresh(() => {
-    loadSessions();
-  }, 15_000);
+    // Only refresh silently if user is not currently making dirty unsaved changes
+    if (!isAttendanceDirtyRef.current) {
+      loadSessions(true);
+    }
+  }, 30_000);
 
   // Track if user currently has unsaved edits in draftPresentIds
   const isAttendanceDirtyRef = useRef(false);
 
+  // When selectedDate changes, reset dirty flag so the selected session loads cleanly
+  useEffect(() => {
+    isAttendanceDirtyRef.current = false;
+  }, [selectedDate, activeKomisi]);
+
   // Sync activeSession whenever selectedDate, sessions, or activeKomisi change
   useEffect(() => {
-    if (loadingSessions) return;
     const found = sessions.find(s => s.date === selectedDate);
     if (found) {
       setActiveSession(found);
@@ -716,7 +718,7 @@ export default function KomisiManagement() {
         absentIds: [],
       });
     }
-  }, [selectedDate, sessions, activeKomisi, loadingSessions]);
+  }, [selectedDate, sessions, activeKomisi]);
 
   useEffect(() => { 
     if (!isAttendanceDirtyRef.current) {
@@ -1311,7 +1313,7 @@ export default function KomisiManagement() {
             sessions={sessions}
           />
 
-          {loadingSessions || !activeSession ? (
+          {sessions.length === 0 && loadingSessions ? (
             <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center shadow-xs">
               <RefreshCw size={28} className="animate-spin text-blue-600 mx-auto mb-3" />
               <p className="text-sm font-semibold text-slate-700">Memuat data absensi...</p>

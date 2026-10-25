@@ -559,6 +559,11 @@ function DailyInput({
   // Track if user has modified present state compared to last loaded server state
   const isDirtyRef = useRef(false);
 
+  // When date changes, reset isDirtyRef so the new session's existing state is loaded
+  useEffect(() => {
+    isDirtyRef.current = false;
+  }, [sessionId]);
+
   // Load session only when date changes (sessionId changes) or external session update arrives while not dirty
   useEffect(() => {
     const s = sessions.find(item => item.id === sessionId);
