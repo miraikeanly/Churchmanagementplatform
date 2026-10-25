@@ -928,36 +928,24 @@ export default function KomisiManagement() {
     setError('');
     try {
       const kvKey = `komisi:${activeKomisi}:absen:${activeSession.id}`;
-      // Fetch latest server session to prevent overwriting inputs from concurrent users
-      const { data: latestRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', kvKey).maybeSingle();
-      const serverSession = latestRow?.value as AbsenSession | undefined;
 
-      // Smart merge: retain any present IDs registered by another user while adding local ones
-      const mergedPresentSet = new Set<string>([
-        ...(serverSession?.presentIds || []),
-        ...draftPresentIds,
-      ]);
+      // Revision: Directly use draftPresentIds so unchecking/marking absent is preserved accurately!
+      const presentIds = Array.from(draftPresentIds);
+      const absentIds = members.map(m => m.id).filter(id => !draftPresentIds.has(id));
 
-      const presentIds = [...mergedPresentSet];
-      const absentIds = members.map(m => m.id).filter(id => !mergedPresentSet.has(id));
       const updated: AbsenSession = {
         ...activeSession,
         presentIds,
         absentIds,
       };
-      const kv = supabaseAdmin.from(KV);
-      const result = typeof (kv as any).upsert === 'function'
-        ? await (kv as any).upsert({
-            key: kvKey,
-            value: updated,
-          })
-        : await kv.insert({
-            key: kvKey,
-            value: updated,
-          });
-      if (result.error) throw result.error;
+
+      const result = await supabaseAdmin.from(KV).upsert({
+        key: kvKey,
+        value: updated,
+      });
+      if (result && result.error) throw result.error;
+
       isAttendanceDirtyRef.current = false;
-      setDraftPresentIds(mergedPresentSet);
       setActiveSession(updated);
       setSessions(old => {
         const idx = old.findIndex(x => x.id === updated.id || x.date === updated.date);
@@ -982,10 +970,59 @@ export default function KomisiManagement() {
 
   const confirmDeleteSession = async () => {
     if (!deletingSession) return;
-    await supabaseAdmin.from(KV).delete().eq('key', `komisi:${activeKomisi}:absen:${deletingSession.id}`);
-    if (activeSession?.id === deletingSession.id) setActiveSession(null);
-    setDeletingSession(null);
-    loadSessions();
+    setSavingAttendance(true);
+    setError('');
+    try {
+      const targetId = deletingSession.id;
+      const targetDate = deletingSession.date;
+
+      // Delete by key and remove any date-matching variants in this komisi
+      await Promise.all([
+        supabaseAdmin.from(KV).delete().eq('key', `komisi:${activeKomisi}:absen:${targetId}`),
+        supabaseAdmin.from(KV).delete().eq('key', `komisi:${activeKomisi}:absen:week-${targetDate}`),
+        supabaseAdmin.from(KV).delete().eq('key', `komisi:${activeKomisi}:absen:session-${activeKomisi}-${targetDate}`),
+      ]);
+
+      // Also clean up any other KV rows for this date in this komisi
+      const { data: allRows } = await supabaseAdmin.from(KV).select('key, value').like('key', `komisi:${activeKomisi}:absen:%`);
+      if (allRows && Array.isArray(allRows)) {
+        for (const row of allRows) {
+          const val = row.value as any;
+          if (val && (val.id === targetId || val.date === targetDate)) {
+            await supabaseAdmin.from(KV).delete().eq('key', row.key);
+          }
+        }
+      }
+
+      // Reset local states
+      setSessions(prev => prev.filter(s => s.id !== targetId && s.date !== targetDate));
+      setDraftPresentIds(new Set());
+      isAttendanceDirtyRef.current = false;
+      setAttendanceSaved(true);
+
+      const dt = new Date(targetDate + 'T00:00:00');
+      const isSun = dt.getDay() === 0;
+      const title = isSun
+        ? `Ibadah Minggu ${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`
+        : `Kegiatan Komisi ${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
+
+      setActiveSession({
+        id: `session-${activeKomisi}-${targetDate}`,
+        komisiId: activeKomisi,
+        date: targetDate,
+        title,
+        createdAt: new Date().toISOString(),
+        presentIds: [],
+        absentIds: [],
+      });
+
+      setDeletingSession(null);
+      await loadSessions();
+    } catch (e: any) {
+      setError(e.message || 'Gagal menghapus data absensi');
+    } finally {
+      setSavingAttendance(false);
+    }
   };
 
   // ── Excel exports ─────────────────────────────────────────────────────────
@@ -1327,8 +1364,8 @@ export default function KomisiManagement() {
                     </div>
                   </div>
 
-                  {/* Right: Quick actions (Hadir Semua, Reset, Export) */}
-                  <div className="grid grid-cols-3 sm:flex items-center gap-2 w-full lg:w-auto">
+                  {/* Right: Quick actions (Hadir Semua, Reset, Export, Hapus Sesi) */}
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full lg:w-auto">
                     {canEdit && (
                       <>
                         <button
@@ -1341,7 +1378,7 @@ export default function KomisiManagement() {
                         <button
                           type="button"
                           onClick={() => markAll(false)}
-                          className="text-xs font-bold px-3 py-2.5 min-h-[44px] justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 active:scale-[0.98] transition-all cursor-pointer flex items-center"
+                          className="text-xs font-bold px-3 py-2.5 min-h-[44px] justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center"
                         >
                           <span>Reset</span>
                         </button>
@@ -1350,10 +1387,20 @@ export default function KomisiManagement() {
                     <button
                       type="button"
                       onClick={() => exportAttendance(activeSession)}
-                      className={`flex items-center justify-center gap-1.5 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-2.5 min-h-[44px] rounded-xl active:scale-[0.98] transition-all cursor-pointer shadow-2xs ${!canEdit ? 'col-span-3' : ''}`}
+                      className="flex items-center justify-center gap-1.5 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-2.5 min-h-[44px] rounded-xl active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
                     >
                       <Download size={14} className="shrink-0" /> <span className="truncate">Export Excel</span>
                     </button>
+                    {canEdit && (draftPresentIds.size > 0 || sessions.some(s => s.date === selectedDate)) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSession(activeSession)}
+                        className="flex items-center justify-center gap-1.5 text-xs font-bold border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2.5 min-h-[44px] rounded-xl active:scale-[0.98] transition-all cursor-pointer"
+                        title="Hapus semua rekaman absensi untuk tanggal ini"
+                      >
+                        <Trash2 size={14} className="shrink-0 text-rose-600" /> <span className="truncate">Hapus Sesi</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
