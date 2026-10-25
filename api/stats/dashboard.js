@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       sql`SELECT value FROM app_kv WHERE key LIKE 'komisi:%:member:%'`,
       sql`SELECT value FROM app_kv WHERE key LIKE 'komsel:%'`,
       sql`SELECT value FROM app_kv WHERE key = 'config:pks-names'`,
-      sql`SELECT value FROM app_kv WHERE key LIKE 'komisi:%:absen:%' OR key LIKE 'attendance_session:%'`,
+      sql`SELECT key, value FROM app_kv WHERE key LIKE 'komisi:%:absen:%' OR key LIKE 'attendance_session:%'`,
       sql`SELECT count(*) AS c FROM users WHERE status = 'pending' AND role <> 'jemaat'`,
     ]);
 
