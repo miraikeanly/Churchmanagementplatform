@@ -518,23 +518,32 @@ export default function KomisiManagement() {
   const isSuperAdmin = user?.role === 'super_admin';
   const permissions = user?.permissions;
 
-  // Which komisi this user can see
+  // Memoize permissions signature as primitive string to avoid reference changes
+  const permKey = useMemo(() => {
+    if (isSuperAdmin) return 'super_admin';
+    return JSON.stringify({
+      allowed: permissions?.allowedKomisi || permissions?.komisiLeaderOf,
+      edit: permissions?.editKomisi,
+      view: permissions?.viewKomisi,
+    });
+  }, [isSuperAdmin, permissions?.allowedKomisi, permissions?.komisiLeaderOf, permissions?.editKomisi, permissions?.viewKomisi]);
+
+  // Which komisi this user can see - returns stable KOMISI_LIST constant when all allowed
   const visibleKomisi = useMemo(() => {
-    if (isSuperAdmin) return [...KOMISI_LIST];
+    if (isSuperAdmin) return KOMISI_LIST;
 
     const allowed = permissions?.allowedKomisi || permissions?.komisiLeaderOf;
     if (Array.isArray(allowed) && allowed.length > 0) {
-      if (allowed.includes('*') || allowed.includes('all')) return [...KOMISI_LIST];
-      const filtered = KOMISI_LIST.filter(k => allowed.includes(k.id));
-      return filtered;
+      if (allowed.includes('*') || allowed.includes('all')) return KOMISI_LIST;
+      return KOMISI_LIST.filter(k => allowed.includes(k.id));
     }
 
     if (permissions?.editKomisi || permissions?.viewKomisi) {
-      return [...KOMISI_LIST];
+      return KOMISI_LIST;
     }
 
     return [];
-  }, [isSuperAdmin, permissions]);
+  }, [isSuperAdmin, permKey]);
 
   const [searchParams] = useSearchParams();
   const komisiParam = searchParams.get('komisi');
@@ -547,11 +556,12 @@ export default function KomisiManagement() {
     return (visibleKomisi[0]?.id as KomisiId) ?? 'sekolah-minggu';
   });
 
+  // Keep activeKomisi valid only when visibleKomisi changes or param specifies a different valid komisi
   useEffect(() => {
     if (visibleKomisi.length === 0) return;
     if (komisiParam) {
       const match = visibleKomisi.find(k => k.id === komisiParam || k.label.toLowerCase() === komisiParam.toLowerCase());
-      if (match) {
+      if (match && match.id !== activeKomisi) {
         setActiveKomisi(match.id as KomisiId);
         return;
       }
@@ -701,31 +711,56 @@ export default function KomisiManagement() {
   useEffect(() => {
     const found = sessions.find(s => s.date === selectedDate);
     if (found) {
-      setActiveSession(found);
+      setActiveSession(prev => {
+        if (
+          prev &&
+          prev.id === found.id &&
+          prev.date === found.date &&
+          JSON.stringify(prev.presentIds) === JSON.stringify(found.presentIds) &&
+          JSON.stringify(prev.absentIds) === JSON.stringify(found.absentIds)
+        ) {
+          return prev;
+        }
+        return found;
+      });
     } else {
       const dt = new Date(selectedDate + 'T00:00:00');
       const isSun = dt.getDay() === 0;
       const title = isSun
         ? `Ibadah Minggu ${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`
         : `Kegiatan Komisi ${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
-      setActiveSession({
-        id: `session-${activeKomisi}-${selectedDate}`,
-        komisiId: activeKomisi,
-        date: selectedDate,
-        title,
-        createdAt: new Date().toISOString(),
-        presentIds: [],
-        absentIds: [],
+      
+      const newSessId = `session-${activeKomisi}-${selectedDate}`;
+      setActiveSession(prev => {
+        if (prev && prev.id === newSessId && prev.date === selectedDate && (!prev.presentIds || prev.presentIds.length === 0)) {
+          return prev;
+        }
+        return {
+          id: newSessId,
+          komisiId: activeKomisi,
+          date: selectedDate,
+          title,
+          createdAt: new Date().toISOString(),
+          presentIds: [],
+          absentIds: [],
+        };
       });
     }
   }, [selectedDate, sessions, activeKomisi]);
 
+  const activeSessionPresentIdsStr = (activeSession?.presentIds || []).join(',');
   useEffect(() => { 
     if (!isAttendanceDirtyRef.current) {
-      setDraftPresentIds(new Set(activeSession?.presentIds || [])); 
+      const newIds = activeSession?.presentIds || [];
+      setDraftPresentIds(prev => {
+        if (prev.size === newIds.length && newIds.every(id => prev.has(id))) {
+          return prev;
+        }
+        return new Set(newIds);
+      }); 
       setAttendanceSaved(true); 
     }
-  }, [activeSession?.id, activeSession?.date, activeSession?.presentIds]);
+  }, [activeSession?.id, activeSession?.date, activeSessionPresentIdsStr]);
 
   // ── Jemaat lookup map ─────────────────────────────────────────────────────
   const jemaatMap = useMemo(() => {

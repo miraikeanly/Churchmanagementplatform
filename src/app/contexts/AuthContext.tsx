@@ -29,7 +29,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.get('/api/auth/me');
       if (res.success && res.user) {
-        setUser(res.user);
+        setUser(prev => {
+          if (!prev) return res.user;
+          // Shallow/json check to prevent changing object reference when data is identical
+          if (JSON.stringify(prev) === JSON.stringify(res.user)) {
+            return prev;
+          }
+          return res.user;
+        });
       } else {
         setUser(null);
       }
