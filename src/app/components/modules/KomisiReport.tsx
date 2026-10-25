@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Download, TrendingUp, CalendarDays, Users, ClipboardList } from 'lucide-react';
+import { Download, TrendingUp, CalendarDays, Users, ClipboardList, Edit, Trash2 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line,
 } from 'recharts';
@@ -17,8 +17,13 @@ const fmtDay = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('
  * Only weeks where someone was actually marked Hadir/Absen are counted, so empty upcoming weeks never show up.
  * The year list is built from the data plus the current year, so 2027 appears by itself when it arrives.
  */
-export default function KomisiReport({ komisiLabel, sessions, members }: {
-  komisiLabel: string; sessions: ReportSession[]; members: ReportMember[];
+export default function KomisiReport({ komisiLabel, sessions, members, canEdit, onSelectDate, onDeleteSession }: {
+  komisiLabel: string;
+  sessions: ReportSession[];
+  members: ReportMember[];
+  canEdit?: boolean;
+  onSelectDate?: (date: string) => void;
+  onDeleteSession?: (session: ReportSession) => void;
 }) {
   const recorded = useMemo(
     () => sessions.filter(s => s.presentIds.length + s.absentIds.length > 0).sort((a, b) => a.date.localeCompare(b.date)),
@@ -37,6 +42,7 @@ export default function KomisiReport({ komisiLabel, sessions, members }: {
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
 
   const weekly = yearSessions.map(s => ({
+    session: s,
     date: s.date, label: fmtDay(s.date), title: s.title,
     hadir: s.presentIds.length, absen: s.absentIds.length, persen: pct(s.presentIds.length),
   }));
@@ -131,25 +137,72 @@ export default function KomisiReport({ komisiLabel, sessions, members }: {
           </div>
 
           {/* Per week */}
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-            <p className="text-sm font-semibold text-gray-700 px-4 py-3 border-b border-gray-50">Rekap per Minggu</p>
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50/70">
-                <tr><th className={`${th} text-left`}>Tanggal</th><th className={`${th} text-center`}>Hadir</th><th className={`${th} text-center`}>Absen</th><th className={`${th} text-right`}>Kehadiran</th></tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {[...weekly].reverse().map(w => (
-                  <tr key={w.date}>
-                    <td className="px-3 py-2.5 font-medium text-gray-800">{new Date(w.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}</td>
-                    <td className="px-3 py-2.5 text-center text-emerald-700 font-semibold">{w.hadir}</td>
-                    <td className="px-3 py-2.5 text-center text-red-500">{w.absen}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <span className="inline-block min-w-[3rem] text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{w.persen}%</span>
-                    </td>
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-2xs">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+              <p className="text-sm font-semibold text-gray-700">Rekap per Minggu</p>
+              <p className="text-[11px] text-gray-400">Klik Edit untuk revisi absensi atau Hapus untuk menghapus data sesi</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50/70">
+                  <tr>
+                    <th className={`${th} text-left`}>Tanggal</th>
+                    <th className={`${th} text-left`}>Sesi</th>
+                    <th className={`${th} text-center`}>Hadir</th>
+                    <th className={`${th} text-center`}>Absen</th>
+                    <th className={`${th} text-right`}>Kehadiran</th>
+                    {canEdit && (
+                      <th className={`${th} text-center`}>Aksi</th>
+                    )}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {[...weekly].reverse().map(w => (
+                    <tr key={w.date} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-3 py-2.5 font-medium text-gray-800 whitespace-nowrap">
+                        {new Date(w.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[150px] truncate" title={w.title}>
+                        {w.title}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-emerald-700 font-semibold">{w.hadir}</td>
+                      <td className="px-3 py-2.5 text-center text-red-500">{w.absen}</td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <span className="inline-block min-w-[3rem] text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{w.persen}%</span>
+                      </td>
+                      {canEdit && (
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {onSelectDate && (
+                              <button
+                                type="button"
+                                onClick={() => onSelectDate(w.date)}
+                                title="Edit / Revisi absensi sesi ini"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 transition-colors cursor-pointer"
+                              >
+                                <Edit size={12} />
+                                <span>Revisi</span>
+                              </button>
+                            )}
+                            {onDeleteSession && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteSession(w.session)}
+                                title="Hapus sesi dan rekaman absensi ini"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/80 transition-colors cursor-pointer"
+                              >
+                                <Trash2 size={12} />
+                                <span>Hapus</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Charts */}

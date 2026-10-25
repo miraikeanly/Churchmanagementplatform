@@ -1274,6 +1274,27 @@ export default function KomisiManagement() {
           komisiLabel={KOMISI_LIST.find(k => k.id === activeKomisi)?.label || ''}
           sessions={sessions}
           members={members.map(m => ({ id: m.id, name: m.name }))}
+          canEdit={canEdit}
+          onSelectDate={(date) => {
+            setSelectedDate(date);
+            setTab('absensi');
+          }}
+          onDeleteSession={(session) => {
+            const found = sessions.find(s => s.date === session.date || s.id === session.id);
+            if (found) {
+              handleDeleteSession(found);
+            } else {
+              handleDeleteSession({
+                id: session.id,
+                komisiId: activeKomisi,
+                title: session.title,
+                date: session.date,
+                presentIds: session.presentIds,
+                absentIds: session.absentIds,
+                createdAt: new Date().toISOString(),
+              });
+            }
+          }}
         />
       )}
 
