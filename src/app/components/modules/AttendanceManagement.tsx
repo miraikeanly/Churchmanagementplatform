@@ -7,7 +7,8 @@ import {
   Search, SortAsc, SortDesc, CheckCircle2, Circle, CheckSquare, Square,
   Save, Download, Calendar as CalendarIcon, Users, TrendingDown, TrendingUp,
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
-  Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw
+  Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
+  Trash2, Edit
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -618,21 +619,16 @@ function DailyInput({
       const nowIso = new Date().toISOString();
       const key = `attendance_session:${sessionId}`;
       
-      // Fetch latest server session to prevent overwriting inputs from concurrent users
       const { data: latestRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', key).maybeSingle();
-      const serverSession = latestRow?.value as Session | undefined;
 
-      // Smart merge: preserve any attendees added by another user while keeping current local attendees
-      const mergedPresent = new Set<string>([
-        ...(serverSession?.presentIds || []),
-        ...present,
-      ]);
+      // Directly use present set so unchecking/revision is accurately preserved
+      const presentIdsList = Array.from(present);
 
       const session: Session = {
         id: sessionId,
         date,
         serviceType: SERVICE_TYPE,
-        presentIds: [...mergedPresent],
+        presentIds: presentIdsList,
         savedAt: nowIso,
       };
 
@@ -651,14 +647,14 @@ function DailyInput({
       await trackActivity(
         'SAVE_ATTENDANCE',
         'Absensi',
-        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${mergedPresent.size} jemaat hadir)`
+        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${presentIdsList.length} jemaat hadir)`
       );
 
       isDirtyRef.current = false;
-      setPresent(mergedPresent);
+      setPresent(new Set(presentIdsList));
       setSaved(true);
       setIsEditing(false);
-      setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan! (${mergedPresent.size} orang hadir)`);
+      setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan! (${presentIdsList.length} orang hadir)`);
       setTimeout(() => setSaveSuccessNotice(''), 4000);
       onSessionSaved();
     } catch (err: any) {
@@ -907,7 +903,19 @@ function DailyInput({
 
 
 // ─── Report Tab ──────────────────────────────────────────────────────────────
-function ReportSummary({ members, sessions }: { members: Member[]; sessions: Session[] }) {
+function ReportSummary({
+  members,
+  sessions,
+  canEdit,
+  onSelectDate,
+  onDeleteDate,
+}: {
+  members: Member[];
+  sessions: Session[];
+  canEdit?: boolean;
+  onSelectDate?: (date: string) => void;
+  onDeleteDate?: (date: string) => void;
+}) {
   const now = new Date();
   const todayStr = fmt(now);
 
@@ -1428,6 +1436,31 @@ function ReportSummary({ members, sessions }: { members: Member[]; sessions: Ses
                         +{newCount}
                       </span>
                     </div>
+
+                    {canEdit && item.dateStr && (
+                      <div className="pt-1.5 mt-0.5 border-t border-gray-200/50 flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        {onSelectDate && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectDate(item.dateStr!)}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[10px] cursor-pointer"
+                            title={`Revisi absensi ${item.label}`}
+                          >
+                            <Edit size={10} /> Revisi
+                          </button>
+                        )}
+                        {item.hadir > 0 && onDeleteDate && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteDate(item.dateStr!)}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-[10px] cursor-pointer"
+                            title={`Hapus data absensi ${item.label}`}
+                          >
+                            <Trash2 size={10} /> Hapus
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1568,12 +1601,41 @@ function ReportSummary({ members, sessions }: { members: Member[]; sessions: Ses
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="sticky left-0 bg-gray-50 px-4 py-3 text-left text-xs font-semibold text-gray-500 w-10">No</th>
               <th className="sticky left-10 bg-gray-50 px-4 py-3 text-left text-xs font-semibold text-gray-500 min-w-40">Nama</th>
-              {dateCols.map(d => (
-                <th key={d} className="px-3 py-3 text-center text-xs font-semibold text-gray-500 min-w-14">
-                  <div>{d.slice(5, 7)}/{d.slice(8)}</div>
-                  {view === 'yearly' && <div className="text-gray-400">{d.slice(0, 4)}</div>}
-                </th>
-              ))}
+              {dateCols.map(d => {
+                const hasSession = sessions.some(s => s.date === d && (s.presentIds || []).length > 0);
+                return (
+                  <th key={d} className="px-3 py-3 text-center text-xs font-semibold text-gray-500 min-w-16">
+                    <div className="flex flex-col items-center gap-1">
+                      <div>{d.slice(5, 7)}/{d.slice(8)}</div>
+                      {view === 'yearly' && <div className="text-[10px] text-gray-400">{d.slice(0, 4)}</div>}
+                      {canEdit && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {onSelectDate && (
+                            <button
+                              type="button"
+                              onClick={() => onSelectDate(d)}
+                              className="p-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors cursor-pointer"
+                              title={`Edit / Revisi absensi tanggal ${d}`}
+                            >
+                              <Edit size={11} />
+                            </button>
+                          )}
+                          {hasSession && onDeleteDate && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteDate(d)}
+                              className="p-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                              title={`Hapus data absensi tanggal ${d}`}
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </th>
+                );
+              })}
               <th className="px-4 py-3 text-center text-xs font-bold text-blue-700 min-w-14">Total</th>
             </tr>
           </thead>
@@ -1789,7 +1851,48 @@ export default function AttendanceManagement() {
           setDate={setSelectedDate}
         />
       ) : (
-        <ReportSummary members={members} sessions={sessions} />
+        <ReportSummary
+          members={members}
+          sessions={sessions}
+          canEdit={canEdit}
+          onSelectDate={(date) => {
+            setSelectedDate(date);
+            setTab('input');
+          }}
+          onDeleteDate={async (date) => {
+            if (!canEdit) return;
+            const confirmMsg = `Hapus data absensi Ibadah Umum untuk tanggal ${date}?\nSemua centang kehadiran pada tanggal ini akan dibersihkan dari database.`;
+            if (!window.confirm(confirmMsg)) return;
+
+            try {
+              const targetSessionId = `sess_${date}_Ibadah_Umum`;
+              const key = `attendance_session:${targetSessionId}`;
+              await supabaseAdmin.from(KV).delete().eq('key', key);
+
+              // Also check any alternative keys for this date if any
+              const { data: allSess } = await supabaseAdmin.from(KV).select('key, value').like('key', 'attendance_session:%');
+              if (allSess && Array.isArray(allSess)) {
+                for (const row of allSess) {
+                  const val = row.value as any;
+                  if (val && val.date === date) {
+                    await supabaseAdmin.from(KV).delete().eq('key', row.key);
+                  }
+                }
+              }
+
+              await trackActivity(
+                'RESET_ATTENDANCE',
+                'Absensi',
+                `Menghapus data absensi Ibadah Umum tanggal ${date}`
+              );
+
+              setSessions(prev => prev.filter(s => s.date !== date && s.id !== targetSessionId));
+              loadData(true);
+            } catch (err: any) {
+              alert(`Gagal menghapus absensi: ${err.message || 'Terjadi kesalahan'}`);
+            }
+          }}
+        />
       )}
     </div>
   );
