@@ -1348,29 +1348,25 @@ export default function KomisiManagement() {
             sessions={sessions}
           />
 
-          {sessions.length === 0 && loadingSessions ? (
-            <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center shadow-xs">
-              <RefreshCw size={28} className="animate-spin text-blue-600 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-700">Memuat data absensi...</p>
-              <p className="text-xs text-slate-400 mt-1">Mengambil sesi untuk tanggal {formatDateLabel(selectedDate)}</p>
-            </div>
-          ) : (
-            <>
-              {/* Header Card: Calendar date picker, navigation & stats */}
-              <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-6 shadow-xs space-y-4">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  {/* Left: Date selector & Navigation */}
-                  <div className="space-y-2.5 w-full lg:w-auto">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1">
-                        {selectedDate === fmt(new Date()) ? 'Hari Ini' : selectedDate === currentWeekSunday() ? 'Minggu Ini' : 'Sesi Terpilih'}
-                      </span>
-                      {sessions.some(s => s.date === selectedDate && (s.presentIds || []).length > 0) && (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 flex items-center gap-1">
-                          <CheckCircle2 size={12} /> Tersimpan di Database
-                        </span>
-                      )}
-                    </div>
+          {/* Header Card: Calendar date picker, navigation & stats */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-6 shadow-xs space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              {/* Left: Date selector & Navigation */}
+              <div className="space-y-2.5 w-full lg:w-auto">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1">
+                    {selectedDate === fmt(new Date()) ? 'Hari Ini' : selectedDate === currentWeekSunday() ? 'Minggu Ini' : 'Sesi Terpilih'}
+                  </span>
+                  {sessions.some(s => s.date === selectedDate && (s.presentIds || []).length > 0) ? (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Tersimpan di Database
+                    </span>
+                  ) : loadingSessions ? (
+                    <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full flex items-center gap-1">
+                      <RefreshCw size={11} className="animate-spin text-blue-500" /> Memuat data...
+                    </span>
+                  ) : null}
+                </div>
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       {/* Big Interactive Calendar Button */}
@@ -1717,8 +1713,6 @@ export default function KomisiManagement() {
                   </div>
                 </div>
               )}
-            </>
-          )}
         </div>
       )}
 

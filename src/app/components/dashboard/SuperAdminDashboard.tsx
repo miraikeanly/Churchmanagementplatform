@@ -159,6 +159,9 @@ export default function SuperAdminDashboard() {
   const [members, setMembers] = useState<any[]>([]);
   const [adminChatOpen, setAdminChatOpen] = useState(false);
   const [pendingTaskCount, setPendingTaskCount] = useState(0);
+  const handlePendingTaskCountChange = useCallback((count: number) => {
+    setPendingTaskCount(prev => prev === count ? prev : count);
+  }, []);
 
   const isSuperAdmin = user?.role === 'super_admin';
   const permissions = user?.permissions || {};
@@ -204,13 +207,21 @@ export default function SuperAdminDashboard() {
   }, [activeTab]);
 
 
-  // Auto-refresh stats + members every 30 seconds, and on tab focus
-  useAutoRefresh(() => { loadStats(); loadMembers(); refreshSession?.(); }, 30_000);
+  // Only poll dashboard stats + members when on the dashboard tab
+  useAutoRefresh(() => {
+    if (activeTab === 'dashboard') {
+      loadStats();
+      loadMembers();
+    }
+  }, 30_000);
 
   const loadMembers = async () => {
     try {
       const all = await loadAllMembers();
-      setMembers(all);
+      setMembers(prev => {
+        if (prev.length === all.length && prev[0]?.id === all[0]?.id) return prev;
+        return all;
+      });
     } catch {}
   };
 
@@ -218,7 +229,10 @@ export default function SuperAdminDashboard() {
     try {
       const result = await api.get('/api/stats/dashboard');
       if (result.success && result.stats) {
-        setStats(result.stats);
+        setStats(prev => {
+          if (JSON.stringify(prev) === JSON.stringify(result.stats)) return prev;
+          return result.stats;
+        });
       }
     } catch {}
   };
@@ -669,7 +683,7 @@ export default function SuperAdminDashboard() {
       <AdminChatDrawer
         isOpen={adminChatOpen}
         onClose={() => setAdminChatOpen(false)}
-        pendingTaskCountChange={setPendingTaskCount}
+        pendingTaskCountChange={handlePendingTaskCountChange}
       />
     </div>
   );

@@ -106,10 +106,12 @@ export default function AdminChatDrawer({
     loadContacts();
   }, [isSuperAdmin, user?.id]);
 
+  const prevPendingCountRef = useRef(-1);
+
   // ── Load messages from KV ──
   const fetchMessages = useCallback(async () => {
     try {
-      const { data } = await supabaseAdmin.from(KV).select('key').eq('key', CHAT_STORAGE_KEY).maybeSingle();
+      const { data } = await supabaseAdmin.from(KV).select('key, value').eq('key', CHAT_STORAGE_KEY).maybeSingle();
       if (data && Array.isArray((data as any).value)) {
         const msgs = (data as any).value as AdminChatMessage[];
         setMessages(msgs);
@@ -126,7 +128,10 @@ export default function AdminChatDrawer({
           return true; // general channel task
         }).length;
 
-        pendingTaskCountChange?.(pendingCount);
+        if (prevPendingCountRef.current !== pendingCount) {
+          prevPendingCountRef.current = pendingCount;
+          pendingTaskCountChange?.(pendingCount);
+        }
       }
     } catch (err) {
       console.error('Failed to load admin chat messages:', err);
