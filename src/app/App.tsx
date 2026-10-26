@@ -23,7 +23,6 @@ import ScrollToTop from "./components/common/ScrollToTop";
 import JemaatChatBot from "./components/public/JemaatChatBot";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { safeSessionStorage } from "../lib/storage";
-import JemaatMobileApp from "./mobile/JemaatMobileApp";
 
 // Protected Route — redirects to /login if not authenticated
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -100,8 +99,6 @@ export default function App() {
             {/* Public church website (jemaat) */}
             <Route path="/" element={<JemaatPage />} />
             <Route path="/jemaat" element={<JemaatPage />} />
-            <Route path="/app" element={<JemaatMobileApp />} />
-            <Route path="/mobile" element={<JemaatMobileApp />} />
             <Route path="/tentang" element={<TentangPage />} />
             <Route path="/galeri" element={<GaleriPage />} />
             <Route path="/lokasi" element={<LokasiPage />} />
