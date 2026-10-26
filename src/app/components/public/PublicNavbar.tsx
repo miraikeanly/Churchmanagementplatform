@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Menu, X, ChevronDown, Crown, Flame, Rocket, HandHeart, ShieldCheck } from 'lucide-react';
+import { Menu, X, ChevronDown, Crown, Flame, Rocket, HandHeart, ShieldCheck, Smartphone } from 'lucide-react';
 import gbiLogo from '../../../imports/pngegg__1_-1.png';
 import AdminPinModal from '../auth/AdminPinModal';
 import { safeSessionStorage } from '../../../lib/storage';
@@ -217,6 +217,20 @@ export default function PublicNavbar() {
 
         {/* CTA + mobile toggle */}
         <div className="flex items-center gap-2 md:gap-3">
+          {/* GBI Mobile App Link */}
+          <Link
+            to="/app"
+            className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all duration-200 border ${
+              solid
+                ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-violet-500 shadow-xs hover:brightness-110'
+                : 'bg-white/20 text-white border-white/40 backdrop-blur-md hover:bg-white/30'
+            }`}
+            title="Buka Aplikasi Mobile Jemaat"
+          >
+            <Smartphone size={14} className="text-amber-300" />
+            <span>GBI App</span>
+          </Link>
+
           {/* Subtle discreet admin access (no label, looks like clean security badge/icon) */}
           <button
             type="button"
