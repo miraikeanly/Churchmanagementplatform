@@ -93,10 +93,18 @@ export default function AdminChatDrawer({
         if (res.success && Array.isArray(res.data)) {
           const validUsers = (res.data as AdminUserContact[]).filter(u => u.status === 'approved' && u.role !== 'jemaat');
           setContacts(validUsers);
-          // If super admin and no admin selected yet, select the first regular admin
-          if (isSuperAdmin && !selectedAdminId) {
-            const firstAdmin = validUsers.find(u => u.role === 'admin' && u.id !== user?.id);
-            if (firstAdmin) setSelectedAdminId(firstAdmin.id);
+          // Auto select first target contact if none selected
+          if (!selectedAdminId) {
+            const otherUsers = validUsers.filter(u => u.id !== user?.id);
+            if (isSuperAdmin) {
+              // Super admin defaults to first other user (admin or another super_admin)
+              if (otherUsers.length > 0) setSelectedAdminId(otherUsers[0].id);
+            } else {
+              // Regular admin defaults to super_admin contact
+              const sa = otherUsers.find(u => u.role === 'super_admin');
+              if (sa) setSelectedAdminId(sa.id);
+              else if (otherUsers.length > 0) setSelectedAdminId(otherUsers[0].id);
+            }
           }
         }
       } catch (e) {
@@ -185,9 +193,10 @@ export default function AdminChatDrawer({
   };
 
   // Find target contact for PM
-  const targetAdminContact = isSuperAdmin
-    ? contacts.find(c => c.id === selectedAdminId)
-    : contacts.find(c => c.role === 'super_admin');
+  const targetContact = contacts.find(c => c.id === selectedAdminId) ||
+    (isSuperAdmin
+      ? contacts.find(c => c.id !== user?.id)
+      : contacts.find(c => c.role === 'super_admin' && c.id !== user?.id));
 
   // ── Send Message or Task ──
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -198,6 +207,10 @@ export default function AdminChatDrawer({
     setSending(true);
 
     const isPM = activeTabChannel === 'pm';
+    const targetId = isPM ? (targetContact?.id || selectedAdminId || 'super_admin') : undefined;
+    const targetName = isPM ? (targetContact?.name || (targetContact?.role === 'super_admin' ? 'Super Admin' : 'Admin')) : undefined;
+    const targetRole = isPM ? (targetContact?.role || (isSuperAdmin ? 'admin' : 'super_admin')) : undefined;
+
     const newMsg: AdminChatMessage = {
       id: crypto.randomUUID(),
       senderId: user?.id || 'admin',
@@ -209,9 +222,9 @@ export default function AdminChatDrawer({
       isDone: false,
       priority: isTaskInput ? taskPriority : undefined,
       channelType: isPM ? 'pm' : 'general',
-      recipientId: isPM ? (targetAdminContact?.id || (isSuperAdmin ? selectedAdminId : 'super_admin')) : undefined,
-      recipientName: isPM ? (targetAdminContact?.name || (isSuperAdmin ? 'Admin' : 'Super Admin')) : undefined,
-      recipientRole: isPM ? (isSuperAdmin ? 'admin' : 'super_admin') : undefined,
+      recipientId: targetId,
+      recipientName: targetName,
+      recipientRole: targetRole,
     };
 
     const updated = [...messages, newMsg];
@@ -307,20 +320,25 @@ export default function AdminChatDrawer({
     // PM Channel Filtering:
     if (m.channelType !== 'pm') return false;
 
-    if (isSuperAdmin) {
-      // Super Admin viewing PM with selectedAdminId
-      if (!selectedAdminId) return true;
-      return (
+    // Direct conversation between user and selected target
+    if (selectedAdminId) {
+      const isBetweenCurrentAndTarget =
         (m.senderId === user?.id && m.recipientId === selectedAdminId) ||
-        (m.senderId === selectedAdminId && (m.recipientId === user?.id || m.recipientRole === 'super_admin'))
-      );
-    } else {
-      // Regular Admin: ONLY sees PM between themselves and Super Admin
-      return (
-        (m.senderId === user?.id && (m.recipientRole === 'super_admin' || m.recipientId === targetAdminContact?.id)) ||
-        ((m.senderRole === 'super_admin' || m.senderId === targetAdminContact?.id) && m.recipientId === user?.id)
-      );
+        (m.senderId === selectedAdminId && (m.recipientId === user?.id || (!m.recipientId && m.recipientRole === user?.role)));
+      if (isBetweenCurrentAndTarget) return true;
     }
+
+    // Legacy fallback: if regular admin and message is from super_admin to this admin (or vice versa)
+    if (!isSuperAdmin) {
+      const isWithSuperAdmin =
+        (m.senderId === user?.id && (m.recipientRole === 'super_admin' || m.recipientId === targetContact?.id)) ||
+        ((m.senderRole === 'super_admin' || m.senderId === targetContact?.id) && (m.recipientId === user?.id || !m.recipientId));
+      if (isWithSuperAdmin && (!selectedAdminId || selectedAdminId === m.senderId || selectedAdminId === m.recipientId)) {
+        return true;
+      }
+    }
+
+    return false;
   });
 
   const filteredMessages = channelMessages.filter(m => {
@@ -331,8 +349,10 @@ export default function AdminChatDrawer({
 
   const pendingTasksCount = channelMessages.filter(m => m.isTask && !m.isDone).length;
 
-  // List regular admins for Super Admin to choose from
-  const regularAdmins = contacts.filter(c => c.role === 'admin' && c.id !== user?.id);
+  // List all available contacts to chat with (excluding current user)
+  const otherContacts = contacts.filter(c => c.id !== user?.id);
+  const superAdminContacts = otherContacts.filter(c => c.role === 'super_admin');
+  const adminContacts = otherContacts.filter(c => c.role === 'admin');
 
   // ── Minimized Floating Pill ──
   if (isMinimized) {
@@ -397,7 +417,7 @@ export default function AdminChatDrawer({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm tracking-tight truncate">
-                {activeTabChannel === 'general' ? 'Ruang Chat Admin' : isSuperAdmin ? `PM: ${targetAdminContact?.name || 'Pilih Admin'}` : 'PM dengan Super Admin'}
+                {activeTabChannel === 'general' ? 'Ruang Chat Admin' : `PM: ${targetContact?.name || 'Pilih Rekan Admin'}`}
               </h3>
               {pendingTasksCount > 0 && (
                 <span className="bg-amber-400 text-amber-950 px-2 py-0.2 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0">
@@ -406,7 +426,9 @@ export default function AdminChatDrawer({
               )}
             </div>
             <p className="text-[11px] text-blue-200/70 truncate">
-              {activeTabChannel === 'general' ? 'Obrolan umum seluruh tim admin' : 'Pesan pribadi rahasia (1-on-1)'}
+              {activeTabChannel === 'general'
+                ? 'Obrolan umum seluruh tim admin & superadmin'
+                : `Pesan pribadi rahasia dengan ${targetContact?.name || 'Admin'} (${targetContact?.role === 'super_admin' ? 'Super Admin' : 'Admin'})`}
             </p>
           </div>
         </div>
@@ -468,40 +490,47 @@ export default function AdminChatDrawer({
             }`}
           >
             <Lock size={13} />
-            <span>{isSuperAdmin ? 'PM Pribadi (Admin)' : 'PM Super Admin'}</span>
+            <span>PM Pribadi (1-on-1)</span>
           </button>
         </div>
 
-        {/* If Super Admin is in PM mode: Select which admin to chat with */}
-        {activeTabChannel === 'pm' && isSuperAdmin && (
+        {/* Contact Selector for PM Mode: Available for both Super Admin and Regular Admin */}
+        {activeTabChannel === 'pm' && (
           <div className="flex items-center gap-2 bg-slate-800/80 p-2 rounded-xl border border-white/5">
             <span className="text-[11px] font-bold text-slate-300 shrink-0 flex items-center gap-1">
               <User size={12} className="text-indigo-400" />
-              Chat ke:
+              Chat dengan:
             </span>
             <select
               value={selectedAdminId}
               onChange={(e) => setSelectedAdminId(e.target.value)}
               className="flex-1 bg-slate-950 text-white border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer truncate"
             >
-              {regularAdmins.length === 0 ? (
-                <option value="">Tidak ada admin lain terdaftar</option>
+              {otherContacts.length === 0 ? (
+                <option value="">Tidak ada akun admin lain terdaftar</option>
               ) : (
-                regularAdmins.map(adm => (
-                  <option key={adm.id} value={adm.id}>
-                    {adm.name} ({adm.email})
-                  </option>
-                ))
+                <>
+                  {superAdminContacts.length > 0 && (
+                    <optgroup label="👑 Super Admin">
+                      {superAdminContacts.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} (Super Admin)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {adminContacts.length > 0 && (
+                    <optgroup label="🛡️ Admin">
+                      {adminContacts.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} (Admin)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </>
               )}
             </select>
-          </div>
-        )}
-
-        {/* If regular Admin is in PM mode: Explanatory note */}
-        {activeTabChannel === 'pm' && !isSuperAdmin && (
-          <div className="flex items-center gap-2 bg-indigo-950/60 p-2 rounded-xl border border-indigo-500/20 text-[11px] text-indigo-200">
-            <ShieldCheck size={14} className="text-indigo-400 shrink-0" />
-            <span>Saluran pesan rahasia langsung dengan <strong>Super Admin</strong>.</span>
           </div>
         )}
       </div>
