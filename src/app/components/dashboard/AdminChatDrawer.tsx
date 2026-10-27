@@ -417,7 +417,7 @@ export default function AdminChatDrawer({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm tracking-tight truncate">
-                {activeTabChannel === 'general' ? 'Ruang Chat Admin' : `PM: ${targetContact?.name || 'Pilih Rekan Admin'}`}
+                {activeTabChannel === 'general' ? 'Ruang Chat Admin' : (targetContact?.name ? `Direct Message: ${targetContact.name}` : 'Direct Message')}
               </h3>
               {pendingTasksCount > 0 && (
                 <span className="bg-amber-400 text-amber-950 px-2 py-0.2 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0">
@@ -428,7 +428,7 @@ export default function AdminChatDrawer({
             <p className="text-[11px] text-blue-200/70 truncate">
               {activeTabChannel === 'general'
                 ? 'Obrolan umum seluruh tim admin & superadmin'
-                : `Pesan pribadi rahasia dengan ${targetContact?.name || 'Admin'} (${targetContact?.role === 'super_admin' ? 'Super Admin' : 'Admin'})`}
+                : `Direct Message dengan ${targetContact?.name || 'Admin'} (${targetContact?.role === 'super_admin' ? 'Super Admin' : 'Admin'})`}
             </p>
           </div>
         </div>
@@ -490,7 +490,7 @@ export default function AdminChatDrawer({
             }`}
           >
             <Lock size={13} />
-            <span>PM Pribadi (1-on-1)</span>
+            <span>Direct Message</span>
           </button>
         </div>
 
@@ -576,7 +576,7 @@ export default function AdminChatDrawer({
         </div>
 
         <span className="text-[11px] font-bold text-slate-400 shrink-0">
-          {activeTabChannel === 'general' ? '📢 Umum' : '🔒 PM'}
+          {activeTabChannel === 'general' ? '📢 Umum' : '🔒 Direct Message'}
         </span>
       </div>
 
@@ -597,7 +597,7 @@ export default function AdminChatDrawer({
             </p>
             <p className="text-xs text-slate-400 mt-1 max-w-[260px]">
               {activeTabChannel === 'pm'
-                ? 'Mulai obrolan pribadi atau berikan to-do list khusus antara Super Admin dan Admin.'
+                ? 'Mulai obrolan Direct Message atau berikan to-do list khusus ke rekan admin.'
                 : 'Mulai kirim pesan dan aktifkan "Jadikan To-Do" untuk meng-highlight pekerjaan admin.'}
             </p>
           </div>
@@ -636,7 +636,7 @@ export default function AdminChatDrawer({
                       </span>
                       {msg.channelType === 'pm' && (
                         <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
-                          PM
+                          DM
                         </span>
                       )}
                     </div>
@@ -825,7 +825,7 @@ export default function AdminChatDrawer({
                 isTaskInput
                   ? 'Tulis rincian tugas yang harus dikerjakan...'
                   : activeTabChannel === 'pm'
-                  ? `Ketik pesan pribadi ke ${targetAdminContact?.name || (isSuperAdmin ? 'Admin' : 'Super Admin')}...`
+                  ? `Ketik Direct Message ke ${targetContact?.name || (isSuperAdmin ? 'Admin' : 'Super Admin')}...`
                   : 'Ketik pesan obrolan admin... (Enter untuk kirim)'
               }
               rows={2}
