@@ -980,7 +980,9 @@ export default function KomisiManagement() {
         if (processedIds.has(other.member.id)) continue;
 
         // Tanggal pernikahan berbeda -> TIDAK BISA dipasangkan (cegah salah pasangan)
-        if (current.marriageDate && other.marriageDate && current.marriageDate !== other.marriageDate) {
+        const cDate = (current.marriageDate || '').slice(0, 10);
+        const oDate = (other.marriageDate || '').slice(0, 10);
+        if (cDate && oDate && cDate !== oDate) {
           continue;
         }
 
