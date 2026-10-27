@@ -781,9 +781,49 @@ export default function KomisiManagement() {
   // ── Jemaat lookup map ─────────────────────────────────────────────────────
   const jemaatMap = useMemo(() => {
     const m: Record<string, JemaatMember> = {};
-    jemaatList.forEach(j => { m[j.id] = j; });
+    jemaatList.forEach(j => {
+      m[j.id] = j;
+      const rawId = j.id.replace(/^congregation:member:/, '').replace(/^member:/, '');
+      m[rawId] = j;
+      m[`congregation:member:${rawId}`] = j;
+      m[`member:${rawId}`] = j;
+    });
     return m;
   }, [jemaatList]);
+
+  // Helper name matching for aliases, slashes, parenthesized names & word order
+  const isNameMatching = useCallback((query?: string, target?: string): boolean => {
+    const q = (query || '').toLowerCase().trim();
+    const t = (target || '').toLowerCase().trim();
+    if (!q || !t) return false;
+    if (q === t) return true;
+
+    // Direct substring check (min length 3)
+    if (q.length >= 3 && t.length >= 3) {
+      if (q.includes(t) || t.includes(q)) return true;
+    }
+
+    // Parts separated by slash or parentheses (e.g. "Mei Hun / Steffany" -> "Mei Hun", "Steffany")
+    const qParts = (query || '').split(/[\/\(\)]/).map(p => p.toLowerCase().trim()).filter(p => p.length >= 3);
+    const tParts = (target || '').split(/[\/\(\)]/).map(p => p.toLowerCase().trim()).filter(p => p.length >= 3);
+    for (const qp of qParts) {
+      for (const tp of tParts) {
+        if (qp === tp || qp.includes(tp) || tp.includes(qp)) return true;
+      }
+    }
+
+    // Token matching (handles re-ordered words: "Steffany Mei Hun" vs "Mei Hun / Steffany")
+    const tokenize = (s: string) => s.toLowerCase().trim().replace(/[\/\(\)\-\.,]/g, ' ').split(/\s+/).filter(Boolean);
+    const qTokens = tokenize(query || '');
+    const tTokens = tokenize(target || '');
+    if (qTokens.length > 0 && tTokens.length > 0) {
+      const common = qTokens.filter(tok => tok.length >= 3 && tTokens.includes(tok));
+      if (common.length >= 2) return true;
+      if (common.length === 1 && (qTokens.length === 1 || tTokens.length === 1) && common[0].length >= 4) return true;
+    }
+
+    return false;
+  }, []);
 
   // ── Live suggestions when typing in form ─────────────────────────────────
   const formSuggestions = useMemo((): MatchResult[] => {
@@ -841,27 +881,59 @@ export default function KomisiManagement() {
       title: string;
       isCouple: boolean;
       anniversary?: string;
+      spouseName?: string;
       members: KomisiMember[];
     }[] = [];
+
+    const getNames = (m: KomisiMember): string[] => {
+      const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+      return [m.name, linked?.name].filter(Boolean) as string[];
+    };
+
+    const getSpouses = (m: KomisiMember): string[] => {
+      const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+      return [m.spouseName, linked?.spouseName].filter(Boolean) as string[];
+    };
 
     for (const m of list) {
       if (processedIds.has(m.id)) continue;
 
       const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
-      const spouseName = (m.spouseName || linked?.spouseName || '').trim().toLowerCase();
-      const mName = m.name.trim().toLowerCase();
+      const mNames = getNames(m);
+      const mSpouses = getSpouses(m);
       const marriageDate = m.marriageDate || linked?.marriageDate || '';
 
       // Cari pasangan di dalam list anggota komisi
       let partner: KomisiMember | undefined;
-      if (spouseName) {
-        partner = list.find(other =>
-          other.id !== m.id &&
-          !processedIds.has(other.id) &&
-          (other.name.trim().toLowerCase() === spouseName ||
-           ((other.spouseName || (other.jemaatId && jemaatMap[other.jemaatId]?.spouseName) || '').trim().toLowerCase() === mName))
-        );
-      }
+
+      partner = list.find(other => {
+        if (other.id === m.id || processedIds.has(other.id)) return false;
+        const otherLinked = other.jemaatId ? jemaatMap[other.jemaatId] : null;
+        const oNames = getNames(other);
+        const oSpouses = getSpouses(other);
+
+        // 1. Apakah ada nama pasangan m yang cocok dengan salah satu nama other?
+        for (const ms of mSpouses) {
+          for (const on of oNames) {
+            if (isNameMatching(ms, on)) return true;
+          }
+        }
+
+        // 2. Apakah ada nama pasangan other yang cocok dengan salah satu nama m?
+        for (const os of oSpouses) {
+          for (const mn of mNames) {
+            if (isNameMatching(os, mn)) return true;
+          }
+        }
+
+        // 3. Tanggal anniversary sama persis & keduanya memiliki data pernikahan
+        const oMarriageDate = other.marriageDate || otherLinked?.marriageDate || '';
+        if (marriageDate && oMarriageDate && marriageDate === oMarriageDate) {
+          if (mSpouses.length > 0 || oSpouses.length > 0) return true;
+        }
+
+        return false;
+      });
 
       if (partner) {
         processedIds.add(m.id);
@@ -884,13 +956,14 @@ export default function KomisiManagement() {
           title: m.name,
           isCouple: false,
           anniversary: marriageDate,
+          spouseName: mSpouses[0] || undefined,
           members: [m],
         });
       }
     }
 
     return groups;
-  }, [filteredMembers, jemaatMap]);
+  }, [filteredMembers, jemaatMap, isNameMatching]);
 
   const linkedCount = members.filter(m => m.jemaatId && jemaatMap[m.jemaatId]).length;
 
@@ -1009,17 +1082,19 @@ export default function KomisiManagement() {
       // Khusus Komisi Kompas (Pasutri): Jika jemaat memiliki pasangan terdaftar di jemaat umum, otomatis tambahkan pasangan ke Kompas jika belum ada
       if (activeKomisi === 'kompas' && memberForm.spouseName?.trim()) {
         try {
-          const spouseQuery = memberForm.spouseName.trim().toLowerCase();
+          const spouseInput = memberForm.spouseName.trim();
+          const selfName = memberForm.name.trim();
+
           const foundSpouseJemaat = jemaatList.find(j =>
-            j.name.toLowerCase().trim() === spouseQuery ||
-            (j.spouseName && j.spouseName.toLowerCase().trim() === memberForm.name.trim().toLowerCase())
+            isNameMatching(spouseInput, j.name) ||
+            (j.spouseName && isNameMatching(selfName, j.spouseName))
           );
 
           if (foundSpouseJemaat) {
             // Cek apakah pasangan sudah ada di komisi ini
             const alreadyInKomisi = members.some(m =>
-              (m.jemaatId && m.jemaatId === foundSpouseJemaat.id) ||
-              m.name.toLowerCase().trim() === foundSpouseJemaat.name.toLowerCase().trim()
+              (m.jemaatId && (m.jemaatId === foundSpouseJemaat.id || m.jemaatId === foundSpouseJemaat.id.replace(/^congregation:member:/, ''))) ||
+              isNameMatching(m.name, foundSpouseJemaat.name)
             );
 
             if (!alreadyInKomisi) {
@@ -1424,6 +1499,12 @@ export default function KomisiManagement() {
                         ) : (
                           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
                             <span>Anggota Kompas</span>
+                            {group.spouseName && (
+                              <span className="text-rose-600 font-semibold flex items-center gap-1">
+                                <Heart size={11} className="text-rose-500 fill-rose-500" />
+                                Pasangan: {group.spouseName}
+                              </span>
+                            )}
                           </div>
                         )}
                         <h3 className="font-extrabold text-gray-900 text-sm sm:text-base">{group.title}</h3>
