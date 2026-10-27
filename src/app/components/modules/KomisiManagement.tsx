@@ -12,7 +12,7 @@ import ImagePicker from '../common/ImagePicker';
 import {
   Users, Plus, Trash2, Edit2, X, Check, ChevronDown, AlertTriangle,
   ClipboardList, Download, Calendar, Calendar as CalendarIcon, UserCheck, UserX, Link, Unlink,
-  Search, RefreshCw, ShieldAlert, Info, Activity, Circle, Save, Phone,
+  Search, RefreshCw, ShieldAlert, Info, Activity, Circle, Save, Phone, MapPin,
   ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles, HeartHandshake, Heart, UserPlus
 } from 'lucide-react';
 
@@ -613,6 +613,9 @@ export default function KomisiManagement() {
   const [savingMember, setSavingMember] = useState(false);
   const [selectedJemaatId, setSelectedJemaatId] = useState('');
   const [linkSearch, setLinkSearch] = useState('');
+  const [spouseSearch, setSpouseSearch] = useState('');
+  const [spouseDropdownOpen, setSpouseDropdownOpen] = useState(false);
+  const [selectedSpouseJemaatId, setSelectedSpouseJemaatId] = useState('');
 
   // Session form
   const [showSessionForm, setShowSessionForm] = useState(false);
@@ -864,6 +867,33 @@ export default function KomisiManagement() {
     return results[0] ?? null;
   }, [memberForm, jemaatList]);
 
+  // Suggestions pasangan dari database jemaat umum
+  const spouseSuggestions = useMemo((): JemaatMember[] => {
+    const q = (spouseSearch || memberForm.spouseName || '').trim().toLowerCase();
+    if (!q || q.length < 2) return [];
+
+    return jemaatList
+      .filter(j => {
+        // Jangan tampilkan jemaat yang sedang dipilih sebagai dirinya sendiri
+        if (selectedJemaatId) {
+          const rawSel = selectedJemaatId.replace(/^congregation:member:/, '').replace(/^member:/, '');
+          const rawJ = j.id.replace(/^congregation:member:/, '').replace(/^member:/, '');
+          if (rawSel === rawJ) return false;
+        }
+        if (memberForm.name && j.name.toLowerCase().trim() === memberForm.name.toLowerCase().trim()) {
+          return false;
+        }
+        const nameMatch = j.name.toLowerCase().includes(q);
+        const phoneMatch = j.phone && j.phone.includes(q);
+        const spouseMatch = j.spouseName && (
+          j.spouseName.toLowerCase().includes(q) ||
+          (memberForm.name && isNameMatching(j.spouseName, memberForm.name))
+        );
+        return nameMatch || phoneMatch || spouseMatch || isNameMatching(q, j.name);
+      })
+      .slice(0, 8);
+  }, [spouseSearch, memberForm.spouseName, memberForm.name, selectedJemaatId, jemaatList, isNameMatching]);
+
 
   // ── Member CRUD ───────────────────────────────────────────────────────────
   const [coupleView, setCoupleView] = useState(true);
@@ -979,7 +1009,11 @@ export default function KomisiManagement() {
       photoUrl: '',
       role: 'anggota'
     });
-    setSelectedJemaatId(''); setLinkSearch('');
+    setSelectedJemaatId('');
+    setLinkSearch('');
+    setSelectedSpouseJemaatId('');
+    setSpouseSearch('');
+    setSpouseDropdownOpen(false);
     setShowMemberForm(true);
   };
 
@@ -992,6 +1026,19 @@ export default function KomisiManagement() {
     const resolvedPhotoUrl = m.photoUrl || linked?.photoUrl || '';
     const resolvedPhone = m.phone || linked?.phone || '';
     const resolvedAddress = m.address || linked?.address || '';
+
+    if (resolvedSpouseName) {
+      const matchSpouse = jemaatList.find(j =>
+        isNameMatching(resolvedSpouseName, j.name) ||
+        (j.spouseName && isNameMatching(m.name, j.spouseName))
+      );
+      setSelectedSpouseJemaatId(matchSpouse ? matchSpouse.id : '');
+      setSpouseSearch(resolvedSpouseName);
+    } else {
+      setSelectedSpouseJemaatId('');
+      setSpouseSearch('');
+    }
+    setSpouseDropdownOpen(false);
 
     setMemberForm({
       name: m.name,
@@ -1010,6 +1057,16 @@ export default function KomisiManagement() {
 
   const selectJemaatToForm = (j: JemaatMember) => {
     setSelectedJemaatId(j.id);
+    const spouse = j.spouseName || '';
+    if (spouse) {
+      const matchSpouse = jemaatList.find(otherJ =>
+        otherJ.id !== j.id &&
+        (isNameMatching(spouse, otherJ.name) || (otherJ.spouseName && isNameMatching(j.name, otherJ.spouseName)))
+      );
+      if (matchSpouse) {
+        setSelectedSpouseJemaatId(matchSpouse.id);
+      }
+    }
     setMemberForm(prev => ({
       ...prev,
       name: j.name || prev.name,
@@ -1021,6 +1078,18 @@ export default function KomisiManagement() {
       photoUrl: j.photoUrl || prev.photoUrl,
     }));
     setLinkSearch('');
+  };
+
+  const selectSpouseToForm = (j: JemaatMember) => {
+    setSelectedSpouseJemaatId(j.id);
+    setMemberForm(prev => ({
+      ...prev,
+      spouseName: j.name,
+      marriageDate: prev.marriageDate || j.marriageDate || '',
+      address: prev.address || j.address || '',
+    }));
+    setSpouseSearch(j.name);
+    setSpouseDropdownOpen(false);
   };
 
   const handleSaveMember = async () => {
@@ -1079,25 +1148,46 @@ export default function KomisiManagement() {
         }
       }
 
-      // Khusus Komisi Kompas (Pasutri): Jika jemaat memiliki pasangan terdaftar di jemaat umum, otomatis tambahkan pasangan ke Kompas jika belum ada
+      // Khusus Komisi Kompas (Pasutri): Sinkronkan data pasangan dua arah
       if (activeKomisi === 'kompas' && memberForm.spouseName?.trim()) {
         try {
           const spouseInput = memberForm.spouseName.trim();
           const selfName = memberForm.name.trim();
 
-          const foundSpouseJemaat = jemaatList.find(j =>
+          const foundSpouseJemaat = (selectedSpouseJemaatId ? jemaatMap[selectedSpouseJemaatId] : null) || jemaatList.find(j =>
             isNameMatching(spouseInput, j.name) ||
             (j.spouseName && isNameMatching(selfName, j.spouseName))
           );
 
           if (foundSpouseJemaat) {
-            // Cek apakah pasangan sudah ada di komisi ini
-            const alreadyInKomisi = members.some(m =>
-              (m.jemaatId && (m.jemaatId === foundSpouseJemaat.id || m.jemaatId === foundSpouseJemaat.id.replace(/^congregation:member:/, ''))) ||
+            // 1. Sync data pasangan di Data Jemaat Umum agar pasangan juga memiliki spouseName = selfName & marriageDate
+            try {
+              const spouseRawId = foundSpouseJemaat.id.replace(/^congregation:member:/, '').replace(/^member:/, '');
+              const spousePrimary = `congregation:member:${spouseRawId}`;
+              const { data: sRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', spousePrimary).maybeSingle()
+                || await supabaseAdmin.from(KV).select('key, value').eq('key', foundSpouseJemaat.id).maybeSingle();
+
+              if (sRow && sRow.value) {
+                const updatedSpouseJemaat = {
+                  ...sRow.value,
+                  spouseName: selfName,
+                  marriageDate: memberForm.marriageDate || sRow.value.marriageDate,
+                  updatedAt: new Date().toISOString(),
+                };
+                await supabaseAdmin.from(KV).update({ value: updatedSpouseJemaat }).eq('key', sRow.key || spousePrimary);
+              }
+            } catch (errSync) {
+              console.warn('Sync spouse jemaat general failed:', errSync);
+            }
+
+            // 2. Cek apakah pasangan sudah ada di Komisi Kompas
+            const existingSpouseInKomisi = members.find(m =>
+              (m.jemaatId && (m.jemaatId === foundSpouseJemaat.id || m.jemaatId.replace(/^congregation:member:/, '') === foundSpouseJemaat.id.replace(/^congregation:member:/, ''))) ||
               isNameMatching(m.name, foundSpouseJemaat.name)
             );
 
-            if (!alreadyInKomisi) {
+            if (!existingSpouseInKomisi) {
+              // Jika belum ada di kompas, otomatis daftarkan pasangan ke Kompas
               const spouseMemberId = crypto.randomUUID();
               const spouseMember: KomisiMember = {
                 id: spouseMemberId,
@@ -1107,7 +1197,7 @@ export default function KomisiManagement() {
                 address: foundSpouseJemaat.address || memberForm.address.trim() || '',
                 birthDate: foundSpouseJemaat.birthDate || undefined,
                 marriageDate: memberForm.marriageDate || foundSpouseJemaat.marriageDate || undefined,
-                spouseName: memberForm.name.trim(),
+                spouseName: selfName,
                 photoUrl: foundSpouseJemaat.photoUrl || undefined,
                 role: 'anggota',
                 joinedAt: new Date().toISOString(),
@@ -1117,10 +1207,23 @@ export default function KomisiManagement() {
                 key: `komisi:kompas:member:${spouseMemberId}`,
                 value: spouseMember,
               });
+            } else {
+              // Jika sudah ada di kompas, pastikan data spouseName & marriageDate nya juga tersinkron
+              const updatedExisting: KomisiMember = {
+                ...existingSpouseInKomisi,
+                spouseName: selfName,
+                marriageDate: memberForm.marriageDate || existingSpouseInKomisi.marriageDate || foundSpouseJemaat.marriageDate,
+                photoUrl: existingSpouseInKomisi.photoUrl || foundSpouseJemaat.photoUrl,
+                phone: existingSpouseInKomisi.phone || foundSpouseJemaat.phone || '',
+                address: existingSpouseInKomisi.address || memberForm.address.trim() || foundSpouseJemaat.address || '',
+              };
+              await supabaseAdmin.from(KV).update({
+                value: updatedExisting,
+              }).eq('key', `komisi:kompas:member:${existingSpouseInKomisi.id}`);
             }
           }
         } catch (spouseErr) {
-          console.warn('Auto add spouse to kompas error (non-fatal):', spouseErr);
+          console.warn('Auto add/sync spouse to kompas error (non-fatal):', spouseErr);
         }
       }
 
@@ -1519,7 +1622,7 @@ export default function KomisiManagement() {
                     </div>
 
                     {/* Member Cards Grid di dalam group */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       {group.members.map(m => {
                         const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
                         const notInDb = !linked;
@@ -1528,66 +1631,103 @@ export default function KomisiManagement() {
                         const photoUrl = m.photoUrl || linked?.photoUrl;
                         const birthDate = linked?.birthDate || m.birthDate || '';
                         const age = birthDate ? getAge(birthDate) : -1;
+                        const address = m.address || linked?.address || '';
+                        const isPresent = draftPresentIds.has(m.id);
 
                         return (
                           <div
                             key={m.id}
-                            className="bg-white rounded-xl border border-gray-200/90 p-3.5 shadow-2xs flex items-start justify-between gap-3 hover:border-blue-200 transition-all"
+                            className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-2xs flex flex-col justify-between hover:border-rose-200 hover:shadow-xs transition-all"
                           >
-                            <div className="flex items-start gap-3 min-w-0 flex-1">
-                              {/* Avatar Foto / Inisial */}
-                              <div className="w-12 h-12 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm shadow-2xs border border-gray-100">
-                                {photoUrl ? (
-                                  <img src={photoUrl} alt={m.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  m.name.charAt(0).toUpperCase()
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <h4 className="font-bold text-gray-900 text-xs sm:text-sm truncate">{m.name}</h4>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${STATUS_STYLE[memberStatus] || STATUS_STYLE.active}`}>
-                                    {STATUS_LABEL[memberStatus] || memberStatus}
-                                  </span>
-                                </div>
-
-                                <div className="mt-1 text-[11px] text-gray-600 space-y-1">
-                                  {m.phone && (
-                                    <div className="flex items-center gap-1 truncate text-emerald-700 font-medium">
-                                      <Phone size={11} className="text-emerald-500 flex-shrink-0" />
-                                      <span>{m.phone}</span>
-                                    </div>
-                                  )}
-                                  {birthDate && (
-                                    <div className="flex items-center gap-1 text-gray-500">
-                                      <Calendar size={11} className="text-pink-400 flex-shrink-0" />
-                                      <span>{formatDate(birthDate)} {age >= 0 ? `(${age} thn)` : ''}</span>
-                                    </div>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                {/* Avatar Foto / Inisial */}
+                                <div className="w-12 h-12 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-500 to-rose-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm shadow-2xs border border-gray-100 ring-2 ring-white">
+                                  {photoUrl ? (
+                                    <img src={photoUrl} alt={m.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    m.name.charAt(0).toUpperCase()
                                   )}
                                 </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <h4 className="font-bold text-gray-900 text-sm truncate">{m.name}</h4>
+                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[memberStatus] || STATUS_STYLE.active}`}>
+                                      {STATUS_LABEL[memberStatus] || memberStatus}
+                                    </span>
+                                    {m.role && m.role !== 'anggota' && (
+                                      <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                                        {m.role}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-2 space-y-1.5 text-xs text-gray-600">
+                                    {m.phone && (
+                                      <div className="flex items-center gap-1.5">
+                                        <a
+                                          href={`https://wa.me/${m.phone.replace(/\D/g, '').replace(/^0/, '62')}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
+                                          title="Chat via WhatsApp"
+                                        >
+                                          <Phone size={11} className="text-emerald-600" />
+                                          <span>{m.phone}</span>
+                                        </a>
+                                      </div>
+                                    )}
+                                    {birthDate && (
+                                      <div className="flex items-center gap-1.5 text-gray-600">
+                                        <Calendar size={12} className="text-pink-400 flex-shrink-0" />
+                                        <span>Lahir: <strong className="font-semibold text-gray-800">{formatDate(birthDate)}</strong> {age >= 0 ? `(${age} thn)` : ''}</span>
+                                      </div>
+                                    )}
+                                    {address && (
+                                      <div className="flex items-start gap-1.5 text-gray-500">
+                                        <MapPin size={12} className="text-gray-400 flex-shrink-0 mt-0.5" />
+                                        <span className="truncate" title={address}>{address}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
+
+                              {/* Action edit/delete */}
+                              {canEdit && (
+                                <div className="flex items-center gap-0.5 flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditMember(m)}
+                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all cursor-pointer"
+                                    title="Edit data anggota"
+                                  >
+                                    <Edit2 size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMember(m)}
+                                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                                    title="Hapus dari komisi"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
 
-                            {/* Action edit/delete */}
-                            {canEdit && (
-                              <div className="flex items-center gap-0.5 flex-shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => openEditMember(m)}
-                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
-                                  title="Edit data anggota"
-                                >
-                                  <Edit2 size={13} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteMember(m)}
-                                  className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                                  title="Hapus dari komisi"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                            {/* Footer info: Kehadiran pada sesi absensi aktif */}
+                            {activeSession && (
+                              <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-[11px]">
+                                <span className="text-gray-400">Kehadiran ({selectedDate}):</span>
+                                <span className={`font-bold px-2 py-0.5 rounded-full ${
+                                  isPresent
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-gray-100 text-gray-500'
+                                }`}>
+                                  {isPresent ? '✓ Hadir' : 'Belum Hadir'}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -2376,29 +2516,115 @@ export default function KomisiManagement() {
                   </p>
                 </div>
 
-                {/* Nama Pasangan (Suami / Istri) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                    <Heart size={13} className="text-rose-500" />
-                    <span>Nama Pasangan (Suami / Istri)</span>
-                    {activeKomisi === 'kompas' && (
-                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.2 rounded-full">
-                        Auto-grouping Pasutri
+                {/* Nama Pasangan (Suami / Istri) dengan Live Dropdown dari Data Jemaat Umum */}
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Heart size={13} className="text-rose-500" />
+                      <span>Nama Pasangan (Suami / Istri)</span>
+                      {activeKomisi === 'kompas' && (
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.2 rounded-full">
+                          Auto-grouping Pasutri
+                        </span>
+                      )}
+                    </label>
+                    {selectedSpouseJemaatId && jemaatMap[selectedSpouseJemaatId] && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 size={11} className="text-emerald-600" /> Tersinkron Jemaat Umum
                       </span>
                     )}
-                  </label>
-                  <input 
-                    type="text" 
-                    placeholder="Contoh: Hadi Susanto"
-                    value={memberForm.spouseName} 
-                    onChange={e => setMemberForm(p => ({ ...p, spouseName: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
-                  />
-                  {activeKomisi === 'kompas' && (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Bila pasangan terdaftar di database jemaat umum, pasangan akan otomatis dimasukkan ke Kompas dan dikelompokkan bersama.
-                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      placeholder="Ketik nama pasangan untuk mencari otomatis di database jemaat umum..."
+                      value={memberForm.spouseName} 
+                      onChange={e => {
+                        const val = e.target.value;
+                        setMemberForm(p => ({ ...p, spouseName: val }));
+                        setSpouseSearch(val);
+                        setSpouseDropdownOpen(true);
+                        if (!val.trim()) setSelectedSpouseJemaatId('');
+                      }}
+                      onFocus={() => {
+                        if (memberForm.spouseName.trim().length >= 2) {
+                          setSpouseDropdownOpen(true);
+                        }
+                      }}
+                      className="w-full pl-3.5 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                    />
+                    {memberForm.spouseName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberForm(p => ({ ...p, spouseName: '' }));
+                          setSelectedSpouseJemaatId('');
+                          setSpouseSearch('');
+                          setSpouseDropdownOpen(false);
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                        title="Hapus nama pasangan"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Suggestions from Data Jemaat Umum */}
+                  {spouseDropdownOpen && spouseSuggestions.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                      <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>Pilih Pasangan dari Data Jemaat Umum</span>
+                        <button
+                          type="button"
+                          onClick={() => setSpouseDropdownOpen(false)}
+                          className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          Tutup
+                        </button>
+                      </div>
+                      {spouseSuggestions.map(j => (
+                        <button
+                          key={j.id}
+                          type="button"
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            selectSpouseToForm(j);
+                          }}
+                          className="w-full text-left px-3.5 py-2.5 hover:bg-rose-50/70 border-b border-slate-100 last:border-0 cursor-pointer flex items-center justify-between group transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {/* Avatar */}
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold text-xs flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {j.photoUrl ? (
+                                <img src={j.photoUrl} alt={j.name} className="w-full h-full object-cover" />
+                              ) : (
+                                j.name.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-xs text-slate-900 group-hover:text-rose-700 truncate">
+                                {j.name}
+                              </p>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 truncate">
+                                {j.phone && <span>{j.phone}</span>}
+                                {j.birthDate && <span>· Lahir: {formatDate(j.birthDate)}</span>}
+                                {j.marriageDate && <span className="text-rose-600 font-semibold">· Anniv: {formatDate(j.marriageDate)}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 flex items-center gap-1 group-hover:bg-rose-600 group-hover:text-white transition-colors flex-shrink-0 ml-2">
+                            <Heart size={10} /> Pilih Pasangan
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   )}
+
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Ketik nama pasangan untuk mencari otomatis di database jemaat umum, atau ketik nama langsung bila belum terdaftar.
+                  </p>
                 </div>
               </div>
 
