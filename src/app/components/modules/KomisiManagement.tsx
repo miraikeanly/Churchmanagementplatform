@@ -5,14 +5,14 @@ import { EdgeKV as supabaseAdmin } from '../../../lib/edgeKvClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { projectId } from '/utils/supabase/info';
-import { getAge, getAgeGroup, AGE_GROUP_STYLES } from '../../../lib/age';
+import { getAge, getAgeGroup, AGE_GROUP_STYLES, getAnniversaryYears } from '../../../lib/age';
 import KomisiReport from './KomisiReport';
 import ModernDatePicker from '../common/ModernDatePicker';
 import {
   Users, Plus, Trash2, Edit2, X, Check, ChevronDown, AlertTriangle,
   ClipboardList, Download, Calendar, Calendar as CalendarIcon, UserCheck, UserX, Link, Unlink,
   Search, RefreshCw, ShieldAlert, Info, Activity, Circle, Save, Phone,
-  ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles
+  ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles, HeartHandshake
 } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
@@ -37,6 +37,7 @@ export interface KomisiMember {
   phone: string;
   address?: string;
   birthDate?: string;
+  marriageDate?: string;
   role?: 'anggota' | 'pengurus' | 'guru';
   status?: string;
   joinedAt: string;
@@ -61,6 +62,7 @@ interface JemaatMember {
   phone?: string;
   address?: string;
   birthDate?: string;
+  marriageDate?: string;
   photoUrl?: string;
   role?: 'anggota' | 'pengurus' | 'guru';
   status?: string;
@@ -595,7 +597,14 @@ export default function KomisiManagement() {
   // Member form
   const [showMemberForm, setShowMemberForm] = useState(false);
   const [editMember, setEditMember] = useState<KomisiMember | null>(null);
-  const [memberForm, setMemberForm] = useState({ name: '', phone: '', address: '', birthDate: '', role: 'anggota' as 'anggota' | 'pengurus' | 'guru' });
+  const [memberForm, setMemberForm] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    birthDate: '',
+    marriageDate: '',
+    role: 'anggota' as 'anggota' | 'pengurus' | 'guru'
+  });
   const [savingMember, setSavingMember] = useState(false);
   const [selectedJemaatId, setSelectedJemaatId] = useState('');
   const [linkSearch, setLinkSearch] = useState('');
@@ -623,6 +632,7 @@ export default function KomisiManagement() {
           phone: m.phone || '', 
           address: m.address || '', 
           birthDate: m.birthDate || '',
+          marriageDate: m.marriageDate || '',
           photoUrl: m.photoUrl || undefined,
           status: m.status || 'active',
         };
@@ -818,7 +828,7 @@ export default function KomisiManagement() {
 
   const openAddMember = () => {
     setEditMember(null);
-    setMemberForm({ name: '', phone: '', address: '', birthDate: '', role: 'anggota' });
+    setMemberForm({ name: '', phone: '', address: '', birthDate: '', marriageDate: '', role: 'anggota' });
     setSelectedJemaatId(''); setLinkSearch('');
     setShowMemberForm(true);
   };
@@ -827,6 +837,7 @@ export default function KomisiManagement() {
     setEditMember(m);
     const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
     const resolvedBirthDate = m.birthDate || linked?.birthDate || '';
+    const resolvedMarriageDate = m.marriageDate || linked?.marriageDate || '';
     const resolvedPhone = m.phone || linked?.phone || '';
     const resolvedAddress = m.address || linked?.address || '';
 
@@ -835,6 +846,7 @@ export default function KomisiManagement() {
       phone: resolvedPhone,
       address: resolvedAddress,
       birthDate: resolvedBirthDate,
+      marriageDate: resolvedMarriageDate,
       role: m.role || 'anggota',
     });
     setSelectedJemaatId(m.jemaatId || '');
@@ -850,6 +862,7 @@ export default function KomisiManagement() {
       phone: j.phone || prev.phone,
       address: j.address || prev.address,
       birthDate: j.birthDate || prev.birthDate,
+      marriageDate: j.marriageDate || prev.marriageDate,
     }));
     setLinkSearch('');
   };
@@ -865,7 +878,8 @@ export default function KomisiManagement() {
         name: memberForm.name.trim(),
         phone: memberForm.phone.trim(),
         address: memberForm.address.trim(),
-        birthDate: memberForm.birthDate,
+        birthDate: memberForm.birthDate || undefined,
+        marriageDate: memberForm.marriageDate || undefined,
         role: memberForm.role,
         joinedAt: editMember?.joinedAt || new Date().toISOString(),
         ...(selectedJemaatId ? { jemaatId: selectedJemaatId } : {}),
@@ -892,6 +906,7 @@ export default function KomisiManagement() {
               ...jRow.value,
               name: memberForm.name.trim(),
               birthDate: memberForm.birthDate || jRow.value.birthDate,
+              marriageDate: memberForm.marriageDate || jRow.value.marriageDate,
               phone: memberForm.phone.trim() || jRow.value.phone,
               address: memberForm.address.trim() || jRow.value.address,
               updatedAt: new Date().toISOString(),
@@ -1064,32 +1079,74 @@ export default function KomisiManagement() {
 
   // ── Excel exports ─────────────────────────────────────────────────────────
   const exportMembers = () => {
-    const rows = members.map(m => ({
-      'Nama': m.name,
-      'No. Telepon': m.phone,
-      'Alamat Domisili': m.address || '',
-      'Tanggal Lahir': m.birthDate || '',
-      'Peran': m.role === 'pengurus' ? 'Pengurus' : m.role === 'guru' ? 'Guru' : 'Anggota',
-      'Bergabung': formatDate(m.joinedAt),
-      'Status Jemaat Umum': m.jemaatId && jemaatMap[m.jemaatId] ? 'Terdaftar' : 'Belum di database umum',
-      'Komisi': komisiInfo.label,
-    }));
+    const rows = members.map(m => {
+      const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+      const bDate = m.birthDate || linked?.birthDate || '';
+      const mDate = m.marriageDate || linked?.marriageDate || '';
+      const anniYears = mDate ? getAnniversaryYears(mDate) : -1;
+
+      return {
+        'Nama': m.name,
+        'No. Telepon': m.phone || linked?.phone || '-',
+        'Alamat Domisili': m.address || linked?.address || '-',
+        'Tanggal Lahir': bDate ? formatDate(bDate) : '-',
+        'Tanggal Pernikahan': mDate ? formatDate(mDate) : '-',
+        'Usia Pernikahan': anniYears >= 0 ? `${anniYears} tahun` : '-',
+        'Peran': m.role === 'pengurus' ? 'Pengurus' : m.role === 'guru' ? 'Guru' : 'Anggota',
+        'Bergabung': formatDate(m.joinedAt),
+        'Status Jemaat Umum': m.jemaatId && jemaatMap[m.jemaatId] ? 'Terdaftar' : 'Belum di database umum',
+        'Komisi': komisiInfo.label,
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Anggota');
     XLSX.writeFile(wb, `Komisi_${komisiInfo.label.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  const exportAttendance = (session: AbsenSession) => {
-    const rows = members.map(m => ({
-      'Nama': m.name, 'No. Telepon': m.phone,
-      'Status': session.presentIds.includes(m.id) ? 'Hadir'
-        : session.absentIds.includes(m.id) ? 'Tidak Hadir' : 'Belum dicatat',
-    }));
+  const exportAttendance = async (session: AbsenSession | null) => {
+    // 1. Sinkronkan perubahan draft absensi secara otomatis ke database jika ada yang belum tersimpan
+    if (isAttendanceDirtyRef.current) {
+      await saveAttendance();
+    }
+
+    const effectiveDate = session?.date || selectedDate;
+    const processedIds = new Set<string>();
+    const rows: any[] = [];
+
+    // 2. Masukkan semua anggota komisi dengan status Hadir / Tidak Hadir yang 100% sinkron dengan layar
+    members.forEach(m => {
+      processedIds.add(m.id);
+      const isPresent = draftPresentIds.has(m.id);
+      rows.push({
+        'Nama': m.name,
+        'No. Telepon': m.phone || '-',
+        'Peran': m.role === 'pengurus' ? 'Pengurus' : m.role === 'guru' ? 'Guru' : 'Anggota',
+        'Status': isPresent ? 'Hadir' : 'Tidak Hadir',
+      });
+    });
+
+    // 3. Jika ada ID di draftPresentIds yang tidak terdaftar di members (misal anggota dari jemaat umum), tetap masukkan agar jumlah Hadir di Excel tepat sama dengan Hadir di UI
+    draftPresentIds.forEach(id => {
+      if (!processedIds.has(id)) {
+        processedIds.add(id);
+        const j = jemaatMap[id];
+        rows.push({
+          'Nama': j?.name || `Anggota (${id})`,
+          'No. Telepon': j?.phone || '-',
+          'Peran': 'Anggota',
+          'Status': 'Hadir',
+        });
+      }
+    });
+
+    // Urutkan alfabetis berdasarkan Nama
+    rows.sort((a, b) => a['Nama'].localeCompare(b['Nama'], 'id'));
+
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Absensi');
-    XLSX.writeFile(wb, `Absen_${komisiInfo.label.replace(/\s+/g, '_')}_${session.date}.xlsx`);
+    XLSX.writeFile(wb, `Absen_${komisiInfo.label.replace(/\s+/g, '_')}_${effectiveDate}.xlsx`);
   };
 
   // ── No access ─────────────────────────────────────────────────────────────
@@ -1203,6 +1260,8 @@ export default function KomisiManagement() {
                 const memberStatus = jMember?.status || m.status || 'active';
                 // Linked members always follow Data Jemaat; the age is computed today, so it rolls over on each birthday.
                 const birthDate = linked?.birthDate || m.birthDate || '';
+                const marriageDate = m.marriageDate || linked?.marriageDate || '';
+                const anniYears = marriageDate ? getAnniversaryYears(marriageDate) : -1;
                 const age = birthDate ? getAge(birthDate) : -1;
                 const range = KOMISI_AGE_RANGE[activeKomisi];
                 const outOfRange = !!range && age >= 0 && (age < range[0] || age > range[1]);
@@ -1238,6 +1297,12 @@ export default function KomisiManagement() {
                                 {age} thn ({getAgeGroup(birthDate)})
                               </span>
                             )}
+                            {anniYears >= 0 && (
+                              <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+                                <HeartHandshake size={11} className="text-rose-500" />
+                                {anniYears} thn Pernikahan
+                              </span>
+                            )}
                             {outOfRange && (
                               <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
                                 Usia di luar rentang komisi
@@ -1245,7 +1310,7 @@ export default function KomisiManagement() {
                             )}
                           </div>
 
-                          {/* Data Rinci: HP, Tgl Lahir, Alamat */}
+                          {/* Data Rinci: HP, Tgl Lahir, Tgl Pernikahan, Alamat */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600">
                             {m.phone && (
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -1263,7 +1328,13 @@ export default function KomisiManagement() {
                             {birthDate && (
                               <div className="flex items-center gap-1.5 min-w-0 text-gray-600">
                                 <Calendar size={13} className="text-pink-400 flex-shrink-0" />
-                                <span>{formatDate(birthDate)}</span>
+                                <span>Lahir: {formatDate(birthDate)}</span>
+                              </div>
+                            )}
+                            {marriageDate && (
+                              <div className="flex items-center gap-1.5 min-w-0 text-rose-700 font-semibold">
+                                <HeartHandshake size={13} className="text-rose-500 flex-shrink-0" />
+                                <span>Anniversary: {formatDate(marriageDate)}{anniYears >= 0 ? ` (${anniYears} thn)` : ''}</span>
                               </div>
                             )}
                             {m.address && (
@@ -1902,6 +1973,37 @@ export default function KomisiManagement() {
                       <option value="guru">Guru (Khusus Sekolah Minggu)</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Tanggal Pernikahan / Anniversary (Khususnya jemaat Kompas / Pasutri) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <HeartHandshake size={14} className="text-rose-500" />
+                      <span>Tanggal Pernikahan / Anniversary</span>
+                      {activeKomisi === 'kompas' && (
+                        <span className="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.2 rounded-full font-bold">
+                          Kompas
+                        </span>
+                      )}
+                    </label>
+                    {memberForm.marriageDate && getAnniversaryYears(memberForm.marriageDate) >= 0 && (
+                      <span className="text-[11px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
+                        {getAnniversaryYears(memberForm.marriageDate)} Tahun Pernikahan
+                      </span>
+                    )}
+                  </div>
+                  <ModernDatePicker
+                    value={memberForm.marriageDate}
+                    onChange={val => setMemberForm(p => ({ ...p, marriageDate: val }))}
+                    placeholder="Pilih tanggal pernikahan / anniversary"
+                    minYear={1950}
+                    maxYear={new Date().getFullYear()}
+                    showAge={false}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Tercatat untuk jemaat komisi (baik yang sudah di database umum maupun jemaat khusus Kompas)
+                  </p>
                 </div>
               </div>
 
