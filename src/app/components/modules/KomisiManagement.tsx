@@ -794,39 +794,75 @@ export default function KomisiManagement() {
     return m;
   }, [jemaatList]);
 
-  // Helper name matching for aliases, slashes, parenthesized names & word order
-  const isNameMatching = useCallback((query?: string, target?: string): boolean => {
-    const q = (query || '').toLowerCase().trim();
-    const t = (target || '').toLowerCase().trim();
-    if (!q || !t) return false;
-    if (q === t) return true;
+  // Helper to extract clean aliases from names with / or ()
+  const getCleanAliases = useCallback((raw?: string): string[] => {
+    if (!raw) return [];
+    const norm = raw.toLowerCase().trim();
+    if (!norm) return [];
+    const aliases = new Set<string>([norm]);
 
-    // Direct substring check (min length 3)
-    if (q.length >= 3 && t.length >= 3) {
-      if (q.includes(t) || t.includes(q)) return true;
+    // Split by /
+    raw.split('/').forEach(p => {
+      const cp = p.toLowerCase().replace(/[\(\)]/g, ' ').trim();
+      if (cp.length >= 2) aliases.add(cp);
+    });
+
+    // Extract inside ()
+    const m = raw.match(/\(([^)]+)\)/g);
+    if (m) {
+      m.forEach(p => {
+        const cp = p.replace(/[\(\)]/g, '').toLowerCase().trim();
+        if (cp.length >= 2) aliases.add(cp);
+      });
     }
 
-    // Parts separated by slash or parentheses (e.g. "Mei Hun / Steffany" -> "Mei Hun", "Steffany")
-    const qParts = (query || '').split(/[\/\(\)]/).map(p => p.toLowerCase().trim()).filter(p => p.length >= 3);
-    const tParts = (target || '').split(/[\/\(\)]/).map(p => p.toLowerCase().trim()).filter(p => p.length >= 3);
-    for (const qp of qParts) {
-      for (const tp of tParts) {
-        if (qp === tp || qp.includes(tp) || tp.includes(qp)) return true;
+    // Without ()
+    const noP = raw.replace(/\([^)]+\)/g, '').toLowerCase().trim();
+    if (noP.length >= 2) aliases.add(noP);
+
+    return Array.from(aliases);
+  }, []);
+
+  const getCleanTokens = useCallback((s?: string): string[] => {
+    if (!s) return [];
+    return s.toLowerCase().trim().replace(/[\/\(\)\-\.,]/g, ' ').split(/\s+/).filter(t => t.length > 1);
+  }, []);
+
+  // Safe & strict name matching: evaluates whether target matches candidate with high confidence
+  const checkTargetNameMatch = useCallback((target?: string, candidate?: string): number => {
+    const tNorm = (target || '').toLowerCase().trim();
+    const cNorm = (candidate || '').toLowerCase().trim();
+    if (!tNorm || !cNorm) return 0;
+    if (tNorm === cNorm) return 2000;
+
+    const tAliases = getCleanAliases(target);
+    const cAliases = getCleanAliases(candidate);
+
+    for (const ta of tAliases) {
+      for (const ca of cAliases) {
+        if (ta === ca) return 1800;
       }
     }
 
-    // Token matching (handles re-ordered words: "Steffany Mei Hun" vs "Mei Hun / Steffany")
-    const tokenize = (s: string) => s.toLowerCase().trim().replace(/[\/\(\)\-\.,]/g, ' ').split(/\s+/).filter(Boolean);
-    const qTokens = tokenize(query || '');
-    const tTokens = tokenize(target || '');
-    if (qTokens.length > 0 && tTokens.length > 0) {
-      const common = qTokens.filter(tok => tok.length >= 3 && tTokens.includes(tok));
-      if (common.length >= 2) return true;
-      if (common.length === 1 && (qTokens.length === 1 || tTokens.length === 1) && common[0].length >= 4) return true;
+    // Token permutation check for multi-word names (e.g. "Steffany Mei Hun" vs "Mei Hun / Steffany")
+    const tToks = getCleanTokens(target);
+    const cToks = getCleanTokens(candidate);
+    if (tToks.length >= 2 && cToks.length >= 2) {
+      const overlap = tToks.filter(t => cToks.includes(t));
+      if (overlap.length === tToks.length && overlap.length === cToks.length) {
+        return 1600;
+      }
+      if (overlap.length >= 2 && (overlap.length === tToks.length || overlap.length === cToks.length)) {
+        return 1300;
+      }
     }
 
-    return false;
-  }, []);
+    return 0;
+  }, [getCleanAliases, getCleanTokens]);
+
+  const isNameMatching = useCallback((query?: string, target?: string): boolean => {
+    return checkTargetNameMatch(query, target) > 0;
+  }, [checkTargetNameMatch]);
 
   // ── Live suggestions when typing in form ─────────────────────────────────
   const formSuggestions = useMemo((): MatchResult[] => {
@@ -887,12 +923,12 @@ export default function KomisiManagement() {
         const phoneMatch = j.phone && j.phone.includes(q);
         const spouseMatch = j.spouseName && (
           j.spouseName.toLowerCase().includes(q) ||
-          (memberForm.name && isNameMatching(j.spouseName, memberForm.name))
+          (memberForm.name && checkTargetNameMatch(j.spouseName, memberForm.name) > 0)
         );
-        return nameMatch || phoneMatch || spouseMatch || isNameMatching(q, j.name);
+        return nameMatch || phoneMatch || spouseMatch || checkTargetNameMatch(q, j.name) > 0;
       })
       .slice(0, 8);
-  }, [spouseSearch, memberForm.spouseName, memberForm.name, selectedJemaatId, jemaatList, isNameMatching]);
+  }, [spouseSearch, memberForm.spouseName, memberForm.name, selectedJemaatId, jemaatList, checkTargetNameMatch]);
 
 
   // ── Member CRUD ───────────────────────────────────────────────────────────
@@ -902,7 +938,7 @@ export default function KomisiManagement() {
     members.filter(m => m.name.toLowerCase().includes(search.toLowerCase())),
     [members, search]);
 
-  // Grouping couple untuk Komisi Kompas
+  // Grouping couple untuk Komisi Kompas dengan kalkulasi skor pasangan berakurasi tinggi
   const coupleGroups = useMemo(() => {
     const list = filteredMembers;
     const processedIds = new Set<string>();
@@ -915,62 +951,95 @@ export default function KomisiManagement() {
       members: KomisiMember[];
     }[] = [];
 
-    const getNames = (m: KomisiMember): string[] => {
+    // Precompute metadata nama & target pasangan
+    const memberMeta = list.map(m => {
       const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
-      return [m.name, linked?.name].filter(Boolean) as string[];
-    };
+      const names = Array.from(new Set([m.name, linked?.name, linked?.nickname].filter(Boolean) as string[]));
+      const spouses = Array.from(new Set([m.spouseName, linked?.spouseName].filter(Boolean) as string[]));
+      const marriageDate = m.marriageDate || linked?.marriageDate || '';
+      return {
+        member: m,
+        linked,
+        names,
+        spouses,
+        marriageDate,
+      };
+    });
 
-    const getSpouses = (m: KomisiMember): string[] => {
-      const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
-      return [m.spouseName, linked?.spouseName].filter(Boolean) as string[];
-    };
-
-    for (const m of list) {
+    for (let i = 0; i < memberMeta.length; i++) {
+      const current = memberMeta[i];
+      const m = current.member;
       if (processedIds.has(m.id)) continue;
 
-      const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
-      const mNames = getNames(m);
-      const mSpouses = getSpouses(m);
-      const marriageDate = m.marriageDate || linked?.marriageDate || '';
+      let bestPartner: typeof memberMeta[0] | null = null;
+      let highestScore = 0;
 
-      // Cari pasangan di dalam list anggota komisi
-      let partner: KomisiMember | undefined;
+      for (let j = 0; j < memberMeta.length; j++) {
+        if (i === j) continue;
+        const other = memberMeta[j];
+        if (processedIds.has(other.member.id)) continue;
 
-      partner = list.find(other => {
-        if (other.id === m.id || processedIds.has(other.id)) return false;
-        const otherLinked = other.jemaatId ? jemaatMap[other.jemaatId] : null;
-        const oNames = getNames(other);
-        const oSpouses = getSpouses(other);
+        // Tanggal pernikahan berbeda -> TIDAK BISA dipasangkan (cegah salah pasangan)
+        if (current.marriageDate && other.marriageDate && current.marriageDate !== other.marriageDate) {
+          continue;
+        }
 
-        // 1. Apakah ada nama pasangan m yang cocok dengan salah satu nama other?
-        for (const ms of mSpouses) {
-          for (const on of oNames) {
-            if (isNameMatching(ms, on)) return true;
+        // Direct spouse ID check bila ada di database jemaat
+        if (current.linked && other.linked) {
+          const cJ = current.linked as any;
+          const oJ = other.linked as any;
+          if (cJ.spouseId && (cJ.spouseId === oJ.id || cJ.spouseId === oJ.id.replace(/^congregation:member:/, ''))) {
+            highestScore = 10000;
+            bestPartner = other;
+            break;
           }
         }
 
-        // 2. Apakah ada nama pasangan other yang cocok dengan salah satu nama m?
-        for (const os of oSpouses) {
-          for (const mn of mNames) {
-            if (isNameMatching(os, mn)) return true;
+        // Skor m -> other
+        let mToOtherScore = 0;
+        for (const sTarget of current.spouses) {
+          for (const oName of other.names) {
+            const sc = checkTargetNameMatch(sTarget, oName);
+            if (sc > mToOtherScore) mToOtherScore = sc;
           }
         }
 
-        // 3. Tanggal anniversary sama persis & keduanya memiliki data pernikahan
-        const oMarriageDate = other.marriageDate || otherLinked?.marriageDate || '';
-        if (marriageDate && oMarriageDate && marriageDate === oMarriageDate) {
-          if (mSpouses.length > 0 || oSpouses.length > 0) return true;
+        // Skor other -> m
+        let otherToMScore = 0;
+        for (const oTarget of other.spouses) {
+          for (const mName of current.names) {
+            const sc = checkTargetNameMatch(oTarget, mName);
+            if (sc > otherToMScore) otherToMScore = sc;
+          }
         }
 
-        return false;
-      });
+        if (mToOtherScore === 0 && otherToMScore === 0) continue;
 
-      if (partner) {
+        let pairScore = 0;
+        if (mToOtherScore > 0 && otherToMScore > 0) {
+          // Konfirmasi timbal balik (kedua pihak saling menyebut pasangan)
+          pairScore = mToOtherScore + otherToMScore + 3000;
+        } else {
+          // Salah satu pihak menyebutkan pasangan secara spesifik
+          pairScore = Math.max(mToOtherScore, otherToMScore);
+        }
+
+        // Bonus kecocokan tanggal anniversary
+        if (current.marriageDate && other.marriageDate && current.marriageDate === other.marriageDate) {
+          pairScore += 200;
+        }
+
+        if (pairScore >= 1200 && pairScore > highestScore) {
+          highestScore = pairScore;
+          bestPartner = other;
+        }
+      }
+
+      if (bestPartner && highestScore >= 1200) {
         processedIds.add(m.id);
-        processedIds.add(partner.id);
-        const partnerLinked = partner.jemaatId ? jemaatMap[partner.jemaatId] : null;
-        const pMarriageDate = partner.marriageDate || partnerLinked?.marriageDate || '';
-        const effectiveMarriageDate = marriageDate || pMarriageDate;
+        processedIds.add(bestPartner.member.id);
+        const partner = bestPartner.member;
+        const effectiveMarriageDate = current.marriageDate || bestPartner.marriageDate;
 
         groups.push({
           key: `couple-${m.id}-${partner.id}`,
@@ -985,15 +1054,15 @@ export default function KomisiManagement() {
           key: `single-${m.id}`,
           title: m.name,
           isCouple: false,
-          anniversary: marriageDate,
-          spouseName: mSpouses[0] || undefined,
+          anniversary: current.marriageDate,
+          spouseName: current.spouses[0] || undefined,
           members: [m],
         });
       }
     }
 
     return groups;
-  }, [filteredMembers, jemaatMap, isNameMatching]);
+  }, [filteredMembers, jemaatMap, checkTargetNameMatch]);
 
   const linkedCount = members.filter(m => m.jemaatId && jemaatMap[m.jemaatId]).length;
 
