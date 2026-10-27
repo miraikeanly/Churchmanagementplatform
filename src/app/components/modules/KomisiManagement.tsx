@@ -8,11 +8,12 @@ import { projectId } from '/utils/supabase/info';
 import { getAge, getAgeGroup, AGE_GROUP_STYLES, getAnniversaryYears } from '../../../lib/age';
 import KomisiReport from './KomisiReport';
 import ModernDatePicker from '../common/ModernDatePicker';
+import ImagePicker from '../common/ImagePicker';
 import {
   Users, Plus, Trash2, Edit2, X, Check, ChevronDown, AlertTriangle,
   ClipboardList, Download, Calendar, Calendar as CalendarIcon, UserCheck, UserX, Link, Unlink,
   Search, RefreshCw, ShieldAlert, Info, Activity, Circle, Save, Phone,
-  ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles, HeartHandshake
+  ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles, HeartHandshake, Heart, UserPlus
 } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
@@ -38,6 +39,7 @@ export interface KomisiMember {
   address?: string;
   birthDate?: string;
   marriageDate?: string;
+  spouseName?: string;
   role?: 'anggota' | 'pengurus' | 'guru';
   status?: string;
   joinedAt: string;
@@ -63,6 +65,7 @@ interface JemaatMember {
   address?: string;
   birthDate?: string;
   marriageDate?: string;
+  spouseName?: string;
   photoUrl?: string;
   role?: 'anggota' | 'pengurus' | 'guru';
   status?: string;
@@ -603,6 +606,8 @@ export default function KomisiManagement() {
     address: '',
     birthDate: '',
     marriageDate: '',
+    spouseName: '',
+    photoUrl: '',
     role: 'anggota' as 'anggota' | 'pengurus' | 'guru'
   });
   const [savingMember, setSavingMember] = useState(false);
@@ -633,6 +638,7 @@ export default function KomisiManagement() {
           address: m.address || '', 
           birthDate: m.birthDate || '',
           marriageDate: m.marriageDate || '',
+          spouseName: m.spouseName || '',
           photoUrl: m.photoUrl || undefined,
           status: m.status || 'active',
         };
@@ -820,15 +826,86 @@ export default function KomisiManagement() {
 
 
   // ── Member CRUD ───────────────────────────────────────────────────────────
+  const [coupleView, setCoupleView] = useState(true);
+
   const filteredMembers = useMemo(() =>
     members.filter(m => m.name.toLowerCase().includes(search.toLowerCase())),
     [members, search]);
+
+  // Grouping couple untuk Komisi Kompas
+  const coupleGroups = useMemo(() => {
+    const list = filteredMembers;
+    const processedIds = new Set<string>();
+    const groups: {
+      key: string;
+      title: string;
+      isCouple: boolean;
+      anniversary?: string;
+      members: KomisiMember[];
+    }[] = [];
+
+    for (const m of list) {
+      if (processedIds.has(m.id)) continue;
+
+      const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+      const spouseName = (m.spouseName || linked?.spouseName || '').trim().toLowerCase();
+      const mName = m.name.trim().toLowerCase();
+      const marriageDate = m.marriageDate || linked?.marriageDate || '';
+
+      // Cari pasangan di dalam list anggota komisi
+      let partner: KomisiMember | undefined;
+      if (spouseName) {
+        partner = list.find(other =>
+          other.id !== m.id &&
+          !processedIds.has(other.id) &&
+          (other.name.trim().toLowerCase() === spouseName ||
+           ((other.spouseName || (other.jemaatId && jemaatMap[other.jemaatId]?.spouseName) || '').trim().toLowerCase() === mName))
+        );
+      }
+
+      if (partner) {
+        processedIds.add(m.id);
+        processedIds.add(partner.id);
+        const partnerLinked = partner.jemaatId ? jemaatMap[partner.jemaatId] : null;
+        const pMarriageDate = partner.marriageDate || partnerLinked?.marriageDate || '';
+        const effectiveMarriageDate = marriageDate || pMarriageDate;
+
+        groups.push({
+          key: `couple-${m.id}-${partner.id}`,
+          title: `${m.name} & ${partner.name}`,
+          isCouple: true,
+          anniversary: effectiveMarriageDate,
+          members: [m, partner],
+        });
+      } else {
+        processedIds.add(m.id);
+        groups.push({
+          key: `single-${m.id}`,
+          title: m.name,
+          isCouple: false,
+          anniversary: marriageDate,
+          members: [m],
+        });
+      }
+    }
+
+    return groups;
+  }, [filteredMembers, jemaatMap]);
 
   const linkedCount = members.filter(m => m.jemaatId && jemaatMap[m.jemaatId]).length;
 
   const openAddMember = () => {
     setEditMember(null);
-    setMemberForm({ name: '', phone: '', address: '', birthDate: '', marriageDate: '', role: 'anggota' });
+    setMemberForm({
+      name: '',
+      phone: '',
+      address: '',
+      birthDate: '',
+      marriageDate: '',
+      spouseName: '',
+      photoUrl: '',
+      role: 'anggota'
+    });
     setSelectedJemaatId(''); setLinkSearch('');
     setShowMemberForm(true);
   };
@@ -838,6 +915,8 @@ export default function KomisiManagement() {
     const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
     const resolvedBirthDate = m.birthDate || linked?.birthDate || '';
     const resolvedMarriageDate = m.marriageDate || linked?.marriageDate || '';
+    const resolvedSpouseName = m.spouseName || linked?.spouseName || '';
+    const resolvedPhotoUrl = m.photoUrl || linked?.photoUrl || '';
     const resolvedPhone = m.phone || linked?.phone || '';
     const resolvedAddress = m.address || linked?.address || '';
 
@@ -847,6 +926,8 @@ export default function KomisiManagement() {
       address: resolvedAddress,
       birthDate: resolvedBirthDate,
       marriageDate: resolvedMarriageDate,
+      spouseName: resolvedSpouseName,
+      photoUrl: resolvedPhotoUrl,
       role: m.role || 'anggota',
     });
     setSelectedJemaatId(m.jemaatId || '');
@@ -863,6 +944,8 @@ export default function KomisiManagement() {
       address: j.address || prev.address,
       birthDate: j.birthDate || prev.birthDate,
       marriageDate: j.marriageDate || prev.marriageDate,
+      spouseName: j.spouseName || prev.spouseName,
+      photoUrl: j.photoUrl || prev.photoUrl,
     }));
     setLinkSearch('');
   };
@@ -880,6 +963,8 @@ export default function KomisiManagement() {
         address: memberForm.address.trim(),
         birthDate: memberForm.birthDate || undefined,
         marriageDate: memberForm.marriageDate || undefined,
+        spouseName: memberForm.spouseName?.trim() || undefined,
+        photoUrl: memberForm.photoUrl || undefined,
         role: memberForm.role,
         joinedAt: editMember?.joinedAt || new Date().toISOString(),
         ...(selectedJemaatId ? { jemaatId: selectedJemaatId } : {}),
@@ -891,7 +976,7 @@ export default function KomisiManagement() {
         await supabaseAdmin.from(KV).insert({ key, value: member });
       }
 
-      // If linked to Data Jemaat, sync updated info back to Data Jemaat if exists
+      // If linked to Data Jemaat, sync updated info (including photoUrl & spouse) back to Data Jemaat if exists
       if (selectedJemaatId) {
         try {
           const rawId = selectedJemaatId.replace(/^congregation:member:/, '').replace(/^member:/, '');
@@ -907,6 +992,8 @@ export default function KomisiManagement() {
               name: memberForm.name.trim(),
               birthDate: memberForm.birthDate || jRow.value.birthDate,
               marriageDate: memberForm.marriageDate || jRow.value.marriageDate,
+              spouseName: memberForm.spouseName?.trim() || jRow.value.spouseName,
+              photoUrl: memberForm.photoUrl || jRow.value.photoUrl,
               phone: memberForm.phone.trim() || jRow.value.phone,
               address: memberForm.address.trim() || jRow.value.address,
               updatedAt: new Date().toISOString(),
@@ -916,6 +1003,49 @@ export default function KomisiManagement() {
           }
         } catch (syncErr) {
           console.warn('Sync back to jemaat error (non-fatal):', syncErr);
+        }
+      }
+
+      // Khusus Komisi Kompas (Pasutri): Jika jemaat memiliki pasangan terdaftar di jemaat umum, otomatis tambahkan pasangan ke Kompas jika belum ada
+      if (activeKomisi === 'kompas' && memberForm.spouseName?.trim()) {
+        try {
+          const spouseQuery = memberForm.spouseName.trim().toLowerCase();
+          const foundSpouseJemaat = jemaatList.find(j =>
+            j.name.toLowerCase().trim() === spouseQuery ||
+            (j.spouseName && j.spouseName.toLowerCase().trim() === memberForm.name.trim().toLowerCase())
+          );
+
+          if (foundSpouseJemaat) {
+            // Cek apakah pasangan sudah ada di komisi ini
+            const alreadyInKomisi = members.some(m =>
+              (m.jemaatId && m.jemaatId === foundSpouseJemaat.id) ||
+              m.name.toLowerCase().trim() === foundSpouseJemaat.name.toLowerCase().trim()
+            );
+
+            if (!alreadyInKomisi) {
+              const spouseMemberId = crypto.randomUUID();
+              const spouseMember: KomisiMember = {
+                id: spouseMemberId,
+                komisiId: 'kompas',
+                name: foundSpouseJemaat.name,
+                phone: foundSpouseJemaat.phone || '',
+                address: foundSpouseJemaat.address || memberForm.address.trim() || '',
+                birthDate: foundSpouseJemaat.birthDate || undefined,
+                marriageDate: memberForm.marriageDate || foundSpouseJemaat.marriageDate || undefined,
+                spouseName: memberForm.name.trim(),
+                photoUrl: foundSpouseJemaat.photoUrl || undefined,
+                role: 'anggota',
+                joinedAt: new Date().toISOString(),
+                jemaatId: foundSpouseJemaat.id,
+              };
+              await supabaseAdmin.from(KV).insert({
+                key: `komisi:kompas:member:${spouseMemberId}`,
+                value: spouseMember,
+              });
+            }
+          }
+        } catch (spouseErr) {
+          console.warn('Auto add spouse to kompas error (non-fatal):', spouseErr);
         }
       }
 
@@ -1232,13 +1362,31 @@ export default function KomisiManagement() {
               <input type="text" placeholder="Cari anggota..." value={search} onChange={e => setSearch(e.target.value)}
                 className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
+
+            {/* Toggle grouping khusus Kompas (Pasutri) */}
+            {activeKomisi === 'kompas' && (
+              <button
+                type="button"
+                onClick={() => setCoupleView(!coupleView)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  coupleView
+                    ? 'bg-rose-50 border-rose-200 text-rose-700 shadow-2xs'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+                title="Beralih antara mode grouping Pasutri (Couple) dan perorangan"
+              >
+                <Heart size={14} className={coupleView ? 'text-rose-500 fill-rose-500' : 'text-gray-400'} />
+                <span>{coupleView ? 'Mode Pasutri (Couple)' : 'Mode Perorangan'}</span>
+              </button>
+            )}
+
             <button onClick={exportMembers}
-              className="flex items-center gap-1.5 border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50">
+              className="flex items-center gap-1.5 border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
               <Download size={14} />Export
             </button>
             {canEdit && (
               <button onClick={openAddMember}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm transition-colors">
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm transition-colors cursor-pointer">
                 <Plus size={15} />Tambah Anggota
               </button>
             )}
@@ -1251,16 +1399,137 @@ export default function KomisiManagement() {
               <Users size={40} className="mx-auto mb-3 opacity-40" />
               <p className="font-medium">Belum ada anggota di {komisiInfo.label}</p>
             </div>
+          ) : activeKomisi === 'kompas' && coupleView ? (
+            /* ── VIEW KHUSUS KOMPAS: GROUPING COUPLE / PASUTRI ── */
+            <div className="space-y-4">
+              {coupleGroups.map(group => {
+                const anniYears = group.anniversary ? getAnniversaryYears(group.anniversary) : -1;
+                return (
+                  <div
+                    key={group.key}
+                    className={`rounded-2xl border transition-all ${
+                      group.isCouple
+                        ? 'bg-gradient-to-br from-rose-50/40 via-white to-pink-50/30 border-rose-200/90 shadow-2xs'
+                        : 'bg-white border-gray-200/80'
+                    } p-4 sm:p-5`}
+                  >
+                    {/* Header Group Pasutri */}
+                    <div className="flex items-center justify-between gap-3 mb-3.5 pb-2.5 border-b border-gray-100 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {group.isCouple ? (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100/80 border border-rose-200 text-rose-800 text-xs font-bold">
+                            <Heart size={13} className="text-rose-500 fill-rose-500" />
+                            <span>Pasangan Suami & Istri</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+                            <span>Anggota Kompas</span>
+                          </div>
+                        )}
+                        <h3 className="font-extrabold text-gray-900 text-sm sm:text-base">{group.title}</h3>
+                      </div>
+
+                      {group.anniversary && (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-white/90 border border-rose-200 px-3 py-1 rounded-full shadow-2xs">
+                          <HeartHandshake size={13} className="text-rose-500" />
+                          <span>Anniversary: {formatDate(group.anniversary)}{anniYears >= 0 ? ` (${anniYears} thn)` : ''}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Member Cards Grid di dalam group */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {group.members.map(m => {
+                        const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+                        const notInDb = !linked;
+                        const jMember = linked || jemaatList.find(j => j.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+                        const memberStatus = jMember?.status || m.status || 'active';
+                        const photoUrl = m.photoUrl || linked?.photoUrl;
+                        const birthDate = linked?.birthDate || m.birthDate || '';
+                        const age = birthDate ? getAge(birthDate) : -1;
+
+                        return (
+                          <div
+                            key={m.id}
+                            className="bg-white rounded-xl border border-gray-200/90 p-3.5 shadow-2xs flex items-start justify-between gap-3 hover:border-blue-200 transition-all"
+                          >
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              {/* Avatar Foto / Inisial */}
+                              <div className="w-12 h-12 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm shadow-2xs border border-gray-100">
+                                {photoUrl ? (
+                                  <img src={photoUrl} alt={m.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  m.name.charAt(0).toUpperCase()
+                                )}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h4 className="font-bold text-gray-900 text-xs sm:text-sm truncate">{m.name}</h4>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${STATUS_STYLE[memberStatus] || STATUS_STYLE.active}`}>
+                                    {STATUS_LABEL[memberStatus] || memberStatus}
+                                  </span>
+                                </div>
+
+                                <div className="mt-1 text-[11px] text-gray-600 space-y-1">
+                                  {m.phone && (
+                                    <div className="flex items-center gap-1 truncate text-emerald-700 font-medium">
+                                      <Phone size={11} className="text-emerald-500 flex-shrink-0" />
+                                      <span>{m.phone}</span>
+                                    </div>
+                                  )}
+                                  {birthDate && (
+                                    <div className="flex items-center gap-1 text-gray-500">
+                                      <Calendar size={11} className="text-pink-400 flex-shrink-0" />
+                                      <span>{formatDate(birthDate)} {age >= 0 ? `(${age} thn)` : ''}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action edit/delete */}
+                            {canEdit && (
+                              <div className="flex items-center gap-0.5 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditMember(m)}
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
+                                  title="Edit data anggota"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMember(m)}
+                                  className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                  title="Hapus dari komisi"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
+            /* ── VIEW STANDAR ANGGOTA (DENGAN TAMPILAN FOTO) ── */
             <div className="space-y-2">
               {filteredMembers.map(m => {
                 const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
                 const notInDb = !linked;
                 const jMember = linked || jemaatList.find(j => j.name.toLowerCase().trim() === m.name.toLowerCase().trim());
                 const memberStatus = jMember?.status || m.status || 'active';
+                const photoUrl = m.photoUrl || linked?.photoUrl;
                 // Linked members always follow Data Jemaat; the age is computed today, so it rolls over on each birthday.
                 const birthDate = linked?.birthDate || m.birthDate || '';
                 const marriageDate = m.marriageDate || linked?.marriageDate || '';
+                const spouseName = m.spouseName || linked?.spouseName || '';
                 const anniYears = marriageDate ? getAnniversaryYears(marriageDate) : -1;
                 const age = birthDate ? getAge(birthDate) : -1;
                 const range = KOMISI_AGE_RANGE[activeKomisi];
@@ -1269,8 +1538,13 @@ export default function KomisiManagement() {
                   <div key={m.id} className={`bg-white border rounded-2xl p-4 sm:p-5 shadow-xs transition-all hover:shadow-sm ${notInDb ? 'border-amber-200 bg-amber-50/20' : 'border-gray-200/80 hover:border-blue-200'}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm shadow-2xs">
-                          {m.name.charAt(0).toUpperCase()}
+                        {/* Avatar Foto atau Inisial */}
+                        <div className="w-12 h-12 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm shadow-2xs border border-gray-100">
+                          {photoUrl ? (
+                            <img src={photoUrl} alt={m.name} className="w-full h-full object-cover" />
+                          ) : (
+                            m.name.charAt(0).toUpperCase()
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           {/* Nama & Status Terhubung */}
@@ -1301,6 +1575,12 @@ export default function KomisiManagement() {
                               <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
                                 <HeartHandshake size={11} className="text-rose-500" />
                                 {anniYears} thn Pernikahan
+                              </span>
+                            )}
+                            {spouseName && (
+                              <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-pink-50 text-pink-700 border border-pink-200 flex items-center gap-1">
+                                <Heart size={11} className="text-pink-500 fill-pink-500" />
+                                Pasangan: {spouseName}
                               </span>
                             )}
                             {outOfRange && (
@@ -1928,6 +2208,15 @@ export default function KomisiManagement() {
               <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3.5">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Informasi Pokok</p>
 
+                {/* Foto Anggota */}
+                <div className="flex justify-center pb-1">
+                  <ImagePicker
+                    label="Foto Anggota"
+                    value={memberForm.photoUrl || null}
+                    onChange={url => setMemberForm(p => ({ ...p, photoUrl: url || '' }))}
+                  />
+                </div>
+
                 {/* Nama Lengkap */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2004,6 +2293,31 @@ export default function KomisiManagement() {
                   <p className="text-[10px] text-slate-400 mt-1">
                     Tercatat untuk jemaat komisi (baik yang sudah di database umum maupun jemaat khusus Kompas)
                   </p>
+                </div>
+
+                {/* Nama Pasangan (Suami / Istri) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                    <Heart size={13} className="text-rose-500" />
+                    <span>Nama Pasangan (Suami / Istri)</span>
+                    {activeKomisi === 'kompas' && (
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.2 rounded-full">
+                        Auto-grouping Pasutri
+                      </span>
+                    )}
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="Contoh: Hadi Susanto"
+                    value={memberForm.spouseName} 
+                    onChange={e => setMemberForm(p => ({ ...p, spouseName: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                  />
+                  {activeKomisi === 'kompas' && (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Bila pasangan terdaftar di database jemaat umum, pasangan akan otomatis dimasukkan ke Kompas dan dikelompokkan bersama.
+                    </p>
+                  )}
                 </div>
               </div>
 
