@@ -1374,20 +1374,6 @@ function ReportSummary({
                   axisLine={false}
                 />
                 <Tooltip content={<CustomChartTooltip />} />
-                {avgAttendance > 0 && (
-                  <ReferenceLine
-                    y={avgAttendance}
-                    stroke="#10b981"
-                    strokeDasharray="4 4"
-                    label={{
-                      value: `Rata-rata: ${avgAttendance}`,
-                      position: 'top',
-                      fill: '#059669',
-                      fontSize: 10,
-                      fontWeight: 600,
-                    }}
-                  />
-                )}
                 <Bar dataKey="hadir" radius={[6, 6, 0, 0]} maxBarSize={48}>
                   {chartData.map((entry, index) => (
                     <Cell
@@ -1397,6 +1383,49 @@ function ReportSummary({
                     />
                   ))}
                 </Bar>
+                {avgAttendance > 0 && (
+                  <ReferenceLine
+                    y={avgAttendance}
+                    isFront={true}
+                    stroke="#10b981"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={(props: any) => {
+                      const vb = props?.viewBox;
+                      if (!vb || typeof vb.x !== 'number' || typeof vb.y !== 'number') return null;
+                      const labelText = `Rata-rata: ${avgAttendance}`;
+                      const width = Math.max(92, labelText.length * 6.5 + 16);
+                      const height = 22;
+                      const x = Math.max(vb.x, vb.x + vb.width - width - 8);
+                      const y = vb.y - height / 2;
+
+                      return (
+                        <g style={{ pointerEvents: 'none' }}>
+                          <rect
+                            x={x}
+                            y={y}
+                            width={width}
+                            height={height}
+                            rx={11}
+                            fill="#ffffff"
+                            stroke="#10b981"
+                            strokeWidth={1.5}
+                          />
+                          <text
+                            x={x + width / 2}
+                            y={y + 14.5}
+                            textAnchor="middle"
+                            fill="#047857"
+                            fontSize={10.5}
+                            fontWeight={700}
+                          >
+                            {labelText}
+                          </text>
+                        </g>
+                      );
+                    }}
+                  />
+                )}
               </BarChart>
             </ResponsiveContainer>
           )}
