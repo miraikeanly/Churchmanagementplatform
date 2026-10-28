@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { EdgeKV as supabaseAdmin } from '../../../lib/edgeKvClient';
 import { api } from '../../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -6,11 +6,48 @@ import {
   MessageSquare, X, Send, CheckCircle2, Circle, Clock, AlertCircle,
   Pin, Sparkles, Filter, Check, Trash2, Maximize2, Minimize2,
   ChevronDown, ChevronUp, MoreVertical, GripVertical, User, Calendar,
-  Users, Lock, ShieldCheck, Shield, ChevronRight
+  Users, Lock, ShieldCheck, Shield, ChevronRight, Bell
 } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
 const CHAT_STORAGE_KEY = 'admin_chat:messages';
+
+// Play subtle, friendly notification chime via Web Audio API without needing external audio files
+function playChatNotificationSound() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    // Note 1: gentle sine (D5 - 587.33 Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now);
+    gain1.gain.setValueAtTime(0.09, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.16);
+
+    // Note 2: higher pleasant chime (A5 - 880 Hz)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880.00, now + 0.08);
+    gain2.gain.setValueAtTime(0.12, now + 0.08);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.08);
+    osc2.stop(now + 0.38);
+  } catch {}
+}
 
 export interface AdminChatMessage {
   id: string;
@@ -31,6 +68,17 @@ export interface AdminChatMessage {
   recipientRole?: string;
 }
 
+export interface ChatToast {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole?: string;
+  content: string;
+  channelType: 'general' | 'pm';
+  isTask?: boolean;
+  createdAt: string;
+}
+
 interface AdminUserContact {
   id: string;
   name: string;
@@ -42,13 +90,17 @@ interface AdminUserContact {
 interface AdminChatDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpen?: () => void;
   pendingTaskCountChange?: (count: number) => void;
+  unreadCountChange?: (count: number) => void;
 }
 
 export default function AdminChatDrawer({
   isOpen,
   onClose,
+  onOpen,
   pendingTaskCountChange,
+  unreadCountChange,
 }: AdminChatDrawerProps) {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin';
@@ -116,6 +168,54 @@ export default function AdminChatDrawer({
 
   const prevPendingCountRef = useRef(-1);
 
+  // ── Read Times tracking (persisted to localStorage per user) ──
+  const [readTimes, setReadTimes] = useState<Record<string, number>>(() => {
+    try {
+      if (!user?.id) return {};
+      const saved = localStorage.getItem(`admin_chat_read_${user.id}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const saveReadTimes = useCallback((newTimes: Record<string, number>) => {
+    setReadTimes(newTimes);
+    if (user?.id) {
+      try {
+        localStorage.setItem(`admin_chat_read_${user.id}`, JSON.stringify(newTimes));
+      } catch {}
+    }
+  }, [user?.id]);
+
+  // ── Toast Pop-up Notification State ──
+  const [activeToast, setActiveToast] = useState<ChatToast | null>(null);
+  const activeToastTimerRef = useRef<any>(null);
+  const knownMessageIdsRef = useRef<Set<string> | null>(null);
+
+  // Keep a ref to latest UI state so polling doesn't recreate interval or miss current tab
+  const stateRef = useRef({
+    isOpen,
+    isMinimized,
+    activeTabChannel,
+    selectedAdminId,
+    userId: user?.id,
+    userName: user?.name,
+    userRole: user?.role,
+  });
+
+  useEffect(() => {
+    stateRef.current = {
+      isOpen,
+      isMinimized,
+      activeTabChannel,
+      selectedAdminId,
+      userId: user?.id,
+      userName: user?.name,
+      userRole: user?.role,
+    };
+  }, [isOpen, isMinimized, activeTabChannel, selectedAdminId, user?.id, user?.name, user?.role]);
+
   // ── Load messages from KV ──
   const fetchMessages = useCallback(async () => {
     try {
@@ -123,6 +223,59 @@ export default function AdminChatDrawer({
       if (data && Array.isArray((data as any).value)) {
         const msgs = (data as any).value as AdminChatMessage[];
         setMessages(msgs);
+
+        // Detect newly arrived messages for realtime toast & audio notification
+        const currentUid = stateRef.current.userId;
+        const currentUname = stateRef.current.userName;
+        const currentUrole = stateRef.current.userRole;
+
+        if (knownMessageIdsRef.current === null) {
+          // First load: cache all existing message IDs without triggering audio/popups
+          knownMessageIdsRef.current = new Set(msgs.map(m => m.id));
+        } else {
+          // Identify new messages not present in previous snapshot
+          const newArrivals = msgs.filter(m => !knownMessageIdsRef.current!.has(m.id));
+          msgs.forEach(m => knownMessageIdsRef.current!.add(m.id));
+
+          if (newArrivals.length > 0) {
+            // Find incoming messages from other people directed to this user
+            const relevantNew = newArrivals.filter(m => {
+              if (m.senderId === currentUid || m.senderName === currentUname) return false;
+              if (!m.channelType || m.channelType === 'general') return true;
+              return m.recipientId === currentUid || (!m.recipientId && m.recipientRole === currentUrole);
+            });
+
+            if (relevantNew.length > 0) {
+              const latest = relevantNew[relevantNew.length - 1];
+              const st = stateRef.current;
+              const isLookingAtIt =
+                st.isOpen &&
+                !st.isMinimized &&
+                ((latest.channelType === 'general' && st.activeTabChannel === 'general') ||
+                 (latest.channelType === 'pm' && st.activeTabChannel === 'pm' && st.selectedAdminId === latest.senderId));
+
+              // If drawer is closed or user is in another channel/contact, show stylish pop-up & chime!
+              if (!isLookingAtIt) {
+                setActiveToast({
+                  id: latest.id,
+                  senderId: latest.senderId,
+                  senderName: latest.senderName,
+                  senderRole: latest.senderRole,
+                  content: latest.content,
+                  channelType: latest.channelType || 'general',
+                  isTask: latest.isTask,
+                  createdAt: latest.createdAt,
+                });
+                playChatNotificationSound();
+
+                if (activeToastTimerRef.current) clearTimeout(activeToastTimerRef.current);
+                activeToastTimerRef.current = setTimeout(() => {
+                  setActiveToast(null);
+                }, 8500);
+              }
+            }
+          }
+        }
 
         // Count pending tasks visible to this user
         const pendingCount = msgs.filter(m => {
@@ -154,6 +307,83 @@ export default function AdminChatDrawer({
     const interval = setInterval(fetchMessages, 4000);
     return () => clearInterval(interval);
   }, [fetchMessages]);
+
+  // ── Compute Unread Counts ──
+  const { unreadGeneralCount, unreadPmCount, unreadByContact, totalUnread } = useMemo(() => {
+    let generalCount = 0;
+    const pmCounts: Record<string, number> = {};
+
+    messages.forEach(m => {
+      // Own messages are never unread
+      if (m.senderId === user?.id || m.senderName === user?.name) return;
+
+      const msgTime = new Date(m.createdAt).getTime();
+
+      if (!m.channelType || m.channelType === 'general') {
+        const lastRead = readTimes.general || 0;
+        if (msgTime > lastRead) {
+          generalCount++;
+        }
+      } else if (m.channelType === 'pm') {
+        const isForMe =
+          m.recipientId === user?.id ||
+          (!m.recipientId && m.recipientRole === user?.role);
+
+        if (isForMe) {
+          const contactKey = m.senderId;
+          const lastRead = readTimes[contactKey] || 0;
+          if (msgTime > lastRead) {
+            pmCounts[contactKey] = (pmCounts[contactKey] || 0) + 1;
+          }
+        }
+      }
+    });
+
+    const totalPm = Object.values(pmCounts).reduce((a, b) => a + b, 0);
+    return {
+      unreadGeneralCount: generalCount,
+      unreadPmCount: totalPm,
+      unreadByContact: pmCounts,
+      totalUnread: generalCount + totalPm,
+    };
+  }, [messages, readTimes, user?.id, user?.name, user?.role]);
+
+  // Notify parent of total unread count for header badge
+  useEffect(() => {
+    unreadCountChange?.(totalUnread);
+  }, [totalUnread, unreadCountChange]);
+
+  // ── Automatically Mark Messages as Read when user is viewing them ──
+  useEffect(() => {
+    if (!isOpen || isMinimized) return;
+
+    if (activeTabChannel === 'general') {
+      const now = Date.now();
+      if ((readTimes.general || 0) < now - 1500) {
+        saveReadTimes({ ...readTimes, general: now });
+      }
+    } else if (activeTabChannel === 'pm' && selectedAdminId) {
+      const now = Date.now();
+      if ((readTimes[selectedAdminId] || 0) < now - 1500) {
+        saveReadTimes({ ...readTimes, [selectedAdminId]: now });
+      }
+    }
+  }, [isOpen, isMinimized, activeTabChannel, selectedAdminId, messages.length, readTimes, saveReadTimes]);
+
+  // Handle opening and replying directly from Toast Pop-up Notification
+  const handleOpenFromToast = (toastItem: ChatToast) => {
+    onOpen?.();
+    setIsMinimized(false);
+    setActiveTabChannel(toastItem.channelType);
+    const now = Date.now();
+    if (toastItem.channelType === 'pm') {
+      setSelectedAdminId(toastItem.senderId);
+      saveReadTimes({ ...readTimes, [toastItem.senderId]: now });
+    } else {
+      saveReadTimes({ ...readTimes, general: now });
+    }
+    setActiveToast(null);
+  };
 
   // Scroll to bottom when messages or active channel change
   useEffect(() => {
@@ -309,7 +539,101 @@ export default function AdminChatDrawer({
     }
   };
 
-  if (!isOpen) return null;
+  // ── Render Realtime Toast Popup Notification ──
+  const renderToastPopup = () => {
+    if (!activeToast) return null;
+    return (
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="fixed top-5 right-5 z-[99999] w-[380px] max-w-[calc(100vw-32px)] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-indigo-500/40 p-4 flex flex-col gap-2.5 transition-all duration-300 animate-in slide-in-from-top-4 fade-in"
+        style={{ filter: 'drop-shadow(0 20px 25px -5px rgba(0, 0, 0, 0.25))' }}
+      >
+        {/* Top Accent Header */}
+        <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-100">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+              {activeToast.senderRole === 'super_admin' ? '👑' : '🛡️'}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-xs text-slate-900 truncate">
+                  {activeToast.senderName}
+                </span>
+                <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                  activeToast.senderRole === 'super_admin'
+                    ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                    : 'bg-blue-100 text-blue-900 border border-blue-200'
+                }`}>
+                  {activeToast.senderRole === 'super_admin' ? 'Super Admin' : 'Admin'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-indigo-600 font-semibold mt-0.5">
+                {activeToast.channelType === 'pm' ? (
+                  <>
+                    <Lock size={10} />
+                    <span>Direct Message baru</span>
+                  </>
+                ) : (
+                  <>
+                    <Users size={10} />
+                    <span>Pesan di Ruang Bersama</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveToast(null)}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+            title="Tutup Notifikasi"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Message body preview */}
+        <div
+          onClick={() => handleOpenFromToast(activeToast)}
+          className="cursor-pointer group rounded-xl p-2.5 transition-colors bg-slate-50 hover:bg-indigo-50/60 border border-slate-100 hover:border-indigo-200"
+        >
+          {activeToast.isTask ? (
+            <div className="flex items-start gap-1.5 text-xs text-amber-900 font-medium">
+              <span className="font-black text-amber-600 shrink-0">📌 [Tugas Baru]:</span>
+              <span className="line-clamp-2">{activeToast.content}</span>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">
+              “{activeToast.content}”
+            </p>
+          )}
+        </div>
+
+        {/* Footer info & CTA */}
+        <div className="flex items-center justify-between pt-1 text-[11px]">
+          <span className="text-slate-400 font-medium flex items-center gap-1">
+            <Clock size={11} /> Baru saja
+          </span>
+          <button
+            type="button"
+            onClick={() => handleOpenFromToast(activeToast)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
+          >
+            <MessageSquare size={12} />
+            <span>Buka &amp; Balas</span>
+            <ChevronRight size={12} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // ── If drawer is closed, only render incoming message Toast Popup ──
+  if (!isOpen) {
+    return activeToast ? renderToastPopup() : null;
+  }
 
   // ── Filter messages based on active channel and status ──
   const channelMessages = messages.filter(m => {
@@ -357,25 +681,38 @@ export default function AdminChatDrawer({
   // ── Minimized Floating Pill ──
   if (isMinimized) {
     return (
-      <div
-        data-admin-chat-open="true"
-        className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-full shadow-2xl border border-slate-700 hover:bg-slate-800 transition-all cursor-pointer select-none"
-        onClick={() => setIsMinimized(false)}
-      >
-        <MessageSquare size={16} className="text-blue-400" />
-        <span className="text-xs font-bold">Chat &amp; Tugas Admin</span>
-        {pendingTasksCount > 0 && (
-          <span className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full text-[11px] font-black">
-            {pendingTasksCount} To-Do
-          </span>
-        )}
-        <button
-          onClick={(e) => { e.stopPropagation(); onClose(); }}
-          className="ml-1 text-slate-400 hover:text-white p-0.5 rounded-full hover:bg-white/10"
+      <>
+        {renderToastPopup()}
+        <div
+          data-admin-chat-open="true"
+          className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-full shadow-2xl border border-slate-700 hover:bg-slate-800 transition-all cursor-pointer select-none"
+          onClick={() => setIsMinimized(false)}
         >
-          <X size={14} />
-        </button>
-      </div>
+          <div className="relative flex items-center justify-center">
+            <MessageSquare size={16} className="text-blue-400" />
+            {totalUnread > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-slate-900 animate-pulse" />
+            )}
+          </div>
+          <span className="text-xs font-bold">Chat &amp; Tugas Admin</span>
+          {totalUnread > 0 && (
+            <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[11px] font-black animate-bounce shadow-xs">
+              {totalUnread} baru
+            </span>
+          )}
+          {pendingTasksCount > 0 && (
+            <span className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full text-[11px] font-black">
+              {pendingTasksCount} To-Do
+            </span>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            className="ml-1 text-slate-400 hover:text-white p-0.5 rounded-full hover:bg-white/10"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </>
     );
   }
 
@@ -389,10 +726,12 @@ export default function AdminChatDrawer({
     : undefined;
 
   return (
-    <aside
-      data-admin-chat-open="true"
-      className={containerClasses}
-      style={containerStyle}
+    <>
+      {renderToastPopup()}
+      <aside
+        data-admin-chat-open="true"
+        className={containerClasses}
+        style={containerStyle}
       aria-label="Admin Internal Chat & Task Panel"
     >
       {/* Resizable handle on the left edge (only in sidepanel mode on desktop) */}
@@ -470,7 +809,7 @@ export default function AdminChatDrawer({
           <button
             type="button"
             onClick={() => setActiveTabChannel('general')}
-            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
               activeTabChannel === 'general'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -478,12 +817,17 @@ export default function AdminChatDrawer({
           >
             <Users size={14} />
             <span>Ruang Bersama</span>
+            {unreadGeneralCount > 0 && (
+              <span className="ml-1 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight animate-pulse shadow-xs">
+                {unreadGeneralCount}
+              </span>
+            )}
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTabChannel('pm')}
-            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
               activeTabChannel === 'pm'
                 ? 'bg-indigo-600 text-white shadow-xs'
                 : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -491,6 +835,11 @@ export default function AdminChatDrawer({
           >
             <Lock size={13} />
             <span>Direct Message</span>
+            {unreadPmCount > 0 && (
+              <span className="ml-1 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight animate-pulse shadow-xs">
+                {unreadPmCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -512,25 +861,36 @@ export default function AdminChatDrawer({
                 <>
                   {superAdminContacts.length > 0 && (
                     <optgroup label="👑 Super Admin">
-                      {superAdminContacts.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} (Super Admin)
-                        </option>
-                      ))}
+                      {superAdminContacts.map(c => {
+                        const count = unreadByContact[c.id] || 0;
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {c.name} (Super Admin){count > 0 ? ` 🔴 (${count} baru)` : ''}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   )}
                   {adminContacts.length > 0 && (
                     <optgroup label="🛡️ Admin">
-                      {adminContacts.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} (Admin)
-                        </option>
-                      ))}
+                      {adminContacts.map(c => {
+                        const count = unreadByContact[c.id] || 0;
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {c.name} (Admin){count > 0 ? ` 🔴 (${count} baru)` : ''}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   )}
                 </>
               )}
             </select>
+            {unreadByContact[selectedAdminId] > 0 && (
+              <span className="bg-rose-500 text-white px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 animate-pulse">
+                {unreadByContact[selectedAdminId]} baru
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -856,5 +1216,6 @@ export default function AdminChatDrawer({
         </form>
       </div>
     </aside>
+    </>
   );
 }

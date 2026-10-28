@@ -164,6 +164,10 @@ export default function SuperAdminDashboard() {
   const handlePendingTaskCountChange = useCallback((count: number) => {
     setPendingTaskCount(prev => prev === count ? prev : count);
   }, []);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const handleUnreadChatCountChange = useCallback((count: number) => {
+    setUnreadChatCount(prev => prev === count ? prev : count);
+  }, []);
 
   const isSuperAdmin = user?.role === 'super_admin';
   const permissions = user?.permissions || {};
@@ -370,11 +374,23 @@ export default function SuperAdminDashboard() {
               title="Chat & Tugas Khusus Admin"
               aria-label="Buka Chat & Tugas Admin"
             >
-              <MessageSquare size={15} className={adminChatOpen ? 'text-white' : 'text-blue-600'} />
+              <div className="relative flex items-center justify-center">
+                <MessageSquare size={15} className={adminChatOpen ? 'text-white' : 'text-blue-600'} />
+                {unreadChatCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
+                )}
+              </div>
               <span className="hidden sm:inline">Chat &amp; Tugas</span>
+
+              {unreadChatCount > 0 && (
+                <span className="bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight animate-bounce shadow-xs">
+                  {unreadChatCount} baru
+                </span>
+              )}
+
               {pendingTaskCount > 0 && (
-                <span className="bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight animate-pulse">
-                  {pendingTaskCount}
+                <span className="bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight">
+                  {pendingTaskCount} To-Do
                 </span>
               )}
             </button>
@@ -708,7 +724,9 @@ export default function SuperAdminDashboard() {
       <AdminChatDrawer
         isOpen={adminChatOpen}
         onClose={() => setAdminChatOpen(false)}
+        onOpen={() => setAdminChatOpen(true)}
         pendingTaskCountChange={handlePendingTaskCountChange}
+        unreadCountChange={handleUnreadChatCountChange}
       />
     </div>
   );
