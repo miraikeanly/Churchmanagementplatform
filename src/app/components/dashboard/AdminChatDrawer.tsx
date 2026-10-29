@@ -350,6 +350,24 @@ export default function AdminChatDrawer({
     };
   }, [messages, readTimes, user?.id, user?.name, user?.role]);
 
+  // ── User Directory Lists (Discord Style) - Placed unconditionally before any early returns ──
+  const filteredUserList = useMemo(() => {
+    const q = userSearchText.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q)
+    );
+  }, [contacts, userSearchText]);
+
+  const superAdminList = useMemo(() => {
+    return filteredUserList.filter(c => c.role === 'super_admin');
+  }, [filteredUserList]);
+
+  const adminList = useMemo(() => {
+    return filteredUserList.filter(c => c.role !== 'super_admin');
+  }, [filteredUserList]);
+
   // Notify parent of total unread count for header badge
   useEffect(() => {
     unreadCountChange?.(totalUnread);
@@ -679,24 +697,6 @@ export default function AdminChatDrawer({
   const otherContacts = contacts.filter(c => c.id !== user?.id);
   const superAdminContacts = otherContacts.filter(c => c.role === 'super_admin');
   const adminContacts = otherContacts.filter(c => c.role === 'admin');
-
-  // ── User Directory Lists (Discord Style) ──
-  const filteredUserList = useMemo(() => {
-    const q = userSearchText.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter(c =>
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.email || '').toLowerCase().includes(q)
-    );
-  }, [contacts, userSearchText]);
-
-  const superAdminList = useMemo(() => {
-    return filteredUserList.filter(c => c.role === 'super_admin');
-  }, [filteredUserList]);
-
-  const adminList = useMemo(() => {
-    return filteredUserList.filter(c => c.role !== 'super_admin');
-  }, [filteredUserList]);
 
   // Render individual user card (Discord Style)
   const renderUserCard = (u: AdminUserContact, showAccessStatus: boolean) => {
