@@ -11,6 +11,7 @@ import {
 
 const KV = 'kv_store_561004a0';
 const CHAT_STORAGE_KEY = 'admin_chat:messages';
+const CHAT_PRESENCE_KEY = 'admin_chat:presence';
 
 // Play subtle, friendly notification chime via Web Audio API without needing external audio files
 function playChatNotificationSound() {
@@ -123,6 +124,9 @@ export default function AdminChatDrawer({
   const [selectedAdminId, setSelectedAdminId] = useState<string>('');
   // Search filter for contacts in Direct Message sidebar
   const [userSearchText, setUserSearchText] = useState<string>('');
+
+  // Online presence map: { [userId]: lastSeenTimestamp }
+  const [presenceMap, setPresenceMap] = useState<Record<string, number>>({});
 
   // Resizable width for sidepanel (default 760px for 2-column Discord layout, min 480px, max 1050px)
   const [panelWidth, setPanelWidth] = useState<number>(() => {
@@ -343,12 +347,50 @@ export default function AdminChatDrawer({
     }
   }, [pendingTaskCountChange, isSuperAdmin, user?.id]);
 
-  // Initial load and periodic polling every 4 seconds for live chat feel
+  // ── Sync Presence: Broadcast own heartbeat & retrieve all active admin timestamps ──
+  const syncPresence = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const now = Date.now();
+      const { data } = await supabaseAdmin.from(KV).select('key, value').eq('key', CHAT_PRESENCE_KEY).maybeSingle();
+      const currentMap: Record<string, number> = (data && typeof (data as any).value === 'object') ? (data as any).value : {};
+      
+      // Update own timestamp
+      currentMap[user.id] = now;
+
+      // Clean up records older than 1 hour to prevent KV bloat
+      const cleanedMap: Record<string, number> = {};
+      Object.entries(currentMap).forEach(([k, timestamp]) => {
+        if (now - (Number(timestamp) || 0) < 3600_000) {
+          cleanedMap[k] = Number(timestamp);
+        }
+      });
+
+      setPresenceMap(cleanedMap);
+
+      // Save updated presence map to KV
+      if (data) {
+        await supabaseAdmin.from(KV).update({ value: cleanedMap }).eq('key', CHAT_PRESENCE_KEY);
+      } else {
+        await supabaseAdmin.from(KV).insert({ key: CHAT_PRESENCE_KEY, value: cleanedMap });
+      }
+    } catch (e) {
+      // Non-blocking error handling
+      console.debug('Failed to sync presence:', e);
+    }
+  }, [user?.id]);
+
+  // Initial load and periodic polling every 4 seconds for live chat feel + 15s presence heartbeat
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(fetchMessages, 4000);
-    return () => clearInterval(interval);
-  }, [fetchMessages]);
+    syncPresence();
+    const chatInterval = setInterval(fetchMessages, 4000);
+    const presenceInterval = setInterval(syncPresence, 15000);
+    return () => {
+      clearInterval(chatInterval);
+      clearInterval(presenceInterval);
+    };
+  }, [fetchMessages, syncPresence]);
 
   // ── Compute Unread Counts ──
   const { unreadGeneralCount, unreadPmCount, unreadByContact, totalUnread } = useMemo(() => {
@@ -446,6 +488,14 @@ export default function AdminChatDrawer({
   const adminList = useMemo(() => {
     return sortedOtherContacts.filter(c => c.role !== 'super_admin');
   }, [sortedOtherContacts]);
+
+  // ── Determine if a contact is currently online (heartbeat active within the last 60 seconds) ──
+  const isUserOnline = useCallback((userId: string) => {
+    if (userId === user?.id) return true; // Current user is always online
+    const lastActive = presenceMap[userId];
+    if (!lastActive) return false;
+    return Date.now() - lastActive < 60_000; // Online if active within 60s
+  }, [presenceMap, user?.id]);
 
   // Notify parent of total unread count for header badge
   useEffect(() => {
@@ -1434,9 +1484,15 @@ export default function AdminChatDrawer({
                                 }`}>
                                   {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                                 </div>
-                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
-                                  isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500'
-                                }`} />
+                                {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
+                                <span
+                                  title={isUserOnline(contact.id) ? 'Online' : 'Offline'}
+                                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
+                                    isSelected
+                                      ? isUserOnline(contact.id) ? 'border-indigo-600 bg-emerald-400' : 'border-indigo-600 bg-slate-400'
+                                      : isUserOnline(contact.id) ? 'border-white bg-emerald-500' : 'border-white bg-slate-300'
+                                  }`}
+                                />
                               </div>
 
                               <div className="flex-1 min-w-0">
@@ -1525,9 +1581,15 @@ export default function AdminChatDrawer({
                                 }`}>
                                   {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                                 </div>
-                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
-                                  isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500'
-                                }`} />
+                                {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
+                                <span
+                                  title={isUserOnline(contact.id) ? 'Online' : 'Offline'}
+                                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
+                                    isSelected
+                                      ? isUserOnline(contact.id) ? 'border-indigo-600 bg-emerald-400' : 'border-indigo-600 bg-slate-400'
+                                      : isUserOnline(contact.id) ? 'border-white bg-emerald-500' : 'border-white bg-slate-300'
+                                  }`}
+                                />
                               </div>
 
                               <div className="flex-1 min-w-0">
@@ -1617,9 +1679,15 @@ export default function AdminChatDrawer({
                             }`}>
                               {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                             </div>
-                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
-                              isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500'
-                            }`} />
+                            {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
+                            <span
+                              title={isUserOnline(contact.id) ? 'Online' : 'Offline'}
+                              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
+                                isSelected
+                                  ? isUserOnline(contact.id) ? 'border-indigo-600 bg-emerald-400' : 'border-indigo-600 bg-slate-400'
+                                  : isUserOnline(contact.id) ? 'border-white bg-emerald-500' : 'border-white bg-slate-300'
+                              }`}
+                            />
                           </div>
 
                           <div className="flex-1 min-w-0">
@@ -1703,7 +1771,13 @@ export default function AdminChatDrawer({
                       <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
                         {targetContact.name ? targetContact.name.charAt(0).toUpperCase() : '?'}
                       </div>
-                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
+                      {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
+                      <span
+                        title={isUserOnline(targetContact.id) ? 'Online' : 'Offline'}
+                        className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                          isUserOnline(targetContact.id) ? 'bg-emerald-500' : 'bg-slate-300'
+                        }`}
+                      />
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -1720,6 +1794,13 @@ export default function AdminChatDrawer({
                             {targetContact.role === 'super_admin' ? 'Super Admin' : 'Admin'}
                           </span>
                         )}
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
+                          isUserOnline(targetContact.id)
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}>
+                          {isUserOnline(targetContact.id) ? '● Online' : '○ Offline'}
+                        </span>
                       </div>
                       <p className="text-[10px] text-slate-400 truncate">
                         {isSuperAdmin ? (
