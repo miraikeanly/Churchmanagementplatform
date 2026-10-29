@@ -6,7 +6,7 @@ import {
   MessageSquare, X, Send, CheckCircle2, Circle, Clock, AlertCircle,
   Pin, Sparkles, Filter, Check, Trash2, Maximize2, Minimize2,
   ChevronDown, ChevronUp, MoreVertical, GripVertical, User, Calendar,
-  Users, Lock, ShieldCheck, Shield, ChevronRight, Bell, Search
+  Users, Lock, ShieldCheck, Shield, ChevronRight, Bell, Search, ChevronLeft
 } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
@@ -117,20 +117,20 @@ export default function AdminChatDrawer({
   const [sending, setSending] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // Active channel: 'general', 'pm', or 'users'
-  const [activeTabChannel, setActiveTabChannel] = useState<'general' | 'pm' | 'users'>('general');
-  // For SuperAdmin / DM: selected target admin to chat with
+  // Active channel: 'general' (Ruang Bersama) or 'pm' (Direct Message with 2-column Discord layout)
+  const [activeTabChannel, setActiveTabChannel] = useState<'general' | 'pm'>('general');
+  // For DM: selected target admin to chat with
   const [selectedAdminId, setSelectedAdminId] = useState<string>('');
-  // User tab search filter
+  // Search filter for contacts in Direct Message sidebar
   const [userSearchText, setUserSearchText] = useState<string>('');
 
-  // Resizable width for sidepanel (default 440px, min 350px, max 850px)
+  // Resizable width for sidepanel (default 720px for 2-column Discord layout, min 420px, max 950px)
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('admin_chat_panel_width');
-      return saved ? Math.min(850, Math.max(350, parseInt(saved, 10))) : 460;
+      return saved ? Math.min(950, Math.max(420, parseInt(saved, 10))) : 720;
     } catch {
-      return 460;
+      return 720;
     }
   });
 
@@ -350,23 +350,62 @@ export default function AdminChatDrawer({
     };
   }, [messages, readTimes, user?.id, user?.name, user?.role]);
 
-  // ── User Directory Lists (Discord Style) - Placed unconditionally before any early returns ──
-  const filteredUserList = useMemo(() => {
+  // ── Compute per-contact statistics: latest message snippet & timestamp for auto-sorting to top ──
+  const contactStatsMap = useMemo(() => {
+    const stats: Record<string, { latestTime: number; lastSnippet: string; lastSenderName: string }> = {};
+
+    messages.forEach(m => {
+      if (m.channelType !== 'pm') return;
+      const isWithUser =
+        (m.senderId === user?.id && m.recipientId) ||
+        (m.recipientId === user?.id && m.senderId);
+
+      const contactId = m.senderId === user?.id ? m.recipientId : m.senderId;
+      if (!contactId) return;
+
+      const time = new Date(m.createdAt).getTime();
+      const current = stats[contactId];
+      if (!current || time > current.latestTime) {
+        stats[contactId] = {
+          latestTime: time,
+          lastSnippet: m.content || '',
+          lastSenderName: m.senderId === user?.id ? 'Anda' : (m.senderName || 'Admin'),
+        };
+      }
+    });
+
+    return stats;
+  }, [messages, user?.id]);
+
+  // ── User Directory Lists (Discord Style) sorted by latest DM to the top ──
+  const sortedOtherContacts = useMemo(() => {
+    // Exclude current logged in user
+    const list = contacts.filter(c => c.id !== user?.id);
+
     const q = userSearchText.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter(c =>
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.email || '').toLowerCase().includes(q)
-    );
-  }, [contacts, userSearchText]);
+    const filtered = q
+      ? list.filter(c =>
+          (c.name || '').toLowerCase().includes(q) ||
+          (c.email || '').toLowerCase().includes(q)
+        )
+      : list;
+
+    // Sort descending by latest DM time: contacts with newest incoming DM float right to the top
+    return [...filtered].sort((a, b) => {
+      const timeA = contactStatsMap[a.id]?.latestTime || 0;
+      const timeB = contactStatsMap[b.id]?.latestTime || 0;
+      if (timeA !== timeB) return timeB - timeA;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [contacts, user?.id, userSearchText, contactStatsMap]);
 
   const superAdminList = useMemo(() => {
-    return filteredUserList.filter(c => c.role === 'super_admin');
-  }, [filteredUserList]);
+    return sortedOtherContacts.filter(c => c.role === 'super_admin');
+  }, [sortedOtherContacts]);
 
   const adminList = useMemo(() => {
-    return filteredUserList.filter(c => c.role !== 'super_admin');
-  }, [filteredUserList]);
+    return sortedOtherContacts.filter(c => c.role !== 'super_admin');
+  }, [sortedOtherContacts]);
 
   // Notify parent of total unread count for header badge
   useEffect(() => {
@@ -693,113 +732,7 @@ export default function AdminChatDrawer({
 
   const pendingTasksCount = channelMessages.filter(m => m.isTask && !m.isDone).length;
 
-  // List all available contacts to chat with (excluding current user)
-  const otherContacts = contacts.filter(c => c.id !== user?.id);
-  const superAdminContacts = otherContacts.filter(c => c.role === 'super_admin');
-  const adminContacts = otherContacts.filter(c => c.role === 'admin');
 
-  // Render individual user card (Discord Style)
-  const renderUserCard = (u: AdminUserContact, showAccessStatus: boolean) => {
-    const isMe = u.id === user?.id;
-    const unread = unreadByContact[u.id] || 0;
-
-    return (
-      <div
-        key={u.id}
-        onClick={() => {
-          if (!isMe) {
-            setActiveTabChannel('pm');
-            setSelectedAdminId(u.id);
-          }
-        }}
-        className={`group p-2.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-          isMe
-            ? 'bg-slate-50/70 border-slate-200'
-            : 'bg-white hover:bg-indigo-50/50 hover:border-indigo-300 border-slate-200/90 shadow-2xs cursor-pointer active:scale-[0.99]'
-        }`}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          {/* Avatar with initial and online dot */}
-          <div className="relative shrink-0">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-xs ${
-              showAccessStatus && u.role === 'super_admin'
-                ? 'bg-gradient-to-tr from-amber-500 to-amber-700'
-                : 'bg-gradient-to-tr from-blue-600 to-indigo-600'
-            }`}>
-              {u.name ? u.name.charAt(0).toUpperCase() : '?'}
-            </div>
-            {/* Online indicator dot */}
-            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-          </div>
-
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-bold text-xs text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
-                {u.name}
-              </span>
-              {isMe && (
-                <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.2 rounded-md">
-                  Anda
-                </span>
-              )}
-              {/* Only show role badge if Super Admin view */}
-              {showAccessStatus && (
-                <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-                  u.role === 'super_admin'
-                    ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                    : 'bg-blue-100 text-blue-900 border border-blue-200'
-                }`}>
-                  {u.role === 'super_admin' ? '👑 Super Admin' : '🛡️ Admin'}
-                </span>
-              )}
-            </div>
-
-            {/* Subtitle: If Super Admin view, show Status Akses. If Admin view, ONLY show email without status access */}
-            <p className="text-[11px] text-slate-400 truncate mt-0.5">
-              {showAccessStatus ? (
-                u.role === 'super_admin' ? (
-                  <span className="text-amber-700 font-semibold">Status Akses: Penuh (Full Control)</span>
-                ) : (
-                  <span className="text-slate-500 font-medium">Status Akses: Admin Terbatas</span>
-                )
-              ) : (
-                <span className="text-slate-500">{u.email || 'Admin Tim'}</span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Right Action */}
-        <div className="flex items-center gap-2 shrink-0">
-          {unread > 0 && (
-            <span className="px-2 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-black animate-pulse shadow-xs">
-              {unread} baru
-            </span>
-          )}
-
-          {!isMe ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveTabChannel('pm');
-                setSelectedAdminId(u.id);
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 font-bold text-[11px] flex items-center gap-1 transition-all shadow-2xs cursor-pointer active:scale-95"
-              title={`Kirim Direct Message ke ${u.name}`}
-            >
-              <MessageSquare size={12} />
-              <span className="hidden sm:inline">Chat</span>
-            </button>
-          ) : (
-            <span className="text-[11px] font-semibold text-slate-400 px-1">
-              Akun Anda
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // ── Minimized Floating Pill ──
   if (isMinimized) {
@@ -934,22 +867,22 @@ export default function AdminChatDrawer({
         </div>
       </div>
 
-      {/* ── Channel Switcher: RUANG BERSAMA vs DIRECT MESSAGE vs PENGGUNA ── */}
-      <div className="px-3 pt-2.5 pb-2 bg-slate-900 border-b border-white/10 flex-shrink-0 space-y-2">
-        <div className="grid grid-cols-3 gap-1 bg-slate-800/90 p-1 rounded-xl">
+      {/* ── Channel Switcher: RUANG BERSAMA vs DIRECT MESSAGE ── */}
+      <div className="px-3 pt-2.5 pb-2 bg-slate-900 border-b border-white/10 flex-shrink-0">
+        <div className="grid grid-cols-2 gap-1.5 bg-slate-800/90 p-1 rounded-xl">
           <button
             type="button"
             onClick={() => setActiveTabChannel('general')}
-            className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer relative ${
+            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
               activeTabChannel === 'general'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-300 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Users size={13} className="shrink-0" />
+            <Users size={14} className="shrink-0" />
             <span className="truncate">Ruang Bersama</span>
             {unreadGeneralCount > 0 && (
-              <span className="ml-0.5 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-tight animate-pulse shadow-xs">
+              <span className="ml-1 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-tight animate-pulse shadow-xs">
                 {unreadGeneralCount}
               </span>
             )}
@@ -958,521 +891,1006 @@ export default function AdminChatDrawer({
           <button
             type="button"
             onClick={() => setActiveTabChannel('pm')}
-            className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer relative ${
+            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
               activeTabChannel === 'pm'
                 ? 'bg-indigo-600 text-white shadow-xs'
                 : 'text-slate-300 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Lock size={12} className="shrink-0" />
+            <Lock size={13} className="shrink-0" />
             <span className="truncate">Direct Message</span>
             {unreadPmCount > 0 && (
-              <span className="ml-0.5 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-tight animate-pulse shadow-xs">
+              <span className="ml-1 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-tight animate-pulse shadow-xs">
                 {unreadPmCount}
               </span>
             )}
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTabChannel('users')}
-            className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer relative ${
-              activeTabChannel === 'users'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'text-slate-300 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <User size={13} className="shrink-0" />
-            <span className="truncate">Pengguna</span>
-            <span className="ml-0.5 text-[9px] px-1 py-0.2 bg-white/10 rounded-full font-semibold">
-              {contacts.length}
-            </span>
-          </button>
         </div>
-
-        {/* Contact Selector for PM Mode: Available for both Super Admin and Regular Admin */}
-        {activeTabChannel === 'pm' && (
-          <div className="flex items-center gap-2 bg-slate-800/80 p-2 rounded-xl border border-white/5">
-            <span className="text-[11px] font-bold text-slate-300 shrink-0 flex items-center gap-1">
-              <User size={12} className="text-indigo-400" />
-              Chat dengan:
-            </span>
-            <select
-              value={selectedAdminId}
-              onChange={(e) => setSelectedAdminId(e.target.value)}
-              className="flex-1 bg-slate-950 text-white border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer truncate"
-            >
-              {otherContacts.length === 0 ? (
-                <option value="">Tidak ada akun admin lain terdaftar</option>
-              ) : (
-                <>
-                  {superAdminContacts.length > 0 && (
-                    <optgroup label="👑 Super Admin">
-                      {superAdminContacts.map(c => {
-                        const count = unreadByContact[c.id] || 0;
-                        return (
-                          <option key={c.id} value={c.id}>
-                            {c.name} (Super Admin){count > 0 ? ` 🔴 (${count} baru)` : ''}
-                          </option>
-                        );
-                      })}
-                    </optgroup>
-                  )}
-                  {adminContacts.length > 0 && (
-                    <optgroup label="🛡️ Admin">
-                      {adminContacts.map(c => {
-                        const count = unreadByContact[c.id] || 0;
-                        return (
-                          <option key={c.id} value={c.id}>
-                            {c.name} (Admin){count > 0 ? ` 🔴 (${count} baru)` : ''}
-                          </option>
-                        );
-                      })}
-                    </optgroup>
-                  )}
-                </>
-              )}
-            </select>
-            {unreadByContact[selectedAdminId] > 0 && (
-              <span className="bg-rose-500 text-white px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 animate-pulse">
-                {unreadByContact[selectedAdminId]} baru
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* ── Conditional Views: PENGGUNA TAB vs CHAT/TASK TAB ── */}
-      {activeTabChannel === 'users' ? (
-        /* ── Discord-Style User Directory ── */
-        <div className="flex-1 flex flex-col min-h-0 bg-slate-100/60 overflow-hidden">
-          {/* Search Header */}
-          <div className="p-3 bg-white border-b border-slate-200 flex items-center gap-2 shrink-0">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={userSearchText}
-                onChange={(e) => setUserSearchText(e.target.value)}
-                placeholder="Cari nama pengguna / admin..."
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              {userSearchText && (
-                <button
-                  type="button"
-                  onClick={() => setUserSearchText('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X size={12} />
-                </button>
+      {/* ── Main Drawer Content Area ── */}
+      {activeTabChannel === 'general' ? (
+        /* ════════════ RUANG BERSAMA (FULL-WIDTH CHAT) ════════════ */
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Filter Bar */}
+          <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1 overflow-x-auto text-xs py-0.5">
+              <button
+                type="button"
+                onClick={() => setFilter('all')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  filter === 'all'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70'
+                }`}
+              >
+                Semua
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter('pending')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  filter === 'pending'
+                    ? 'bg-amber-500 text-slate-950 shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70'
+                }`}
+              >
+                <AlertCircle size={12} className={filter === 'pending' ? 'text-slate-950' : 'text-amber-500'} />
+                <span>To-Do ({pendingTasksCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter('done')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  filter === 'done'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70'
+                }`}
+              >
+                <CheckCircle2 size={12} className={filter === 'done' ? 'text-white' : 'text-emerald-500'} />
+                <span>Selesai</span>
+              </button>
+            </div>
+
+            <span className="text-[11px] font-bold text-slate-400 shrink-0">
+              📢 Tim Admin
+            </span>
+          </div>
+
+          {/* Messages & Task List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-100/50">
+            {loading ? (
+              <div className="h-full flex items-center justify-center text-slate-400 text-xs gap-2">
+                <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <span>Memuat pesan...</span>
+              </div>
+            ) : filteredMessages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-300 mb-3 shadow-2xs">
+                  <MessageSquare size={22} />
+                </div>
+                <p className="font-bold text-slate-700 text-sm">
+                  {filter === 'pending' ? 'Tidak ada tugas yang pending!' : filter === 'done' ? 'Belum ada tugas selesai' : 'Belum ada pesan'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1 max-w-[260px]">
+                  Mulai kirim pesan dan aktifkan &quot;Jadikan To-Do&quot; untuk meng-highlight pekerjaan admin.
+                </p>
+              </div>
+            ) : (
+              filteredMessages.map((msg) => {
+                const isMe = msg.senderId === user?.id || msg.senderName === user?.name;
+                const isMenuOpen = activeMenuId === msg.id;
+
+                if (msg.isTask) {
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`rounded-2xl border p-3.5 transition-all shadow-2xs relative group ${
+                        msg.isDone
+                          ? 'bg-emerald-50/60 border-emerald-200 text-slate-700'
+                          : msg.priority === 'urgent'
+                          ? 'bg-gradient-to-r from-red-50/90 to-amber-50/80 border-red-200 ring-1 ring-red-300/60'
+                          : 'bg-white border-amber-200/90 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                            msg.isDone
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : msg.priority === 'urgent'
+                              ? 'bg-red-500 text-white'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {msg.isDone ? <Check size={10} /> : <AlertCircle size={10} />}
+                            {msg.isDone ? 'Tugas Selesai' : msg.priority === 'urgent' ? 'PENTING / URGENT' : 'Tugas / To-Do'}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-600">
+                            Oleh: {msg.senderName} {msg.senderRole === 'super_admin' ? '(SuperAdmin)' : ''}
+                          </span>
+                        </div>
+
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setActiveMenuId(isMenuOpen ? null : msg.id)}
+                            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                          >
+                            <MoreVertical size={14} />
+                          </button>
+
+                          {isMenuOpen && (
+                            <div className="absolute right-0 top-6 z-20 w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTaskStatus(msg.id)}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer"
+                              >
+                                <MessageSquare size={13} />
+                                Ubah ke Chat Biasa
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMessage(msg.id)}
+                                className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2 cursor-pointer"
+                              >
+                                <Trash2 size={13} />
+                                Hapus Pesan
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className={`mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words font-medium ${
+                        msg.isDone ? 'line-through text-slate-500' : 'text-slate-800'
+                      }`}>
+                        {msg.content}
+                      </p>
+
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                          <Clock size={11} />
+                          <span>{new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                          {msg.isDone && msg.doneBy && (
+                            <span className="text-emerald-700 font-semibold ml-1">
+                              · Selesai oleh {msg.doneBy}
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDone(msg.id)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
+                            msg.isDone
+                              ? 'bg-emerald-100/80 hover:bg-emerald-200 text-emerald-800 border border-emerald-300'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                        >
+                          {msg.isDone ? (
+                            <>
+                              <CheckCircle2 size={13} className="text-emerald-700" />
+                              <span>Sudah Selesai</span>
+                            </>
+                          ) : (
+                            <>
+                              <Circle size={13} />
+                              <span>Tandai Selesai</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1 px-1">
+                      <span className="text-[11px] font-bold text-slate-600">
+                        {msg.senderName} {msg.senderRole === 'super_admin' ? '(SuperAdmin)' : ''}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div className="relative group max-w-[85%]">
+                      <div
+                        className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words shadow-2xs ${
+                          isMe
+                            ? 'bg-blue-600 text-white rounded-br-xs'
+                            : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+
+                      <div className={`absolute top-1 ${isMe ? '-left-8' : '-right-8'} opacity-0 group-hover:opacity-100 transition-opacity`}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTaskStatus(msg.id)}
+                          className="p-1 rounded-md bg-white border border-slate-200 text-slate-500 hover:text-amber-600 shadow-xs cursor-pointer"
+                          title="Jadikan Tugas / To-Do"
+                        >
+                          <Pin size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-3.5 bg-white border-t border-slate-200 flex-shrink-0 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isTaskInput}
+                  onChange={(e) => setIsTaskInput(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer"
+                />
+                <span className={`font-bold transition-colors ${isTaskInput ? 'text-amber-700' : 'text-slate-600'}`}>
+                  📌 Jadikan Tugas (To-Do Kerja)
+                </span>
+              </label>
+
+              {isTaskInput && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[11px] text-slate-500 font-medium">Prioritas:</span>
+                  <button
+                    type="button"
+                    onClick={() => setTaskPriority('normal')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      taskPriority === 'normal'
+                        ? 'bg-slate-200 text-slate-800 shadow-2xs'
+                        : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    Biasa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaskPriority('urgent')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      taskPriority === 'urgent'
+                        ? 'bg-red-500 text-white shadow-2xs'
+                        : 'text-red-600 hover:bg-red-50'
+                    }`}
+                  >
+                    Mendesak 🔥
+                  </button>
+                </div>
               )}
             </div>
-            <span className="text-[11px] font-bold text-slate-500 shrink-0 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-              {filteredUserList.length} User
-            </span>
-          </div>
 
-          {/* User List Body */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
-            {filteredUserList.length === 0 ? (
-              <div className="h-48 flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                <User size={24} className="text-slate-300 mb-2" />
-                <p className="font-bold text-slate-600 text-xs">Tidak ada pengguna ditemukan</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Coba gunakan kata kunci pencarian yang lain.</p>
+            <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+              <div className="flex-1 relative">
+                <textarea
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder={
+                    isTaskInput
+                      ? 'Tulis rincian tugas yang harus dikerjakan...'
+                      : 'Ketik pesan obrolan admin... (Enter untuk kirim)'
+                  }
+                  rows={2}
+                  className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm border focus:outline-none focus:ring-2 resize-none transition-all ${
+                    isTaskInput
+                      ? 'border-amber-300 bg-amber-50/40 focus:ring-amber-400 placeholder:text-amber-700/50'
+                      : 'border-slate-300 bg-slate-50/50 focus:ring-blue-500'
+                  }`}
+                />
               </div>
-            ) : isSuperAdmin ? (
-              /* ── SUPER ADMIN VIEW: Dibagi Super Admin & Admin dengan Status Akses ── */
-              <>
-                {/* Super Admin Section */}
-                {superAdminList.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-black tracking-wider uppercase text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80 flex items-center justify-between mb-2">
-                      <span className="flex items-center gap-1.5">
-                        <span>👑</span>
-                        <span>SUPER ADMIN — {superAdminList.length}</span>
-                      </span>
-                      <span className="text-[9px] font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.2 rounded">
-                        Status: Akses Penuh
-                      </span>
-                    </div>
 
-                    <div className="space-y-1.5">
-                      {superAdminList.map(u => renderUserCard(u, true))}
-                    </div>
-                  </div>
+              <button
+                type="submit"
+                disabled={!inputText.trim() || sending}
+                className={`p-3 rounded-xl font-bold flex items-center justify-center transition-all shadow-sm shrink-0 cursor-pointer disabled:bg-slate-200 disabled:text-slate-400 ${
+                  isTaskInput
+                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+                title="Kirim Pesan"
+              >
+                {sending ? (
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Send size={16} />
                 )}
-
-                {/* Admin Section */}
-                {adminList.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-black tracking-wider uppercase text-blue-800 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/80 flex items-center justify-between mb-2 mt-4">
-                      <span className="flex items-center gap-1.5">
-                        <span>🛡️</span>
-                        <span>ADMIN — {adminList.length}</span>
-                      </span>
-                      <span className="text-[9px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.2 rounded">
-                        Status: Akses Terbatas
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {adminList.map(u => renderUserCard(u, true))}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              /* ── REGULAR ADMIN VIEW: Cuma nama aja tanpa status access ── */
-              <div>
-                <div className="text-[10px] font-black tracking-wider uppercase text-slate-600 bg-slate-200/70 px-3 py-1.5 rounded-xl border border-slate-300/60 flex items-center justify-between mb-2">
-                  <span className="flex items-center gap-1.5">
-                    <span>👥</span>
-                    <span>DAFTAR PENGGUNA — {filteredUserList.length}</span>
-                  </span>
-                  <span className="text-[9px] font-semibold text-slate-500">
-                    Anggota Tim
-                  </span>
-                </div>
-
-                <div className="space-y-1.5">
-                  {filteredUserList.map(u => renderUserCard(u, false))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* User Tab Bottom Notice */}
-          <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
-            <span>Total <strong>{contacts.length}</strong> akun terdaftar</span>
-            <span className="text-indigo-600 font-bold flex items-center gap-1">
-              <MessageSquare size={11} /> Klik untuk kirim Direct Message
-            </span>
+              </button>
+            </form>
           </div>
         </div>
       ) : (
-        <>
-          {/* ── Filter Bar ── */}
-          <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
-        <div className="flex items-center gap-1 overflow-x-auto text-xs py-0.5">
-          <button
-            type="button"
-            onClick={() => setFilter('all')}
-            className={`px-2.5 py-1 rounded-lg font-bold transition-all whitespace-nowrap cursor-pointer ${
-              filter === 'all'
-                ? 'bg-blue-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-200/70'
-            }`}
-          >
-            Semua
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter('pending')}
-            className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              filter === 'pending'
-                ? 'bg-amber-500 text-slate-950 shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-200/70'
-            }`}
-          >
-            <AlertCircle size={12} className={filter === 'pending' ? 'text-slate-950' : 'text-amber-500'} />
-            <span>To-Do ({pendingTasksCount})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter('done')}
-            className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              filter === 'done'
-                ? 'bg-emerald-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-200/70'
-            }`}
-          >
-            <CheckCircle2 size={12} className={filter === 'done' ? 'text-white' : 'text-emerald-500'} />
-            <span>Selesai</span>
-          </button>
-        </div>
-
-        <span className="text-[11px] font-bold text-slate-400 shrink-0">
-          {activeTabChannel === 'general' ? '📢 Umum' : '🔒 Direct Message'}
-        </span>
-      </div>
-
-      {/* ── Messages & Task List ── */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-100/50">
-        {loading ? (
-          <div className="h-full flex items-center justify-center text-slate-400 text-xs gap-2">
-            <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <span>Memuat pesan...</span>
-          </div>
-        ) : filteredMessages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-300 mb-3 shadow-2xs">
-              <MessageSquare size={22} />
+        /* ════════════ DIRECT MESSAGE (2-COLUMN DISCORD SPLIT VIEW) ════════════ */
+        <div className="flex-1 flex min-h-0 bg-white overflow-hidden">
+          {/* ── Left Column: Contact Sidebar (Always shows latest incoming DM on top) ── */}
+          <div className={`w-full md:w-64 border-r border-slate-200 bg-slate-50/70 flex flex-col shrink-0 min-h-0 ${
+            selectedAdminId ? 'hidden md:flex' : 'flex'
+          }`}>
+            {/* Search Header */}
+            <div className="p-2.5 bg-white border-b border-slate-200 flex items-center gap-1.5 shrink-0">
+              <div className="relative flex-1">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={userSearchText}
+                  onChange={(e) => setUserSearchText(e.target.value)}
+                  placeholder="Cari kontak DM..."
+                  className="w-full pl-7 pr-6 py-1.5 text-xs bg-slate-100/80 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                {userSearchText && (
+                  <button
+                    type="button"
+                    onClick={() => setUserSearchText('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
             </div>
-            <p className="font-bold text-slate-700 text-sm">
-              {filter === 'pending' ? 'Tidak ada tugas yang pending!' : filter === 'done' ? 'Belum ada tugas selesai' : 'Belum ada pesan'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1 max-w-[260px]">
-              {activeTabChannel === 'pm'
-                ? 'Mulai obrolan Direct Message atau berikan to-do list khusus ke rekan admin.'
-                : 'Mulai kirim pesan dan aktifkan "Jadikan To-Do" untuk meng-highlight pekerjaan admin.'}
-            </p>
-          </div>
-        ) : (
-          filteredMessages.map((msg) => {
-            const isMe = msg.senderId === user?.id || msg.senderName === user?.name;
-            const isMenuOpen = activeMenuId === msg.id;
 
-            // Render Task Card
-            if (msg.isTask) {
-              return (
-                <div
-                  key={msg.id}
-                  className={`rounded-2xl border p-3.5 transition-all shadow-2xs relative group ${
-                    msg.isDone
-                      ? 'bg-emerald-50/60 border-emerald-200 text-slate-700'
-                      : msg.priority === 'urgent'
-                      ? 'bg-gradient-to-r from-red-50/90 to-amber-50/80 border-red-200 ring-1 ring-red-300/60'
-                      : 'bg-white border-amber-200/90 shadow-xs'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
-                        msg.isDone
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : msg.priority === 'urgent'
-                          ? 'bg-red-500 text-white'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {msg.isDone ? <Check size={10} /> : <AlertCircle size={10} />}
-                        {msg.isDone ? 'Tugas Selesai' : msg.priority === 'urgent' ? 'PENTING / URGENT' : 'Tugas / To-Do'}
-                      </span>
-                      <span className="text-[11px] font-semibold text-slate-600">
-                        Oleh: {msg.senderName} {msg.senderRole === 'super_admin' ? '(SuperAdmin)' : ''}
-                      </span>
-                      {msg.channelType === 'pm' && (
-                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
-                          DM
+            {/* Contacts Scrollable List */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-3">
+              {sortedOtherContacts.length === 0 ? (
+                <div className="h-40 flex flex-col items-center justify-center text-center p-4 text-slate-400">
+                  <User size={20} className="text-slate-300 mb-1" />
+                  <p className="font-bold text-xs text-slate-600">Tidak ada kontak</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Semua admin lain akan muncul di sini.</p>
+                </div>
+              ) : isSuperAdmin ? (
+                /* ── Super Admin View: Grouped by 👑 Super Admin & 🛡️ Admin with status access ── */
+                <>
+                  {superAdminList.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-50/90 px-2 py-1 rounded-md border border-amber-200/70 flex items-center justify-between mb-1.5">
+                        <span className="flex items-center gap-1">
+                          <span>👑</span>
+                          <span>SUPER ADMIN ({superAdminList.length})</span>
                         </span>
-                      )}
+                        <span className="text-[8.5px] font-bold text-amber-700 bg-amber-100/70 px-1 py-0.2 rounded">
+                          Akses Penuh
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        {superAdminList.map((contact) => {
+                          const isSelected = selectedAdminId === contact.id;
+                          const unread = unreadByContact[contact.id] || 0;
+                          const stats = contactStatsMap[contact.id];
+
+                          return (
+                            <button
+                              key={contact.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedAdminId(contact.id);
+                                const now = Date.now();
+                                saveReadTimes({ ...readTimes, [contact.id]: now });
+                              }}
+                              className={`w-full text-left p-2 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer border ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                                  : 'bg-white hover:bg-indigo-50/70 border-slate-200/80 text-slate-800 hover:border-indigo-200'
+                              }`}
+                            >
+                              <div className="relative shrink-0">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                                  isSelected
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-gradient-to-tr from-amber-500 to-amber-700 text-white shadow-2xs'
+                                }`}>
+                                  {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
+                                </div>
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
+                                  isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500'
+                                }`} />
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                    {contact.name}
+                                  </span>
+                                  {stats && (
+                                    <span className={`text-[9px] shrink-0 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                      {new Date(stats.latestTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-between gap-1 mt-0.5">
+                                  <p className={`text-[10.5px] truncate ${
+                                    isSelected
+                                      ? 'text-indigo-100'
+                                      : unread > 0
+                                      ? 'text-slate-800 font-bold'
+                                      : 'text-slate-400'
+                                  }`}>
+                                    {stats ? (
+                                      <span>{stats.lastSenderName === 'Anda' ? 'Anda: ' : ''}{stats.lastSnippet}</span>
+                                    ) : (
+                                      <span className="italic">Belum ada obrolan</span>
+                                    )}
+                                  </p>
+
+                                  {unread > 0 && (
+                                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black shrink-0 ${
+                                      isSelected
+                                        ? 'bg-white text-indigo-700'
+                                        : 'bg-rose-500 text-white animate-pulse'
+                                    }`}>
+                                      {unread}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {adminList.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-blue-800 bg-blue-50/90 px-2 py-1 rounded-md border border-blue-200/70 flex items-center justify-between mb-1.5">
+                        <span className="flex items-center gap-1">
+                          <span>🛡️</span>
+                          <span>ADMIN ({adminList.length})</span>
+                        </span>
+                        <span className="text-[8.5px] font-bold text-blue-700 bg-blue-100/70 px-1 py-0.2 rounded">
+                          Akses Terbatas
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        {adminList.map((contact) => {
+                          const isSelected = selectedAdminId === contact.id;
+                          const unread = unreadByContact[contact.id] || 0;
+                          const stats = contactStatsMap[contact.id];
+
+                          return (
+                            <button
+                              key={contact.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedAdminId(contact.id);
+                                const now = Date.now();
+                                saveReadTimes({ ...readTimes, [contact.id]: now });
+                              }}
+                              className={`w-full text-left p-2 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer border ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                                  : 'bg-white hover:bg-indigo-50/70 border-slate-200/80 text-slate-800 hover:border-indigo-200'
+                              }`}
+                            >
+                              <div className="relative shrink-0">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                                  isSelected
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-2xs'
+                                }`}>
+                                  {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
+                                </div>
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
+                                  isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500'
+                                }`} />
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                    {contact.name}
+                                  </span>
+                                  {stats && (
+                                    <span className={`text-[9px] shrink-0 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                      {new Date(stats.latestTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-between gap-1 mt-0.5">
+                                  <p className={`text-[10.5px] truncate ${
+                                    isSelected
+                                      ? 'text-indigo-100'
+                                      : unread > 0
+                                      ? 'text-slate-800 font-bold'
+                                      : 'text-slate-400'
+                                  }`}>
+                                    {stats ? (
+                                      <span>{stats.lastSenderName === 'Anda' ? 'Anda: ' : ''}{stats.lastSnippet}</span>
+                                    ) : (
+                                      <span className="italic">Belum ada obrolan</span>
+                                    )}
+                                  </p>
+
+                                  {unread > 0 && (
+                                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black shrink-0 ${
+                                      isSelected
+                                        ? 'bg-white text-indigo-700'
+                                        : 'bg-rose-500 text-white animate-pulse'
+                                    }`}>
+                                      {unread}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* ── Regular Admin View: Clean list of names only, NO status access or role tags ── */
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-slate-600 bg-slate-200/70 px-2 py-1 rounded-md border border-slate-300/60 flex items-center justify-between mb-1.5">
+                    <span className="flex items-center gap-1">
+                      <span>💬</span>
+                      <span>KONTAK DM ({sortedOtherContacts.length})</span>
+                    </span>
+                    <span className="text-[8.5px] font-semibold text-slate-500">
+                      Terbaru di Atas
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    {sortedOtherContacts.map((contact) => {
+                      const isSelected = selectedAdminId === contact.id;
+                      const unread = unreadByContact[contact.id] || 0;
+                      const stats = contactStatsMap[contact.id];
+
+                      return (
+                        <button
+                          key={contact.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAdminId(contact.id);
+                            const now = Date.now();
+                            saveReadTimes({ ...readTimes, [contact.id]: now });
+                          }}
+                          className={`w-full text-left p-2 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer border ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                              : 'bg-white hover:bg-indigo-50/70 border-slate-200/80 text-slate-800 hover:border-indigo-200'
+                          }`}
+                        >
+                          <div className="relative shrink-0">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                              isSelected
+                                ? 'bg-white/20 text-white'
+                                : 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-2xs'
+                            }`}>
+                              {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
+                              isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500'
+                            }`} />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                {contact.name}
+                              </span>
+                              {stats && (
+                                <span className={`text-[9px] shrink-0 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                  {new Date(stats.latestTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between gap-1 mt-0.5">
+                              <p className={`text-[10.5px] truncate ${
+                                isSelected
+                                  ? 'text-indigo-100'
+                                  : unread > 0
+                                  ? 'text-slate-800 font-bold'
+                                  : 'text-slate-400'
+                              }`}>
+                                {stats ? (
+                                  <span>{stats.lastSenderName === 'Anda' ? 'Anda: ' : ''}{stats.lastSnippet}</span>
+                                ) : (
+                                  <span className="italic">Belum ada obrolan</span>
+                                )}
+                              </p>
+
+                              {unread > 0 && (
+                                <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black shrink-0 ${
+                                  isSelected
+                                    ? 'bg-white text-indigo-700'
+                                    : 'bg-rose-500 text-white animate-pulse'
+                                }`}>
+                                  {unread}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Right Column: Active Direct Message Conversation ── */}
+          <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${
+            !selectedAdminId ? 'hidden md:flex' : 'flex'
+          }`}>
+            {targetContact ? (
+              <>
+                {/* Contact Chat Header */}
+                <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* Mobile back to contact list button */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAdminId('')}
+                      className="md:hidden p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
+                      title="Kembali ke daftar kontak"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                        {targetContact.name ? targetContact.name.charAt(0).toUpperCase() : '?'}
+                      </div>
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
                     </div>
 
-                    {/* Options dropdown toggle */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setActiveMenuId(isMenuOpen ? null : msg.id)}
-                        className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                      >
-                        <MoreVertical size={14} />
-                      </button>
-
-                      {isMenuOpen && (
-                        <div className="absolute right-0 top-6 z-20 w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleTaskStatus(msg.id)}
-                            className="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer"
-                          >
-                            <MessageSquare size={13} />
-                            Ubah ke Chat Biasa
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMessage(msg.id)}
-                            className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2 cursor-pointer"
-                          >
-                            <Trash2 size={13} />
-                            Hapus Pesan
-                          </button>
-                        </div>
-                      )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-slate-900 truncate">
+                          {targetContact.name}
+                        </span>
+                        {isSuperAdmin && (
+                          <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                            targetContact.role === 'super_admin'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                              : 'bg-blue-100 text-blue-900 border border-blue-200'
+                          }`}>
+                            {targetContact.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 truncate">
+                        {isSuperAdmin ? (
+                          targetContact.role === 'super_admin' ? 'Status: Akses Penuh' : 'Status: Akses Terbatas'
+                        ) : (
+                          targetContact.email || 'Admin Tim'
+                        )}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Task Content */}
-                  <p className={`mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words font-medium ${
-                    msg.isDone ? 'line-through text-slate-500' : 'text-slate-800'
-                  }`}>
-                    {msg.content}
-                  </p>
-
-                  {/* Footer status & Mark As Done button */}
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                      <Clock size={11} />
-                      <span>{new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                      {msg.isDone && msg.doneBy && (
-                        <span className="text-emerald-700 font-semibold ml-1">
-                          · Selesai oleh {msg.doneBy}
-                        </span>
-                      )}
-                    </div>
-
+                  {/* Filter tabs inside active DM */}
+                  <div className="flex items-center gap-1 text-[11px] shrink-0">
                     <button
                       type="button"
-                      onClick={() => handleToggleDone(msg.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
-                        msg.isDone
-                          ? 'bg-emerald-100/80 hover:bg-emerald-200 text-emerald-800 border border-emerald-300'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      onClick={() => setFilter('all')}
+                      className={`px-2 py-0.8 rounded-md font-bold transition-all cursor-pointer ${
+                        filter === 'all' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-200/60'
                       }`}
                     >
-                      {msg.isDone ? (
-                        <>
-                          <CheckCircle2 size={13} className="text-emerald-700" />
-                          <span>Sudah Selesai</span>
-                        </>
-                      ) : (
-                        <>
-                          <Circle size={13} />
-                          <span>Tandai Selesai</span>
-                        </>
-                      )}
+                      Semua
                     </button>
-                  </div>
-                </div>
-              );
-            }
-
-            // Normal Chat Bubble
-            return (
-              <div
-                key={msg.id}
-                className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}
-              >
-                <div className="flex items-center gap-1.5 mb-1 px-1">
-                  <span className="text-[11px] font-bold text-slate-600">
-                    {msg.senderName} {msg.senderRole === 'super_admin' ? '(SuperAdmin)' : ''}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    {new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-
-                <div className="relative group max-w-[85%]">
-                  <div
-                    className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words shadow-2xs ${
-                      isMe
-                        ? 'bg-blue-600 text-white rounded-br-xs'
-                        : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-
-                  {/* Quick Action Button to convert to Task */}
-                  <div className={`absolute top-1 ${isMe ? '-left-8' : '-right-8'} opacity-0 group-hover:opacity-100 transition-opacity`}>
                     <button
                       type="button"
-                      onClick={() => handleToggleTaskStatus(msg.id)}
-                      className="p-1 rounded-md bg-white border border-slate-200 text-slate-500 hover:text-amber-600 shadow-xs cursor-pointer"
-                      title="Jadikan Tugas / To-Do"
+                      onClick={() => setFilter('pending')}
+                      className={`px-2 py-0.8 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                        filter === 'pending' ? 'bg-amber-500 text-slate-950 shadow-2xs' : 'text-slate-600 hover:bg-slate-200/60'
+                      }`}
                     >
-                      <Pin size={12} />
+                      <AlertCircle size={11} />
+                      <span>To-Do ({pendingTasksCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilter('done')}
+                      className={`px-2 py-0.8 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                        filter === 'done' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <CheckCircle2 size={11} />
+                      <span>Selesai</span>
                     </button>
                   </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* ── Input Area (Cleaned up, no buttons clipping or overlapping) ── */}
-      <div className="p-3.5 bg-white border-t border-slate-200 flex-shrink-0 space-y-2.5">
-        {/* Task toggle & Priority toolbar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={isTaskInput}
-              onChange={(e) => setIsTaskInput(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer"
-            />
-            <span className={`font-bold transition-colors ${isTaskInput ? 'text-amber-700' : 'text-slate-600'}`}>
-              📌 Jadikan Tugas (To-Do Kerja)
-            </span>
-          </label>
+                {/* Direct Messages List */}
+                <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-slate-100/50 min-h-0">
+                  {loading ? (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-xs gap-2">
+                      <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                      <span>Memuat pesan...</span>
+                    </div>
+                  ) : filteredMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                      <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-300 mb-3 shadow-2xs">
+                        <Lock size={22} />
+                      </div>
+                      <p className="font-bold text-slate-700 text-sm">
+                        {filter === 'pending'
+                          ? 'Tidak ada to-do pending dengan kontak ini'
+                          : filter === 'done'
+                          ? 'Belum ada tugas selesai'
+                          : `Mulai obrolan dengan ${targetContact.name}`}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-[280px]">
+                        Pesan langsung (DM) bersifat privat antara Anda dan {targetContact.name}.
+                      </p>
+                    </div>
+                  ) : (
+                    filteredMessages.map((msg) => {
+                      const isMe = msg.senderId === user?.id || msg.senderName === user?.name;
+                      const isMenuOpen = activeMenuId === msg.id;
 
-          {isTaskInput && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[11px] text-slate-500 font-medium">Prioritas:</span>
-              <button
-                type="button"
-                onClick={() => setTaskPriority('normal')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                  taskPriority === 'normal'
-                    ? 'bg-slate-200 text-slate-800 shadow-2xs'
-                    : 'text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                Biasa
-              </button>
-              <button
-                type="button"
-                onClick={() => setTaskPriority('urgent')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                  taskPriority === 'urgent'
-                    ? 'bg-red-500 text-white shadow-2xs'
-                    : 'text-red-600 hover:bg-red-50'
-                }`}
-              >
-                Mendesak 🔥
-              </button>
-            </div>
-          )}
-        </div>
+                      if (msg.isTask) {
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`rounded-2xl border p-3 transition-all shadow-2xs relative group ${
+                              msg.isDone
+                                ? 'bg-emerald-50/60 border-emerald-200 text-slate-700'
+                                : msg.priority === 'urgent'
+                                ? 'bg-gradient-to-r from-red-50/90 to-amber-50/80 border-red-200 ring-1 ring-red-300/60'
+                                : 'bg-white border-amber-200/90 shadow-xs'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                                  msg.isDone
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : msg.priority === 'urgent'
+                                    ? 'bg-red-500 text-white'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {msg.isDone ? <Check size={10} /> : <AlertCircle size={10} />}
+                                  {msg.isDone ? 'Tugas Selesai' : msg.priority === 'urgent' ? 'PENTING / URGENT' : 'Tugas / To-Do'}
+                                </span>
+                                <span className="text-[10.5px] font-semibold text-slate-600">
+                                  {isMe ? 'Anda' : msg.senderName}
+                                </span>
+                              </div>
 
-        {/* Textarea + Send button */}
-        <form onSubmit={handleSendMessage} className="flex items-end gap-2">
-          <div className="flex-1 relative">
-            <textarea
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              placeholder={
-                isTaskInput
-                  ? 'Tulis rincian tugas yang harus dikerjakan...'
-                  : activeTabChannel === 'pm'
-                  ? `Ketik Direct Message ke ${targetContact?.name || (isSuperAdmin ? 'Admin' : 'Super Admin')}...`
-                  : 'Ketik pesan obrolan admin... (Enter untuk kirim)'
-              }
-              rows={2}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm border focus:outline-none focus:ring-2 resize-none transition-all ${
-                isTaskInput
-                  ? 'border-amber-300 bg-amber-50/40 focus:ring-amber-400 placeholder:text-amber-700/50'
-                  : 'border-slate-300 bg-slate-50/50 focus:ring-blue-500'
-              }`}
-            />
-          </div>
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveMenuId(isMenuOpen ? null : msg.id)}
+                                  className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                                >
+                                  <MoreVertical size={13} />
+                                </button>
 
-          <button
-            type="submit"
-            disabled={!inputText.trim() || sending}
-            className={`p-3 rounded-xl font-bold flex items-center justify-center transition-all shadow-sm shrink-0 cursor-pointer disabled:bg-slate-200 disabled:text-slate-400 ${
-              isTaskInput
-                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-            title="Kirim Pesan"
-          >
-            {sending ? (
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                {isMenuOpen && (
+                                  <div className="absolute right-0 top-6 z-20 w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1 text-xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleTaskStatus(msg.id)}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <MessageSquare size={13} />
+                                      Ubah ke Chat Biasa
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMessage(msg.id)}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <Trash2 size={13} />
+                                      Hapus Pesan
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <p className={`mt-2 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words font-medium ${
+                              msg.isDone ? 'line-through text-slate-500' : 'text-slate-800'
+                            }`}>
+                              {msg.content}
+                            </p>
+
+                            <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-[10.5px] text-slate-400 flex items-center gap-1">
+                                <Clock size={11} />
+                                <span>{new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                                {msg.isDone && msg.doneBy && (
+                                  <span className="text-emerald-700 font-semibold ml-1">
+                                    · Selesai oleh {msg.doneBy}
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDone(msg.id)}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
+                                  msg.isDone
+                                    ? 'bg-emerald-100/80 hover:bg-emerald-200 text-emerald-800 border border-emerald-300'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                }`}
+                              >
+                                {msg.isDone ? (
+                                  <>
+                                    <CheckCircle2 size={12} className="text-emerald-700" />
+                                    <span>Sudah Selesai</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Circle size={12} />
+                                    <span>Tandai Selesai</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}
+                        >
+                          <div className="flex items-center gap-1 mb-1 px-1">
+                            <span className="text-[10.5px] font-bold text-slate-600">
+                              {isMe ? 'Anda' : msg.senderName}
+                            </span>
+                            <span className="text-[9.5px] text-slate-400">
+                              {new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
+                          <div className="relative group max-w-[85%]">
+                            <div
+                              className={`px-3.5 py-2 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words shadow-2xs ${
+                                isMe
+                                  ? 'bg-indigo-600 text-white rounded-br-xs'
+                                  : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
+                              }`}
+                            >
+                              {msg.content}
+                            </div>
+
+                            <div className={`absolute top-1 ${isMe ? '-left-7' : '-right-7'} opacity-0 group-hover:opacity-100 transition-opacity`}>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTaskStatus(msg.id)}
+                                className="p-1 rounded-md bg-white border border-slate-200 text-slate-500 hover:text-amber-600 shadow-xs cursor-pointer"
+                                title="Jadikan Tugas / To-Do"
+                              >
+                                <Pin size={11} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* DM Input Form */}
+                <div className="p-3 bg-white border-t border-slate-200 flex-shrink-0 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isTaskInput}
+                        onChange={(e) => setIsTaskInput(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300 cursor-pointer"
+                      />
+                      <span className={`text-[11px] font-bold transition-colors ${isTaskInput ? 'text-amber-700' : 'text-slate-600'}`}>
+                        📌 Jadikan Tugas (To-Do)
+                      </span>
+                    </label>
+
+                    {isTaskInput && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setTaskPriority('normal')}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                            taskPriority === 'normal'
+                              ? 'bg-slate-200 text-slate-800 shadow-2xs'
+                              : 'text-slate-500 hover:bg-slate-100'
+                          }`}
+                        >
+                          Biasa
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTaskPriority('urgent')}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                            taskPriority === 'urgent'
+                              ? 'bg-red-500 text-white shadow-2xs'
+                              : 'text-red-600 hover:bg-red-50'
+                          }`}
+                        >
+                          Mendesak 🔥
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+                    <div className="flex-1 relative">
+                      <textarea
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        placeholder={`Kirim Direct Message ke ${targetContact.name}...`}
+                        rows={2}
+                        className={`w-full px-3 py-2 rounded-xl text-xs sm:text-sm border focus:outline-none focus:ring-2 resize-none transition-all ${
+                          isTaskInput
+                            ? 'border-amber-300 bg-amber-50/40 focus:ring-amber-400 placeholder:text-amber-700/50'
+                            : 'border-slate-300 bg-slate-50/50 focus:ring-indigo-500'
+                        }`}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={!inputText.trim() || sending}
+                      className={`p-2.5 rounded-xl font-bold flex items-center justify-center transition-all shadow-sm shrink-0 cursor-pointer disabled:bg-slate-200 disabled:text-slate-400 ${
+                        isTaskInput
+                          ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      }`}
+                      title="Kirim Pesan"
+                    >
+                      {sending ? (
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Send size={15} />
+                      )}
+                    </button>
+                  </form>
+                </div>
+              </>
             ) : (
-              <Send size={16} />
+              /* No Contact Selected Empty State */
+              <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400 bg-slate-50/50">
+                <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-indigo-400 mb-3 shadow-xs">
+                  <MessageSquare size={26} />
+                </div>
+                <h4 className="font-bold text-slate-800 text-sm">Pilih Kontak untuk Direct Message</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-[280px]">
+                  Klik salah satu nama admin pada daftar kontak di kolom sebelah kiri untuk mulai mengobrol secara langsung.
+                </p>
+              </div>
             )}
-          </button>
-        </form>
-      </div>
-      </>
-    )}
+          </div>
+        </div>
+      )}
     </aside>
     </>
   );
