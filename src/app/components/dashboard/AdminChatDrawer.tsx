@@ -124,20 +124,60 @@ export default function AdminChatDrawer({
   // Search filter for contacts in Direct Message sidebar
   const [userSearchText, setUserSearchText] = useState<string>('');
 
-  // Resizable width for sidepanel (default 720px for 2-column Discord layout, min 420px, max 950px)
+  // Resizable width for sidepanel (default 760px for 2-column Discord layout, min 480px, max 1050px)
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('admin_chat_panel_width');
-      return saved ? Math.min(950, Math.max(420, parseInt(saved, 10))) : 720;
+      return saved ? Math.min(1050, Math.max(480, parseInt(saved, 10))) : 760;
     } catch {
-      return 720;
+      return 760;
+    }
+  });
+
+  // Resizable width for floating pop-out window (default 800px, min 520px, max 1100px)
+  const [floatingWidth, setFloatingWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('admin_chat_floating_width');
+      return saved ? Math.min(1100, Math.max(520, parseInt(saved, 10))) : 800;
+    } catch {
+      return 800;
+    }
+  });
+
+  // Resizable height for floating pop-out window (default 650px, min 420px, max 900px)
+  const [floatingHeight, setFloatingHeight] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('admin_chat_floating_height');
+      return saved ? Math.min(900, Math.max(420, parseInt(saved, 10))) : 650;
+    } catch {
+      return 650;
+    }
+  });
+
+  // Resizable width for the left Contact List sidebar in Direct Message (default 260px, min 180px, max 420px)
+  const [contactSidebarWidth, setContactSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('admin_chat_contact_sidebar_width');
+      return saved ? Math.min(420, Math.max(180, parseInt(saved, 10))) : 260;
+    } catch {
+      return 260;
     }
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const startXRef = useRef(0);
-  const startWidthRef = useRef(460);
+  const startYRef = useRef(0);
+  const startWidthRef = useRef(760);
+  const startHeightRef = useRef(650);
+
+  // Separate refs for contact sidebar resizer
+  const isSidebarDraggingRef = useRef(false);
+  const startSidebarXRef = useRef(0);
+  const startSidebarWidthRef = useRef(260);
+
+  // Separate refs for floating pop-out resize
+  const isFloatingResizeRef = useRef(false);
 
   // ── Load contacts (admins & superadmins) ──
   useEffect(() => {
@@ -451,30 +491,97 @@ export default function AdminChatDrawer({
     }
   }, [messages.length, isOpen, isMinimized, filter, activeTabChannel, selectedAdminId]);
 
-  // ── Resizing Logic ──
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    if (mode !== 'sidepanel') return;
+  // ── Resizing Logic for Drawer (Sidepanel or Floating Pop-out Window) ──
+  const handleMouseDownResize = (e: React.MouseEvent, direction: 'left' | 'top-left' = 'left') => {
     e.preventDefault();
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = panelWidth;
+    e.stopPropagation();
+
+    if (mode === 'sidepanel') {
+      isDraggingRef.current = true;
+      startXRef.current = e.clientX;
+      startWidthRef.current = panelWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        if (!isDraggingRef.current) return;
+        const delta = startXRef.current - moveEvent.clientX;
+        const newWidth = Math.min(1050, Math.max(480, startWidthRef.current + delta));
+        setPanelWidth(newWidth);
+      };
+
+      const onMouseUp = () => {
+        isDraggingRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        localStorage.setItem('admin_chat_panel_width', String(panelWidth));
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    } else {
+      // Floating mode resize (from top-left corner or left edge)
+      isFloatingResizeRef.current = true;
+      startXRef.current = e.clientX;
+      startYRef.current = e.clientY;
+      startWidthRef.current = floatingWidth;
+      startHeightRef.current = floatingHeight;
+      document.body.style.cursor = direction === 'top-left' ? 'nwse-resize' : 'ew-resize';
+      document.body.style.userSelect = 'none';
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        if (!isFloatingResizeRef.current) return;
+        const deltaX = startXRef.current - moveEvent.clientX;
+        const deltaY = startYRef.current - moveEvent.clientY;
+        const newWidth = Math.min(1150, Math.max(520, startWidthRef.current + deltaX));
+        const newHeight = Math.min(920, Math.max(450, startHeightRef.current + deltaY));
+        setFloatingWidth(newWidth);
+        if (direction === 'top-left') {
+          setFloatingHeight(newHeight);
+        }
+      };
+
+      const onMouseUp = () => {
+        isFloatingResizeRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        localStorage.setItem('admin_chat_floating_width', String(floatingWidth));
+        localStorage.setItem('admin_chat_floating_height', String(floatingHeight));
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+  };
+
+  // ── Resizing Logic for Contact List Sidebar inside Direct Message (Garis geser manual) ──
+  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isSidebarDraggingRef.current = true;
+    startSidebarXRef.current = e.clientX;
+    startSidebarWidthRef.current = contactSidebarWidth;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      const delta = startXRef.current - moveEvent.clientX;
-      const newWidth = Math.min(880, Math.max(350, startWidthRef.current + delta));
-      setPanelWidth(newWidth);
+      if (!isSidebarDraggingRef.current) return;
+      const delta = moveEvent.clientX - startSidebarXRef.current;
+      const newWidth = Math.min(420, Math.max(180, startSidebarWidthRef.current + delta));
+      setContactSidebarWidth(newWidth);
     };
 
     const onMouseUp = () => {
-      isDraggingRef.current = false;
+      isSidebarDraggingRef.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
-      localStorage.setItem('admin_chat_panel_width', String(panelWidth));
+      localStorage.setItem('admin_chat_contact_sidebar_width', String(contactSidebarWidth));
     };
 
     window.addEventListener('mousemove', onMouseMove);
@@ -775,11 +882,17 @@ export default function AdminChatDrawer({
   // ── Container Classes based on Mode ──
   const containerClasses = mode === 'sidepanel'
     ? `fixed top-0 right-0 bottom-0 z-[70] bg-white border-l border-slate-200 shadow-2xl flex flex-col transition-all duration-75`
-    : `fixed bottom-5 right-5 z-[70] w-[460px] max-w-[calc(100vw-32px)] h-[640px] max-h-[calc(100vh-80px)] rounded-2xl shadow-2xl border border-slate-200 flex flex-col bg-white overflow-hidden animate-in fade-in zoom-in-95 duration-150`;
+    : `fixed bottom-5 right-5 z-[70] rounded-2xl shadow-2xl border border-slate-200 flex flex-col bg-white overflow-hidden animate-in fade-in zoom-in-95 duration-150`;
 
-  const containerStyle = mode === 'sidepanel'
-    ? { width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vw' : `${panelWidth}px` }
-    : undefined;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const containerStyle: React.CSSProperties = mode === 'sidepanel'
+    ? { width: isMobile ? '100vw' : `${panelWidth}px` }
+    : {
+        width: isMobile ? 'calc(100vw - 24px)' : `${floatingWidth}px`,
+        height: isMobile ? 'calc(100vh - 80px)' : `${floatingHeight}px`,
+        maxWidth: 'calc(100vw - 24px)',
+        maxHeight: 'calc(100vh - 40px)',
+      };
 
   return (
     <>
@@ -788,20 +901,40 @@ export default function AdminChatDrawer({
         data-admin-chat-open="true"
         className={containerClasses}
         style={containerStyle}
-      aria-label="Admin Internal Chat & Task Panel"
-    >
-      {/* Resizable handle on the left edge (only in sidepanel mode on desktop) */}
-      {mode === 'sidepanel' && (
-        <div
-          onMouseDown={handleMouseDownResize}
-          title="Tarik ke kiri/kanan untuk memperbesar atau memperkecil lebar panel chat"
-          className="hidden md:flex absolute -left-2 top-0 bottom-0 w-3 cursor-col-resize z-50 items-center justify-center group hover:bg-blue-500/20 transition-colors"
-        >
-          <div className="w-1 h-14 bg-slate-300 group-hover:bg-blue-600 rounded-full transition-colors flex items-center justify-center shadow-xs">
-            <GripVertical size={11} className="text-slate-500 group-hover:text-white" />
+        aria-label="Admin Internal Chat & Task Panel"
+      >
+        {/* Resizable handle on the left edge (in sidepanel mode on desktop) */}
+        {mode === 'sidepanel' && (
+          <div
+            onMouseDown={(e) => handleMouseDownResize(e, 'left')}
+            title="Tarik ke kiri/kanan untuk mengatur lebar panel"
+            className="hidden md:flex absolute -left-2 top-0 bottom-0 w-3 cursor-col-resize z-50 items-center justify-center group hover:bg-blue-500/20 transition-colors"
+          >
+            <div className="w-1 h-14 bg-slate-300 group-hover:bg-blue-600 rounded-full transition-colors flex items-center justify-center shadow-xs">
+              <GripVertical size={11} className="text-slate-500 group-hover:text-white" />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Resizable handles for floating pop-out mode (desktop) */}
+        {mode === 'floating' && (
+          <>
+            {/* Left Edge Resizer */}
+            <div
+              onMouseDown={(e) => handleMouseDownResize(e, 'left')}
+              title="Tarik untuk mengubah lebar jendela pop-out"
+              className="hidden md:block absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-50 hover:bg-indigo-500/30 transition-colors"
+            />
+            {/* Top-Left Corner Resizer */}
+            <div
+              onMouseDown={(e) => handleMouseDownResize(e, 'top-left')}
+              title="Tarik untuk mengubah ukuran (lebar & tinggi) jendela pop-out"
+              className="hidden md:flex absolute top-0 left-0 w-5 h-5 cursor-nwse-resize z-50 items-center justify-center bg-indigo-600/30 hover:bg-indigo-600 rounded-br-lg text-white transition-colors"
+            >
+              <GripVertical size={10} className="rotate-45" />
+            </div>
+          </>
+        )}
 
       {/* ── Header ── */}
       <div className="px-4 py-3 bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white flex items-center justify-between gap-2 border-b border-white/10 flex-shrink-0 select-none">
@@ -1220,9 +1353,12 @@ export default function AdminChatDrawer({
         /* ════════════ DIRECT MESSAGE (2-COLUMN DISCORD SPLIT VIEW) ════════════ */
         <div className="flex-1 flex min-h-0 bg-white overflow-hidden">
           {/* ── Left Column: Contact Sidebar (Always shows latest incoming DM on top) ── */}
-          <div className={`w-full md:w-64 border-r border-slate-200 bg-slate-50/70 flex flex-col shrink-0 min-h-0 ${
-            selectedAdminId ? 'hidden md:flex' : 'flex'
-          }`}>
+          <div
+            style={{ width: isMobile ? '100%' : `${contactSidebarWidth}px` }}
+            className={`bg-slate-50/70 border-r border-slate-200 flex flex-col shrink-0 min-h-0 relative ${
+              selectedAdminId ? 'hidden md:flex' : 'flex'
+            }`}
+          >
             {/* Search Header */}
             <div className="p-2.5 bg-white border-b border-slate-200 flex items-center gap-1.5 shrink-0">
               <div className="relative flex-1">
@@ -1531,17 +1667,28 @@ export default function AdminChatDrawer({
                 </div>
               )}
             </div>
+
+            {/* Draggable Divider Handle between columns (Manual resize via mouse cursor) */}
+            <div
+              onMouseDown={handleMouseDownSidebarResize}
+              title="Tarik ke kiri atau ke kanan untuk mengatur lebar daftar kontak"
+              className="hidden md:flex absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-20 items-center justify-center group hover:bg-indigo-500/20 transition-colors"
+            >
+              <div className="w-1 h-8 bg-slate-300 group-hover:bg-indigo-600 rounded-full transition-colors flex items-center justify-center shadow-xs">
+                <GripVertical size={9} className="text-slate-400 group-hover:text-white" />
+              </div>
+            </div>
           </div>
 
           {/* ── Right Column: Active Direct Message Conversation ── */}
-          <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${
+          <div className={`flex-1 flex flex-col min-w-0 min-h-0 bg-white ${
             !selectedAdminId ? 'hidden md:flex' : 'flex'
           }`}>
             {targetContact ? (
               <>
                 {/* Contact Chat Header */}
-                <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     {/* Mobile back to contact list button */}
                     <button
                       type="button"
@@ -1559,8 +1706,8 @@ export default function AdminChatDrawer({
                       <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
                     </div>
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-xs text-slate-900 truncate">
                           {targetContact.name}
                         </span>
@@ -1584,13 +1731,13 @@ export default function AdminChatDrawer({
                     </div>
                   </div>
 
-                  {/* Filter tabs inside active DM */}
-                  <div className="flex items-center gap-1 text-[11px] shrink-0">
+                  {/* Filter tabs inside active DM (Clean pill buttons, no overlapping) */}
+                  <div className="flex items-center gap-1 text-[11px] shrink-0 bg-slate-200/60 p-0.5 rounded-lg border border-slate-300/40">
                     <button
                       type="button"
                       onClick={() => setFilter('all')}
                       className={`px-2 py-0.8 rounded-md font-bold transition-all cursor-pointer ${
-                        filter === 'all' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-200/60'
+                        filter === 'all' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white/60'
                       }`}
                     >
                       Semua
@@ -1599,20 +1746,20 @@ export default function AdminChatDrawer({
                       type="button"
                       onClick={() => setFilter('pending')}
                       className={`px-2 py-0.8 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                        filter === 'pending' ? 'bg-amber-500 text-slate-950 shadow-2xs' : 'text-slate-600 hover:bg-slate-200/60'
+                        filter === 'pending' ? 'bg-amber-500 text-slate-950 shadow-2xs' : 'text-slate-600 hover:bg-white/60'
                       }`}
                     >
-                      <AlertCircle size={11} />
+                      <AlertCircle size={11} className={filter === 'pending' ? 'text-slate-950' : 'text-amber-500'} />
                       <span>To-Do ({pendingTasksCount})</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setFilter('done')}
                       className={`px-2 py-0.8 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                        filter === 'done' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-200/60'
+                        filter === 'done' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white/60'
                       }`}
                     >
-                      <CheckCircle2 size={11} />
+                      <CheckCircle2 size={11} className={filter === 'done' ? 'text-white' : 'text-emerald-500'} />
                       <span>Selesai</span>
                     </button>
                   </div>
