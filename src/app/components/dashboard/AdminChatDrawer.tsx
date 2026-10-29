@@ -489,12 +489,18 @@ export default function AdminChatDrawer({
     return sortedOtherContacts.filter(c => c.role !== 'super_admin');
   }, [sortedOtherContacts]);
 
-  // ── Determine if a contact is currently online (heartbeat active within the last 60 seconds) ──
-  const isUserOnline = useCallback((userId: string) => {
-    if (userId === user?.id) return true; // Current user is always online
+  // ── Determine contact presence status:
+  // - 'online': aktif dalam 75 detik terakhir (hijau)
+  // - 'idle': aktif antara 75 detik s/d 10 menit terakhir / AFK (kuning/amber)
+  // - 'offline': tidak aktif lebih dari 10 menit atau belum terdeteksi (abu-abu)
+  const getUserPresence = useCallback((userId: string): 'online' | 'idle' | 'offline' => {
+    if (userId === user?.id) return 'online'; // User yang sedang login selalu online
     const lastActive = presenceMap[userId];
-    if (!lastActive) return false;
-    return Date.now() - lastActive < 60_000; // Online if active within 60s
+    if (!lastActive) return 'offline';
+    const elapsed = Date.now() - lastActive;
+    if (elapsed < 75_000) return 'online';
+    if (elapsed < 600_000) return 'idle';
+    return 'offline';
   }, [presenceMap, user?.id]);
 
   // Notify parent of total unread count for header badge
@@ -1484,15 +1490,22 @@ export default function AdminChatDrawer({
                                 }`}>
                                   {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                                 </div>
-                                {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
-                                <span
-                                  title={isUserOnline(contact.id) ? 'Online' : 'Offline'}
-                                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
-                                    isSelected
-                                      ? isUserOnline(contact.id) ? 'border-indigo-600 bg-emerald-400' : 'border-indigo-600 bg-slate-400'
-                                      : isUserOnline(contact.id) ? 'border-white bg-emerald-500' : 'border-white bg-slate-300'
-                                  }`}
-                                />
+                                {/* Presence Dot: Hijau (online), Kuning/Amber (idle/afk), Abu-abu (offline) */}
+                                {(() => {
+                                  const status = getUserPresence(contact.id);
+                                  const title = status === 'online' ? 'Online' : status === 'idle' ? 'Sedang Idle / AFK' : 'Offline';
+                                  const colorClass = status === 'online'
+                                    ? (isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500')
+                                    : status === 'idle'
+                                    ? (isSelected ? 'border-indigo-600 bg-amber-400' : 'border-white bg-amber-500')
+                                    : (isSelected ? 'border-indigo-600 bg-slate-400' : 'border-white bg-slate-300');
+                                  return (
+                                    <span
+                                      title={title}
+                                      className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${colorClass}`}
+                                    />
+                                  );
+                                })()}
                               </div>
 
                               <div className="flex-1 min-w-0">
@@ -1581,15 +1594,22 @@ export default function AdminChatDrawer({
                                 }`}>
                                   {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                                 </div>
-                                {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
-                                <span
-                                  title={isUserOnline(contact.id) ? 'Online' : 'Offline'}
-                                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
-                                    isSelected
-                                      ? isUserOnline(contact.id) ? 'border-indigo-600 bg-emerald-400' : 'border-indigo-600 bg-slate-400'
-                                      : isUserOnline(contact.id) ? 'border-white bg-emerald-500' : 'border-white bg-slate-300'
-                                  }`}
-                                />
+                                {/* Presence Dot: Hijau (online), Kuning/Amber (idle/afk), Abu-abu (offline) */}
+                                {(() => {
+                                  const status = getUserPresence(contact.id);
+                                  const title = status === 'online' ? 'Online' : status === 'idle' ? 'Sedang Idle / AFK' : 'Offline';
+                                  const colorClass = status === 'online'
+                                    ? (isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500')
+                                    : status === 'idle'
+                                    ? (isSelected ? 'border-indigo-600 bg-amber-400' : 'border-white bg-amber-500')
+                                    : (isSelected ? 'border-indigo-600 bg-slate-400' : 'border-white bg-slate-300');
+                                  return (
+                                    <span
+                                      title={title}
+                                      className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${colorClass}`}
+                                    />
+                                  );
+                                })()}
                               </div>
 
                               <div className="flex-1 min-w-0">
@@ -1679,15 +1699,22 @@ export default function AdminChatDrawer({
                             }`}>
                               {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                             </div>
-                            {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
-                            <span
-                              title={isUserOnline(contact.id) ? 'Online' : 'Offline'}
-                              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
-                                isSelected
-                                  ? isUserOnline(contact.id) ? 'border-indigo-600 bg-emerald-400' : 'border-indigo-600 bg-slate-400'
-                                  : isUserOnline(contact.id) ? 'border-white bg-emerald-500' : 'border-white bg-slate-300'
-                              }`}
-                            />
+                            {/* Presence Dot: Hijau (online), Kuning/Amber (idle/afk), Abu-abu (offline) */}
+                            {(() => {
+                              const status = getUserPresence(contact.id);
+                              const title = status === 'online' ? 'Online' : status === 'idle' ? 'Sedang Idle / AFK' : 'Offline';
+                              const colorClass = status === 'online'
+                                ? (isSelected ? 'border-indigo-600 bg-emerald-400' : 'border-white bg-emerald-500')
+                                : status === 'idle'
+                                ? (isSelected ? 'border-indigo-600 bg-amber-400' : 'border-white bg-amber-500')
+                                : (isSelected ? 'border-indigo-600 bg-slate-400' : 'border-white bg-slate-300');
+                              return (
+                                <span
+                                  title={title}
+                                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${colorClass}`}
+                                />
+                              );
+                            })()}
                           </div>
 
                           <div className="flex-1 min-w-0">
@@ -1771,13 +1798,21 @@ export default function AdminChatDrawer({
                       <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
                         {targetContact.name ? targetContact.name.charAt(0).toUpperCase() : '?'}
                       </div>
-                      {/* Presence Dot: Hijau jika online, Abu-abu jika offline */}
-                      <span
-                        title={isUserOnline(targetContact.id) ? 'Online' : 'Offline'}
-                        className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                          isUserOnline(targetContact.id) ? 'bg-emerald-500' : 'bg-slate-300'
-                        }`}
-                      />
+                      {/* Presence Dot: Hijau (online), Kuning/Amber (idle/afk), Abu-abu (offline) */}
+                      {(() => {
+                        const targetStatus = getUserPresence(targetContact.id);
+                        const dotColor = targetStatus === 'online'
+                          ? 'bg-emerald-500'
+                          : targetStatus === 'idle'
+                          ? 'bg-amber-500'
+                          : 'bg-slate-300';
+                        return (
+                          <span
+                            title={targetStatus === 'online' ? 'Online' : targetStatus === 'idle' ? 'Sedang Idle / AFK' : 'Offline'}
+                            className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${dotColor}`}
+                          />
+                        );
+                      })()}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -1794,13 +1829,28 @@ export default function AdminChatDrawer({
                             {targetContact.role === 'super_admin' ? 'Super Admin' : 'Admin'}
                           </span>
                         )}
-                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                          isUserOnline(targetContact.id)
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-500 border border-slate-200'
-                        }`}>
-                          {isUserOnline(targetContact.id) ? '● Online' : '○ Offline'}
-                        </span>
+                        {(() => {
+                          const targetStatus = getUserPresence(targetContact.id);
+                          if (targetStatus === 'online') {
+                            return (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                ● Online
+                              </span>
+                            );
+                          }
+                          if (targetStatus === 'idle') {
+                            return (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                                🌙 Idle / AFK
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                              ○ Offline
+                            </span>
+                          );
+                        })()}
                       </div>
                       <p className="text-[10px] text-slate-400 truncate">
                         {isSuperAdmin ? (
