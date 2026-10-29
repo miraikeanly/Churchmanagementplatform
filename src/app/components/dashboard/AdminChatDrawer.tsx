@@ -6,7 +6,7 @@ import {
   MessageSquare, X, Send, CheckCircle2, Circle, Clock, AlertCircle,
   Pin, Sparkles, Filter, Check, Trash2, Maximize2, Minimize2,
   ChevronDown, ChevronUp, MoreVertical, GripVertical, User, Calendar,
-  Users, Lock, ShieldCheck, Shield, ChevronRight, Bell
+  Users, Lock, ShieldCheck, Shield, ChevronRight, Bell, Search
 } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
@@ -117,10 +117,12 @@ export default function AdminChatDrawer({
   const [sending, setSending] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // Active channel: 'general' or 'pm'
-  const [activeTabChannel, setActiveTabChannel] = useState<'general' | 'pm'>('general');
-  // For SuperAdmin: selected target admin to chat with
+  // Active channel: 'general', 'pm', or 'users'
+  const [activeTabChannel, setActiveTabChannel] = useState<'general' | 'pm' | 'users'>('general');
+  // For SuperAdmin / DM: selected target admin to chat with
   const [selectedAdminId, setSelectedAdminId] = useState<string>('');
+  // User tab search filter
+  const [userSearchText, setUserSearchText] = useState<string>('');
 
   // Resizable width for sidepanel (default 440px, min 350px, max 850px)
   const [panelWidth, setPanelWidth] = useState<number>(() => {
@@ -678,6 +680,127 @@ export default function AdminChatDrawer({
   const superAdminContacts = otherContacts.filter(c => c.role === 'super_admin');
   const adminContacts = otherContacts.filter(c => c.role === 'admin');
 
+  // ── User Directory Lists (Discord Style) ──
+  const filteredUserList = useMemo(() => {
+    const q = userSearchText.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q)
+    );
+  }, [contacts, userSearchText]);
+
+  const superAdminList = useMemo(() => {
+    return filteredUserList.filter(c => c.role === 'super_admin');
+  }, [filteredUserList]);
+
+  const adminList = useMemo(() => {
+    return filteredUserList.filter(c => c.role !== 'super_admin');
+  }, [filteredUserList]);
+
+  // Render individual user card (Discord Style)
+  const renderUserCard = (u: AdminUserContact, showAccessStatus: boolean) => {
+    const isMe = u.id === user?.id;
+    const unread = unreadByContact[u.id] || 0;
+
+    return (
+      <div
+        key={u.id}
+        onClick={() => {
+          if (!isMe) {
+            setActiveTabChannel('pm');
+            setSelectedAdminId(u.id);
+          }
+        }}
+        className={`group p-2.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+          isMe
+            ? 'bg-slate-50/70 border-slate-200'
+            : 'bg-white hover:bg-indigo-50/50 hover:border-indigo-300 border-slate-200/90 shadow-2xs cursor-pointer active:scale-[0.99]'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Avatar with initial and online dot */}
+          <div className="relative shrink-0">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-xs ${
+              showAccessStatus && u.role === 'super_admin'
+                ? 'bg-gradient-to-tr from-amber-500 to-amber-700'
+                : 'bg-gradient-to-tr from-blue-600 to-indigo-600'
+            }`}>
+              {u.name ? u.name.charAt(0).toUpperCase() : '?'}
+            </div>
+            {/* Online indicator dot */}
+            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-bold text-xs text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
+                {u.name}
+              </span>
+              {isMe && (
+                <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.2 rounded-md">
+                  Anda
+                </span>
+              )}
+              {/* Only show role badge if Super Admin view */}
+              {showAccessStatus && (
+                <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                  u.role === 'super_admin'
+                    ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                    : 'bg-blue-100 text-blue-900 border border-blue-200'
+                }`}>
+                  {u.role === 'super_admin' ? '👑 Super Admin' : '🛡️ Admin'}
+                </span>
+              )}
+            </div>
+
+            {/* Subtitle: If Super Admin view, show Status Akses. If Admin view, ONLY show email without status access */}
+            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+              {showAccessStatus ? (
+                u.role === 'super_admin' ? (
+                  <span className="text-amber-700 font-semibold">Status Akses: Penuh (Full Control)</span>
+                ) : (
+                  <span className="text-slate-500 font-medium">Status Akses: Admin Terbatas</span>
+                )
+              ) : (
+                <span className="text-slate-500">{u.email || 'Admin Tim'}</span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* Right Action */}
+        <div className="flex items-center gap-2 shrink-0">
+          {unread > 0 && (
+            <span className="px-2 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-black animate-pulse shadow-xs">
+              {unread} baru
+            </span>
+          )}
+
+          {!isMe ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTabChannel('pm');
+                setSelectedAdminId(u.id);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 font-bold text-[11px] flex items-center gap-1 transition-all shadow-2xs cursor-pointer active:scale-95"
+              title={`Kirim Direct Message ke ${u.name}`}
+            >
+              <MessageSquare size={12} />
+              <span className="hidden sm:inline">Chat</span>
+            </button>
+          ) : (
+            <span className="text-[11px] font-semibold text-slate-400 px-1">
+              Akun Anda
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ── Minimized Floating Pill ──
   if (isMinimized) {
     return (
@@ -751,14 +874,18 @@ export default function AdminChatDrawer({
       <div className="px-4 py-3 bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white flex items-center justify-between gap-2 border-b border-white/10 flex-shrink-0 select-none">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center text-blue-300 shrink-0">
-            <MessageSquare size={16} />
+            {activeTabChannel === 'users' ? <User size={16} /> : <MessageSquare size={16} />}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm tracking-tight truncate">
-                {activeTabChannel === 'general' ? 'Ruang Chat Admin' : (targetContact?.name ? `Direct Message: ${targetContact.name}` : 'Direct Message')}
+                {activeTabChannel === 'general'
+                  ? 'Ruang Chat Admin'
+                  : activeTabChannel === 'pm'
+                  ? (targetContact?.name ? `Direct Message: ${targetContact.name}` : 'Direct Message')
+                  : 'Daftar Pengguna'}
               </h3>
-              {pendingTasksCount > 0 && (
+              {pendingTasksCount > 0 && activeTabChannel !== 'users' && (
                 <span className="bg-amber-400 text-amber-950 px-2 py-0.2 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0">
                   {pendingTasksCount} To-Do
                 </span>
@@ -767,7 +894,11 @@ export default function AdminChatDrawer({
             <p className="text-[11px] text-blue-200/70 truncate">
               {activeTabChannel === 'general'
                 ? 'Obrolan umum seluruh tim admin & superadmin'
-                : `Direct Message dengan ${targetContact?.name || 'Admin'} (${targetContact?.role === 'super_admin' ? 'Super Admin' : 'Admin'})`}
+                : activeTabChannel === 'pm'
+                ? `Direct Message dengan ${targetContact?.name || 'Admin'} (${targetContact?.role === 'super_admin' ? 'Super Admin' : 'Admin'})`
+                : isSuperAdmin
+                ? 'Daftar seluruh akun Super Admin & Admin beserta status akses'
+                : 'Daftar seluruh anggota tim'}
             </p>
           </div>
         </div>
@@ -803,22 +934,22 @@ export default function AdminChatDrawer({
         </div>
       </div>
 
-      {/* ── Channel Switcher: RUANG BERSAMA vs PM PRIBADI ── */}
+      {/* ── Channel Switcher: RUANG BERSAMA vs DIRECT MESSAGE vs PENGGUNA ── */}
       <div className="px-3 pt-2.5 pb-2 bg-slate-900 border-b border-white/10 flex-shrink-0 space-y-2">
-        <div className="grid grid-cols-2 gap-1.5 bg-slate-800/90 p-1 rounded-xl">
+        <div className="grid grid-cols-3 gap-1 bg-slate-800/90 p-1 rounded-xl">
           <button
             type="button"
             onClick={() => setActiveTabChannel('general')}
-            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
+            className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer relative ${
               activeTabChannel === 'general'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-300 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Users size={14} />
-            <span>Ruang Bersama</span>
+            <Users size={13} className="shrink-0" />
+            <span className="truncate">Ruang Bersama</span>
             {unreadGeneralCount > 0 && (
-              <span className="ml-1 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight animate-pulse shadow-xs">
+              <span className="ml-0.5 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-tight animate-pulse shadow-xs">
                 {unreadGeneralCount}
               </span>
             )}
@@ -827,19 +958,35 @@ export default function AdminChatDrawer({
           <button
             type="button"
             onClick={() => setActiveTabChannel('pm')}
-            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
+            className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer relative ${
               activeTabChannel === 'pm'
                 ? 'bg-indigo-600 text-white shadow-xs'
                 : 'text-slate-300 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Lock size={13} />
-            <span>Direct Message</span>
+            <Lock size={12} className="shrink-0" />
+            <span className="truncate">Direct Message</span>
             {unreadPmCount > 0 && (
-              <span className="ml-1 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[10px] font-black tracking-tight animate-pulse shadow-xs">
+              <span className="ml-0.5 bg-rose-500 text-white px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-tight animate-pulse shadow-xs">
                 {unreadPmCount}
               </span>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTabChannel('users')}
+            className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer relative ${
+              activeTabChannel === 'users'
+                ? 'bg-sky-600 text-white shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <User size={13} className="shrink-0" />
+            <span className="truncate">Pengguna</span>
+            <span className="ml-0.5 text-[9px] px-1 py-0.2 bg-white/10 rounded-full font-semibold">
+              {contacts.length}
+            </span>
           </button>
         </div>
 
@@ -895,8 +1042,117 @@ export default function AdminChatDrawer({
         )}
       </div>
 
-      {/* ── Filter Bar ── */}
-      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
+      {/* ── Conditional Views: PENGGUNA TAB vs CHAT/TASK TAB ── */}
+      {activeTabChannel === 'users' ? (
+        /* ── Discord-Style User Directory ── */
+        <div className="flex-1 flex flex-col min-h-0 bg-slate-100/60 overflow-hidden">
+          {/* Search Header */}
+          <div className="p-3 bg-white border-b border-slate-200 flex items-center gap-2 shrink-0">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={userSearchText}
+                onChange={(e) => setUserSearchText(e.target.value)}
+                placeholder="Cari nama pengguna / admin..."
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              {userSearchText && (
+                <button
+                  type="button"
+                  onClick={() => setUserSearchText('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <span className="text-[11px] font-bold text-slate-500 shrink-0 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+              {filteredUserList.length} User
+            </span>
+          </div>
+
+          {/* User List Body */}
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
+            {filteredUserList.length === 0 ? (
+              <div className="h-48 flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                <User size={24} className="text-slate-300 mb-2" />
+                <p className="font-bold text-slate-600 text-xs">Tidak ada pengguna ditemukan</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Coba gunakan kata kunci pencarian yang lain.</p>
+              </div>
+            ) : isSuperAdmin ? (
+              /* ── SUPER ADMIN VIEW: Dibagi Super Admin & Admin dengan Status Akses ── */
+              <>
+                {/* Super Admin Section */}
+                {superAdminList.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-black tracking-wider uppercase text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80 flex items-center justify-between mb-2">
+                      <span className="flex items-center gap-1.5">
+                        <span>👑</span>
+                        <span>SUPER ADMIN — {superAdminList.length}</span>
+                      </span>
+                      <span className="text-[9px] font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.2 rounded">
+                        Status: Akses Penuh
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {superAdminList.map(u => renderUserCard(u, true))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin Section */}
+                {adminList.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-black tracking-wider uppercase text-blue-800 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/80 flex items-center justify-between mb-2 mt-4">
+                      <span className="flex items-center gap-1.5">
+                        <span>🛡️</span>
+                        <span>ADMIN — {adminList.length}</span>
+                      </span>
+                      <span className="text-[9px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.2 rounded">
+                        Status: Akses Terbatas
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {adminList.map(u => renderUserCard(u, true))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* ── REGULAR ADMIN VIEW: Cuma nama aja tanpa status access ── */
+              <div>
+                <div className="text-[10px] font-black tracking-wider uppercase text-slate-600 bg-slate-200/70 px-3 py-1.5 rounded-xl border border-slate-300/60 flex items-center justify-between mb-2">
+                  <span className="flex items-center gap-1.5">
+                    <span>👥</span>
+                    <span>DAFTAR PENGGUNA — {filteredUserList.length}</span>
+                  </span>
+                  <span className="text-[9px] font-semibold text-slate-500">
+                    Anggota Tim
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {filteredUserList.map(u => renderUserCard(u, false))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* User Tab Bottom Notice */}
+          <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+            <span>Total <strong>{contacts.length}</strong> akun terdaftar</span>
+            <span className="text-indigo-600 font-bold flex items-center gap-1">
+              <MessageSquare size={11} /> Klik untuk kirim Direct Message
+            </span>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── Filter Bar ── */}
+          <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto text-xs py-0.5">
           <button
             type="button"
@@ -1215,6 +1471,8 @@ export default function AdminChatDrawer({
           </button>
         </form>
       </div>
+      </>
+    )}
     </aside>
     </>
   );
