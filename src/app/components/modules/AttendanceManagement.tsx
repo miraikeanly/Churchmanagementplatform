@@ -8,13 +8,15 @@ import {
   Save, Download, Calendar as CalendarIcon, Users, TrendingDown, TrendingUp,
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
-  Trash2, Edit
+  Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   CartesianGrid, ReferenceLine, Cell
 } from 'recharts';
 import { Info } from 'lucide-react';
+import { getAge, parseLocalDate } from '../../../lib/age';
+import { IBADAH_LABEL } from '../../../lib/ibadahOptions';
 
 const KV = 'kv_store_561004a0';
 const SERVICE_TYPE = 'Ibadah Umum';
@@ -29,15 +31,27 @@ function toMember(r: { key: string; value: unknown }): Member | null {
     photoUrl: m.photoUrl || undefined,
     address: m.address,
     phone: m.phone || (Array.isArray(m.phones) && m.phones.length > 0 ? m.phones[0] : undefined),
+    phones: Array.isArray(m.phones) ? m.phones : (m.phone ? [m.phone] : []),
+    email: m.email,
     status: m.status,
     pksName: m.pksName,
     komselId: m.komselId,
     joinDate: m.joinDate,
     birthDate: m.birthDate,
-    spouseName: m.spouseName,
+    birthPlace: m.birthPlace,
     gender: m.gender,
     maritalStatus: m.maritalStatus,
+    marriageDate: m.marriageDate,
+    spouseName: m.spouseName,
+    children: m.children,
+    parentName: m.parentName,
+    parentId: m.parentId,
+    baptismStatus: m.baptismStatus,
+    baptismDate: m.baptismDate,
+    pelayan: m.pelayan,
+    ibadah: m.ibadah,
     createdAt: m.createdAt,
+    _rawKey: r.key,
   };
 }
 
@@ -48,15 +62,27 @@ interface Member {
   photoUrl?: string;
   address?: string;
   phone?: string;
+  phones?: string[];
+  email?: string;
   status?: string;
   pksName?: string;
   komselId?: string;
   joinDate?: string;
   birthDate?: string;
-  spouseName?: string;
+  birthPlace?: string;
   gender?: string;
   maritalStatus?: string;
+  marriageDate?: string;
+  spouseName?: string;
+  children?: { name: string; birthDate?: string }[];
+  parentName?: string;
+  parentId?: string;
+  baptismStatus?: string;
+  baptismDate?: string;
+  pelayan?: string[];
+  ibadah?: string[];
   createdAt?: string;
+  _rawKey?: string;
 }
 
 interface Session {
@@ -239,26 +265,17 @@ function MemberQuickInfoModal({
 
   // Format Birth Date and Age if present
   let birthDateFormatted = '–';
-  let ageString = '';
+  let age = -1;
   if (member.birthDate) {
     try {
-      const d = new Date(member.birthDate);
-      if (!isNaN(d.getTime())) {
+      age = getAge(member.birthDate);
+      const d = parseLocalDate(member.birthDate);
+      if (d && !isNaN(d.getTime())) {
         birthDateFormatted = new Intl.DateTimeFormat('id-ID', {
           day: 'numeric',
           month: 'long',
           year: 'numeric',
         }).format(d);
-
-        const today = new Date();
-        let age = today.getFullYear() - d.getFullYear();
-        const mDiff = today.getMonth() - d.getMonth();
-        if (mDiff < 0 || (mDiff === 0 && today.getDate() < d.getDate())) {
-          age--;
-        }
-        if (age >= 0) {
-          ageString = ` (${age} tahun)`;
-        }
       } else {
         birthDateFormatted = member.birthDate;
       }
@@ -269,13 +286,19 @@ function MemberQuickInfoModal({
 
   // Marital / Spouse info
   const maritalStatusLabel: Record<string, string> = {
-    single: 'Belum Menikah',
+    single: 'Single / Belum Menikah',
     married: 'Menikah',
-    divorced: 'Cerai Hidup',
-    widowed: 'Cerai Mati',
+    divorced: 'Cerai',
+    widowed: 'Duda / Janda',
   };
 
   const spouseLabel = member.gender === 'female' ? 'Nama Suami' : 'Nama Istri';
+
+  // Primary and secondary phones
+  const phoneList = (member.phones && member.phones.length > 0)
+    ? member.phones
+    : member.phone ? [member.phone] : [];
+  const primaryPhone = phoneList[0];
 
   return (
     <div
@@ -283,19 +306,24 @@ function MemberQuickInfoModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Info size={18} className="text-blue-200" />
-            <h3 className="font-bold text-base text-white">Detail Singkat Jemaat</h3>
+        {/* Header Banner */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-5 py-4 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-blue-300">
+              <Info size={17} />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm sm:text-base text-white leading-tight">Detail Jemaat</h3>
+              <p className="text-[11px] text-blue-200/80">Tersinkronisasi otomatis dengan Data Jemaat & Komsel</p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
             title="Tutup"
           >
             <X size={18} />
@@ -303,99 +331,246 @@ function MemberQuickInfoModal({
         </div>
 
         {/* Member Profile Banner */}
-        <div className="p-5 border-b border-gray-100 flex items-center gap-3.5 bg-gray-50/60">
+        <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center gap-3.5 bg-gray-50/70 shrink-0">
           <Avatar name={member.name} photoUrl={member.photoUrl} present={false} />
           <div className="min-w-0 flex-1">
-            <h4 className="font-bold text-gray-900 text-base truncate">{member.name}</h4>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="font-bold text-gray-900 text-base truncate">{member.name}</h4>
+              {member.nickname && (
+                <span className="text-xs font-semibold bg-blue-100/70 text-blue-800 px-2 py-0.5 rounded-full">
+                  ({member.nickname})
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${STATUS_STYLE[member.status || 'active'] || STATUS_STYLE.active}`}>
                 {STATUS_LABEL[member.status || 'active'] || member.status || 'Aktif'}
               </span>
-              {member.maritalStatus && (
-                <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
-                  {maritalStatusLabel[member.maritalStatus] || member.maritalStatus}
+              <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-medium">
+                {member.gender === 'female' ? 'Perempuan' : 'Laki-laki'}
+              </span>
+              {age >= 0 && (
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-semibold border border-indigo-100">
+                  {age} tahun
                 </span>
               )}
             </div>
           </div>
         </div>
 
-        {/* Detail List */}
-        <div className="p-5 space-y-3.5 text-sm">
-          <div className="flex justify-between items-start gap-4">
-            <span className="text-gray-500 font-medium shrink-0">Nama Lengkap</span>
-            <span className="font-semibold text-gray-900 text-right">{member.name}</span>
-          </div>
+        {/* Detail Scrollable Body */}
+        <div className="p-5 overflow-y-auto space-y-4 text-xs sm:text-sm">
+          {/* 1. INFORMASI PERSONAL */}
+          <div className="bg-white rounded-xl border border-gray-100 p-3.5 space-y-2.5">
+            <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+              <User size={13} className="text-blue-500" />
+              Identitas & Personal
+            </h5>
 
-          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
-            <span className="text-gray-500 font-medium shrink-0">Nama Panggilan</span>
-            <span className="font-semibold text-gray-900 text-right">
-              {member.nickname ? member.nickname : <span className="text-gray-400 font-normal">–</span>}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
-            <span className="text-gray-500 font-medium shrink-0">
-              {member.spouseName ? (spouseLabel) : 'Pasangan (Suami/Istri)'}
-            </span>
-            <span className="font-semibold text-gray-900 text-right">
-              {member.spouseName ? (
-                <span className="text-indigo-600">{member.spouseName}</span>
-              ) : (
-                <span className="text-gray-400 font-normal">–</span>
-              )}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
-            <span className="text-gray-500 font-medium shrink-0">Tanggal Lahir</span>
-            <span className="font-semibold text-gray-900 text-right">
-              {birthDateFormatted !== '–' ? (
-                <span>
-                  {birthDateFormatted}
-                  <span className="text-xs text-gray-500 font-normal ml-1">{ageString}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              <div>
+                <span className="text-[11px] text-gray-500 block">Nama Lengkap</span>
+                <span className="font-semibold text-gray-900">{member.name}</span>
+              </div>
+              <div>
+                <span className="text-[11px] text-gray-500 block">Nama Panggilan</span>
+                <span className="font-semibold text-gray-900">
+                  {member.nickname || <span className="text-gray-400 font-normal">–</span>}
                 </span>
-              ) : (
-                <span className="text-gray-400 font-normal">–</span>
-              )}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
-            <span className="text-gray-500 font-medium shrink-0">PKS</span>
-            <span className="font-semibold text-right">
-              {member.pksName ? (
-                <span className="inline-block bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full text-xs font-semibold border border-purple-100">
-                  {member.pksName}
+              </div>
+              <div className="sm:col-span-2">
+                <span className="text-[11px] text-gray-500 block">Tempat &amp; Tanggal Lahir</span>
+                <span className="font-semibold text-gray-900 flex items-center gap-1 mt-0.5">
+                  <Cake size={13} className="text-pink-400 shrink-0" />
+                  {member.birthPlace ? `${member.birthPlace}, ` : ''}
+                  {birthDateFormatted !== '–' ? birthDateFormatted : '–'}
+                  {age >= 0 && <span className="text-gray-500 font-normal ml-1">({age} thn)</span>}
                 </span>
-              ) : (
-                <span className="text-gray-400 font-normal">Non-PKS</span>
-              )}
-            </span>
-          </div>
-
-          {member.phone && (
-            <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
-              <span className="text-gray-500 font-medium shrink-0">No. WhatsApp / HP</span>
-              <a
-                href={`https://wa.me/${member.phone.replace(/[^0-9]/g, '').replace(/^0/, '62')}`}
-                target="_blank"
-                rel="noreferrer"
-                className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline inline-flex items-center gap-1 text-right"
-              >
-                <Phone size={13} />
-                {member.phone}
-              </a>
+              </div>
             </div>
-          )}
+          </div>
+
+          {/* 2. PKS & KOMSEL */}
+          <div className="bg-purple-50/50 rounded-xl border border-purple-100 p-3.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <h5 className="text-[11px] font-bold text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Users size={13} className="text-purple-600" />
+                Komsel (PKS)
+              </h5>
+              {member.pksName ? (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-600 text-white shadow-2xs">
+                  PKS {member.pksName}
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                  Non-PKS
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-purple-900/80">
+              {member.pksName
+                ? `Terhubung sebagai anggota komsel ${member.pksName}.`
+                : 'Belum terdaftar atau belum ditugaskan ke kelompok komsel/PKS.'}
+            </p>
+          </div>
+
+          {/* 3. KELUARGA & PASANGAN */}
+          <div className="bg-white rounded-xl border border-gray-100 p-3.5 space-y-2.5">
+            <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Heart size={13} className="text-rose-500" />
+              Keluarga &amp; Relasi
+            </h5>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              <div>
+                <span className="text-[11px] text-gray-500 block">Status Pernikahan</span>
+                <span className="font-semibold text-gray-900">
+                  {member.maritalStatus ? (maritalStatusLabel[member.maritalStatus] || member.maritalStatus) : '–'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] text-gray-500 block">
+                  {member.spouseName ? spouseLabel : 'Pasangan (Suami/Istri)'}
+                </span>
+                <span className="font-semibold text-gray-900">
+                  {member.spouseName ? (
+                    <span className="text-indigo-600">{member.spouseName}</span>
+                  ) : (
+                    <span className="text-gray-400 font-normal">–</span>
+                  )}
+                </span>
+              </div>
+
+              {/* Anak-anak jika ada */}
+              {member.children && member.children.length > 0 && (
+                <div className="sm:col-span-2 border-t border-gray-50 pt-2">
+                  <span className="text-[11px] text-gray-500 block mb-1">
+                    Anak ({member.children.length}):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {member.children.map((c, idx) => (
+                      <span key={idx} className="bg-slate-50 border border-slate-200 text-slate-800 px-2 py-0.5 rounded-lg text-xs font-medium">
+                        {c.name} {c.birthDate ? `(${c.birthDate})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Orang Tua jika ada */}
+              {member.parentName && (
+                <div className="sm:col-span-2 border-t border-gray-50 pt-2">
+                  <span className="text-[11px] text-gray-500 block">Orang Tua / Anak Dari:</span>
+                  <span className="font-semibold text-gray-900">{member.parentName}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. KONTAK & ALAMAT */}
+          <div className="bg-white rounded-xl border border-gray-100 p-3.5 space-y-2.5">
+            <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Phone size={13} className="text-emerald-500" />
+              Kontak &amp; Domisili
+            </h5>
+
+            <div className="space-y-2 pt-1">
+              {primaryPhone ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-gray-500 block">No. WhatsApp / HP</span>
+                    <span className="font-semibold text-gray-900 font-mono">{primaryPhone}</span>
+                  </div>
+                  <a
+                    href={`https://wa.me/${primaryPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-xs border border-emerald-200 transition-colors"
+                  >
+                    <MessageCircle size={12} />
+                    <span>Chat WA</span>
+                  </a>
+                </div>
+              ) : (
+                <div>
+                  <span className="text-[11px] text-gray-500 block">No. WhatsApp / HP</span>
+                  <span className="text-gray-400 italic">Belum ada nomor telepon</span>
+                </div>
+              )}
+
+              {member.email && (
+                <div className="pt-1.5 border-t border-gray-50">
+                  <span className="text-[11px] text-gray-500 block">Email</span>
+                  <span className="text-blue-600 font-medium">{member.email}</span>
+                </div>
+              )}
+
+              {member.address && (
+                <div className="pt-1.5 border-t border-gray-50">
+                  <span className="text-[11px] text-gray-500 block">Alamat Domisili</span>
+                  <p className="text-gray-700 leading-relaxed flex items-start gap-1 mt-0.5">
+                    <MapPin size={13} className="text-rose-500 shrink-0 mt-0.5" />
+                    <span>{member.address}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 5. KEANGGOTAAN GEREJA & PELAYANAN */}
+          {(member.pelayan?.length || member.ibadah?.length || member.baptismStatus) ? (
+            <div className="bg-white rounded-xl border border-gray-100 p-3.5 space-y-2.5">
+              <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Church size={13} className="text-indigo-500" />
+                Rohani &amp; Pelayanan
+              </h5>
+
+              <div className="space-y-2 pt-1">
+                {member.baptismStatus && (
+                  <div>
+                    <span className="text-[11px] text-gray-500 block">Status Baptis</span>
+                    <span className="font-semibold text-gray-800">
+                      {member.baptismStatus === 'sudah' ? 'Sudah Baptis' : 'Belum Baptis'}
+                    </span>
+                  </div>
+                )}
+
+                {member.ibadah && member.ibadah.length > 0 && (
+                  <div>
+                    <span className="text-[11px] text-gray-500 block mb-1">Komisi / Ibadah Diikuti:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {member.ibadah.map(code => (
+                        <span key={code} className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          {IBADAH_LABEL[code] || code}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {member.pelayan && member.pelayan.length > 0 && (
+                  <div>
+                    <span className="text-[11px] text-gray-500 block mb-1">Bidang Pelayanan:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {member.pelayan.map(p => (
+                        <span key={p} className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-100">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end">
+        <div className="px-5 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 active:scale-95 text-gray-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
           >
             Tutup
           </button>
@@ -2040,17 +2215,43 @@ export default function AttendanceManagement() {
     try {
       if (!silent && members.length === 0) setLoading(true);
       else if (!silent) setRefreshing(true);
-      const [{ data: d1 }, { data: d2 }, { data: sessData }] = await Promise.all([
+      const [{ data: d1 }, { data: d2 }, { data: komselRows }, { data: sessData }] = await Promise.all([
         supabaseAdmin.from(KV).select('key,value').like('key', 'congregation:member:%'),
         supabaseAdmin.from(KV).select('key,value').like('key', 'member:%'),
+        supabaseAdmin.from(KV).select('key,value').like('key', 'komsel:%'),
         supabaseAdmin.from(KV).select('key,value').like('key', 'attendance_session:%'),
       ]);
-      const seen = new Set<string>();
-      const memberList: Member[] = [];
-      for (const r of [...(d1 || []), ...(d2 || [])]) {
-        const m = toMember(r);
-        if (m && !seen.has(m.id)) { seen.add(m.id); memberList.push(m); }
+
+      // Build map of komsel by ID and by PKS Name
+      const komselById = new Map<string, any>();
+      for (const r of komselRows || []) {
+        const v = r.value as any;
+        if (v && v.id) {
+          komselById.set(v.id, v);
+          if (v.pksName) komselById.set(v.pksName.toLowerCase().trim(), v);
+          if (v.name) komselById.set(v.name.toLowerCase().trim(), v);
+        }
       }
+
+      // Merge members: congregation:member:% takes priority over legacy member:%
+      const byId = new Map<string, Member>();
+      const allRows = [...(d2 || []), ...(d1 || [])]; // d1 last so it overrides d2
+      for (const r of allRows) {
+        const m = toMember(r);
+        if (m) {
+          byId.set(m.id, m);
+        }
+      }
+
+      const memberList: Member[] = Array.from(byId.values()).map(m => {
+        // Resolve PKS Name if member has komselId but missing pksName
+        if (!m.pksName && m.komselId && komselById.has(m.komselId)) {
+          const k = komselById.get(m.komselId);
+          return { ...m, pksName: k.pksName || k.name };
+        }
+        return m;
+      });
+
       memberList.sort((a, b) => a.name.localeCompare(b.name, 'id'));
       setMembers(memberList);
 
