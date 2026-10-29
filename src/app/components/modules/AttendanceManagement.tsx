@@ -14,6 +14,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   CartesianGrid, ReferenceLine, Cell
 } from 'recharts';
+import { Info } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
 const SERVICE_TYPE = 'Ibadah Umum';
@@ -24,6 +25,7 @@ function toMember(r: { key: string; value: unknown }): Member | null {
   return {
     id: m.id || r.key,
     name: m.name,
+    nickname: m.nickname,
     photoUrl: m.photoUrl || undefined,
     address: m.address,
     phone: m.phone || (Array.isArray(m.phones) && m.phones.length > 0 ? m.phones[0] : undefined),
@@ -31,6 +33,10 @@ function toMember(r: { key: string; value: unknown }): Member | null {
     pksName: m.pksName,
     komselId: m.komselId,
     joinDate: m.joinDate,
+    birthDate: m.birthDate,
+    spouseName: m.spouseName,
+    gender: m.gender,
+    maritalStatus: m.maritalStatus,
     createdAt: m.createdAt,
   };
 }
@@ -38,6 +44,7 @@ function toMember(r: { key: string; value: unknown }): Member | null {
 interface Member {
   id: string;
   name: string;
+  nickname?: string;
   photoUrl?: string;
   address?: string;
   phone?: string;
@@ -45,6 +52,10 @@ interface Member {
   pksName?: string;
   komselId?: string;
   joinDate?: string;
+  birthDate?: string;
+  spouseName?: string;
+  gender?: string;
+  maritalStatus?: string;
   createdAt?: string;
 }
 
@@ -212,6 +223,184 @@ function Avatar({ name, photoUrl, present }: { name: string; photoUrl?: string; 
   return (
     <div className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 transition-colors ${present ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
       {initials}
+    </div>
+  );
+}
+
+// ─── Modal Info Ringkas Jemaat ────────────────────────────────────────────────
+function MemberQuickInfoModal({
+  member,
+  onClose,
+}: {
+  member: Member | null;
+  onClose: () => void;
+}) {
+  if (!member) return null;
+
+  // Format Birth Date and Age if present
+  let birthDateFormatted = '–';
+  let ageString = '';
+  if (member.birthDate) {
+    try {
+      const d = new Date(member.birthDate);
+      if (!isNaN(d.getTime())) {
+        birthDateFormatted = new Intl.DateTimeFormat('id-ID', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        }).format(d);
+
+        const today = new Date();
+        let age = today.getFullYear() - d.getFullYear();
+        const mDiff = today.getMonth() - d.getMonth();
+        if (mDiff < 0 || (mDiff === 0 && today.getDate() < d.getDate())) {
+          age--;
+        }
+        if (age >= 0) {
+          ageString = ` (${age} tahun)`;
+        }
+      } else {
+        birthDateFormatted = member.birthDate;
+      }
+    } catch {
+      birthDateFormatted = member.birthDate;
+    }
+  }
+
+  // Marital / Spouse info
+  const maritalStatusLabel: Record<string, string> = {
+    single: 'Belum Menikah',
+    married: 'Menikah',
+    divorced: 'Cerai Hidup',
+    widowed: 'Cerai Mati',
+  };
+
+  const spouseLabel = member.gender === 'female' ? 'Nama Suami' : 'Nama Istri';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4 text-white flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Info size={18} className="text-blue-200" />
+            <h3 className="font-bold text-base text-white">Detail Singkat Jemaat</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+            title="Tutup"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Member Profile Banner */}
+        <div className="p-5 border-b border-gray-100 flex items-center gap-3.5 bg-gray-50/60">
+          <Avatar name={member.name} photoUrl={member.photoUrl} present={false} />
+          <div className="min-w-0 flex-1">
+            <h4 className="font-bold text-gray-900 text-base truncate">{member.name}</h4>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${STATUS_STYLE[member.status || 'active'] || STATUS_STYLE.active}`}>
+                {STATUS_LABEL[member.status || 'active'] || member.status || 'Aktif'}
+              </span>
+              {member.maritalStatus && (
+                <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
+                  {maritalStatusLabel[member.maritalStatus] || member.maritalStatus}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Detail List */}
+        <div className="p-5 space-y-3.5 text-sm">
+          <div className="flex justify-between items-start gap-4">
+            <span className="text-gray-500 font-medium shrink-0">Nama Lengkap</span>
+            <span className="font-semibold text-gray-900 text-right">{member.name}</span>
+          </div>
+
+          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
+            <span className="text-gray-500 font-medium shrink-0">Nama Panggilan</span>
+            <span className="font-semibold text-gray-900 text-right">
+              {member.nickname ? member.nickname : <span className="text-gray-400 font-normal">–</span>}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
+            <span className="text-gray-500 font-medium shrink-0">
+              {member.spouseName ? (spouseLabel) : 'Pasangan (Suami/Istri)'}
+            </span>
+            <span className="font-semibold text-gray-900 text-right">
+              {member.spouseName ? (
+                <span className="text-indigo-600">{member.spouseName}</span>
+              ) : (
+                <span className="text-gray-400 font-normal">–</span>
+              )}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
+            <span className="text-gray-500 font-medium shrink-0">Tanggal Lahir</span>
+            <span className="font-semibold text-gray-900 text-right">
+              {birthDateFormatted !== '–' ? (
+                <span>
+                  {birthDateFormatted}
+                  <span className="text-xs text-gray-500 font-normal ml-1">{ageString}</span>
+                </span>
+              ) : (
+                <span className="text-gray-400 font-normal">–</span>
+              )}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
+            <span className="text-gray-500 font-medium shrink-0">PKS</span>
+            <span className="font-semibold text-right">
+              {member.pksName ? (
+                <span className="inline-block bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full text-xs font-semibold border border-purple-100">
+                  {member.pksName}
+                </span>
+              ) : (
+                <span className="text-gray-400 font-normal">Non-PKS</span>
+              )}
+            </span>
+          </div>
+
+          {member.phone && (
+            <div className="flex justify-between items-start gap-4 border-t border-gray-100 pt-3">
+              <span className="text-gray-500 font-medium shrink-0">No. WhatsApp / HP</span>
+              <a
+                href={`https://wa.me/${member.phone.replace(/[^0-9]/g, '').replace(/^0/, '62')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline inline-flex items-center gap-1 text-right"
+              >
+                <Phone size={13} />
+                {member.phone}
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 active:scale-95 text-gray-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -550,6 +739,7 @@ function DailyInput({
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState('');
+  const [selectedMemberForInfo, setSelectedMemberForInfo] = useState<Member | null>(null);
 
   const sessionId = `sess_${date}_Ibadah_Umum`;
   const existingSession = useMemo(() => sessions.find(s => s.id === sessionId), [sessions, sessionId]);
@@ -890,6 +1080,17 @@ function DailyInput({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-gray-900 truncate">{m.name}</p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedMemberForInfo(m);
+                      }}
+                      className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                      title="Lihat detail singkat jemaat"
+                    >
+                      <Info size={15} />
+                    </button>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
                       {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
                     </span>
@@ -911,6 +1112,12 @@ function DailyInput({
           })
         )}
       </div>
+
+      {/* Quick Info Modal */}
+      <MemberQuickInfoModal
+        member={selectedMemberForInfo}
+        onClose={() => setSelectedMemberForInfo(null)}
+      />
 
       {/* Calendar Picker Modal */}
       <CalendarModal
@@ -970,6 +1177,7 @@ function ReportSummary({
 
   const [search, setSearch] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [selectedMemberForInfo, setSelectedMemberForInfo] = useState<Member | null>(null);
 
   const currentWeek = useMemo(() => getWeekInfo(selectedDate), [selectedDate]);
   const sundays = useMemo(() => sundaysInMonth(year, month), [year, month]);
@@ -1704,6 +1912,17 @@ function ReportSummary({
                     <td className="sticky left-10 bg-inherit px-4 py-3 font-medium text-gray-900">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span>{m.name}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedMemberForInfo(m);
+                          }}
+                          className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                          title="Lihat detail singkat jemaat"
+                        >
+                          <Info size={14} />
+                        </button>
                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
                           {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
                         </span>
@@ -1755,6 +1974,17 @@ function ReportSummary({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="font-semibold text-sm text-gray-900 break-words">{m.name}</p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedMemberForInfo(m);
+                  }}
+                  className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                  title="Lihat detail singkat jemaat"
+                >
+                  <Info size={14} />
+                </button>
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
                   {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
                 </span>
@@ -1765,6 +1995,12 @@ function ReportSummary({
           </article>;
         })}
       </div>
+
+      {/* Quick Info Modal */}
+      <MemberQuickInfoModal
+        member={selectedMemberForInfo}
+        onClose={() => setSelectedMemberForInfo(null)}
+      />
 
       {/* Calendar Picker Modal */}
       <CalendarModal
