@@ -39,7 +39,9 @@ export const KOMISI_MAP = {
   'koemas': 'Komisi Lansia (Koemas)'
 };
 
-export const DATABASE_URL = process.env.DATABASE_URL;
+export const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgresql://neondb_owner:npg_MrsRLhB3Zmy5@ep-weathered-math-b48091qo-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
 // Function to normalize any incoming phone number to international 62 format
 export function normalizePhone(raw) {
