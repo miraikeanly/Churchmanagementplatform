@@ -62,6 +62,16 @@ async function sendBotMessage(jid, content) {
   return sent;
 }
 
+import { restoreAuthFromDb, syncAuthToDb } from './auth-sync.js';
+
+let syncTimeout = null;
+function debouncedSyncAuth() {
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    syncAuthToDb().catch(console.error);
+  }, 10000);
+}
+
 /**
  * Start WhatsApp Socket Connection
  */
@@ -70,6 +80,9 @@ async function startBot() {
   console.log('🤖 GBI JELAMBAR TIMUR - WHATSAPP MODERATOR BOT');
   console.log(`🔒 Moderator Resmi: +${ALLOWED_MODERATOR_NUMBER}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  // Pulihkan auth dari Neon DB jika di server cloud (Railway / Render)
+  await restoreAuthFromDb();
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
@@ -80,7 +93,10 @@ async function startBot() {
     browser: ['GBI Jelambar Timur Bot', 'Safari', '3.0']
   });
 
-  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('creds.update', async () => {
+    await saveCreds();
+    debouncedSyncAuth();
+  });
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
