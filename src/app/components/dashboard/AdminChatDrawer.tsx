@@ -129,6 +129,18 @@ export default function AdminChatDrawer({
   const [presenceMap, setPresenceMap] = useState<Record<string, number>>({});
 
   // Resizable width for sidepanel (default 760px for 2-column Discord layout, min 480px, max 1050px)
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('admin_chat_panel_width');
@@ -191,8 +203,8 @@ export default function AdminChatDrawer({
         if (res.success && Array.isArray(res.data)) {
           const validUsers = (res.data as AdminUserContact[]).filter(u => u.status === 'approved' && u.role !== 'jemaat');
           setContacts(validUsers);
-          // Auto select first target contact if none selected
-          if (!selectedAdminId) {
+          // Auto select first target contact if none selected (desktop only)
+          if (!selectedAdminId && typeof window !== 'undefined' && window.innerWidth >= 768) {
             const otherUsers = validUsers.filter(u => u.id !== user?.id);
             if (isSuperAdmin) {
               // Super admin defaults to first other user (admin or another super_admin)
@@ -644,11 +656,10 @@ export default function AdminChatDrawer({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Find target contact for PM
-  const targetContact = contacts.find(c => c.id === selectedAdminId) ||
-    (isSuperAdmin
-      ? contacts.find(c => c.id !== user?.id)
-      : contacts.find(c => c.role === 'super_admin' && c.id !== user?.id));
+  // Find target contact for PM (only when an admin is actively selected)
+  const targetContact = selectedAdminId
+    ? (contacts.find(c => c.id === selectedAdminId) || null)
+    : null;
 
   // ── Send Message or Task ──
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -936,16 +947,19 @@ export default function AdminChatDrawer({
   }
 
   // ── Container Classes based on Mode ──
-  const containerClasses = mode === 'sidepanel'
+  const containerClasses = isMobile
+    ? `fixed inset-0 z-[70] bg-white flex flex-col shadow-2xl`
+    : mode === 'sidepanel'
     ? `fixed top-0 right-0 bottom-0 z-[70] bg-white border-l border-slate-200 shadow-2xl flex flex-col transition-all duration-75`
     : `fixed bottom-5 right-5 z-[70] rounded-2xl shadow-2xl border border-slate-200 flex flex-col bg-white overflow-hidden animate-in fade-in zoom-in-95 duration-150`;
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const containerStyle: React.CSSProperties = mode === 'sidepanel'
-    ? { width: isMobile ? '100vw' : `${panelWidth}px` }
+  const containerStyle: React.CSSProperties = isMobile
+    ? { width: '100vw', height: '100dvh', maxHeight: '100dvh', maxWidth: '100vw' }
+    : mode === 'sidepanel'
+    ? { width: `${panelWidth}px` }
     : {
-        width: isMobile ? 'calc(100vw - 24px)' : `${floatingWidth}px`,
-        height: isMobile ? 'calc(100vh - 80px)' : `${floatingHeight}px`,
+        width: `${floatingWidth}px`,
+        height: `${floatingHeight}px`,
         maxWidth: 'calc(100vw - 24px)',
         maxHeight: 'calc(100vh - 40px)',
       };
@@ -1017,7 +1031,7 @@ export default function AdminChatDrawer({
               {activeTabChannel === 'general'
                 ? 'Obrolan umum seluruh tim admin & superadmin'
                 : activeTabChannel === 'pm'
-                ? `Direct Message dengan ${targetContact?.name || 'Admin'} (${targetContact?.role === 'super_admin' ? 'Super Admin' : 'Admin'})`
+                ? (targetContact ? `Direct Message dengan ${targetContact.name} (${targetContact.role === 'super_admin' ? 'Super Admin' : 'Admin'})` : 'Pilih kontak untuk mengobrol secara privat')
                 : isSuperAdmin
                 ? 'Daftar seluruh akun Super Admin & Admin beserta status akses'
                 : 'Daftar seluruh anggota tim'}
@@ -1030,7 +1044,7 @@ export default function AdminChatDrawer({
           <button
             type="button"
             onClick={() => setMode(m => m === 'sidepanel' ? 'floating' : 'sidepanel')}
-            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+            className="hidden md:inline-flex p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
             title={mode === 'sidepanel' ? 'Ganti ke mode Pop-up Mengambang' : 'Tempelkan ke Panel Kanan (Sidepanel)'}
           >
             {mode === 'sidepanel' ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
@@ -1318,7 +1332,7 @@ export default function AdminChatDrawer({
           </div>
 
           {/* Input Area */}
-          <div className="p-3.5 bg-white border-t border-slate-200 flex-shrink-0 space-y-2.5">
+          <div className="p-3.5 pb-5 md:pb-3.5 bg-white border-t border-slate-200 flex-shrink-0 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -1781,21 +1795,21 @@ export default function AdminChatDrawer({
           }`}>
             {targetContact ? (
               <>
-                {/* Contact Chat Header */}
-                <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                {/* 1. Contact Chat Header */}
+                <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     {/* Mobile back to contact list button */}
                     <button
                       type="button"
                       onClick={() => setSelectedAdminId('')}
-                      className="md:hidden p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
+                      className="md:hidden -ml-1 p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition-colors shrink-0"
                       title="Kembali ke daftar kontak"
                     >
-                      <ChevronLeft size={18} />
+                      <ChevronLeft size={20} />
                     </button>
 
                     <div className="relative shrink-0">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs">
                         {targetContact.name ? targetContact.name.charAt(0).toUpperCase() : '?'}
                       </div>
                       {/* Presence Dot: Hijau (online), Kuning/Amber (idle/afk), Abu-abu (offline) */}
@@ -1809,19 +1823,19 @@ export default function AdminChatDrawer({
                         return (
                           <span
                             title={targetStatus === 'online' ? 'Online' : targetStatus === 'idle' ? 'Sedang Idle / AFK' : 'Offline'}
-                            className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${dotColor}`}
+                            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${dotColor}`}
                           />
                         );
                       })()}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-xs text-slate-900 truncate">
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
                           {targetContact.name}
                         </span>
                         {isSuperAdmin && (
-                          <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                          <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded-full shrink-0 ${
                             targetContact.role === 'super_admin'
                               ? 'bg-amber-100 text-amber-900 border border-amber-200'
                               : 'bg-blue-100 text-blue-900 border border-blue-200'
@@ -1833,26 +1847,26 @@ export default function AdminChatDrawer({
                           const targetStatus = getUserPresence(targetContact.id);
                           if (targetStatus === 'online') {
                             return (
-                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
                                 ● Online
                               </span>
                             );
                           }
                           if (targetStatus === 'idle') {
                             return (
-                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-200 shrink-0">
                                 🌙 Idle / AFK
                               </span>
                             );
                           }
                           return (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-500 border border-slate-200 shrink-0">
                               ○ Offline
                             </span>
                           );
                         })()}
                       </div>
-                      <p className="text-[10px] text-slate-400 truncate">
+                      <p className="text-[10.5px] text-slate-400 truncate mt-0.5">
                         {isSuperAdmin ? (
                           targetContact.role === 'super_admin' ? 'Status: Akses Penuh' : 'Status: Akses Terbatas'
                         ) : (
@@ -1861,13 +1875,15 @@ export default function AdminChatDrawer({
                       </p>
                     </div>
                   </div>
+                </div>
 
-                  {/* Filter tabs inside active DM (Clean pill buttons, no overlapping) */}
-                  <div className="flex items-center gap-1 text-[11px] shrink-0 bg-slate-200/60 p-0.5 rounded-lg border border-slate-300/40">
+                {/* 2. Filter Sub-Bar for Direct Message (Clean and isolated, never overlaps) */}
+                <div className="px-3.5 py-1.5 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between gap-1.5 shrink-0 overflow-x-auto no-scrollbar">
+                  <div className="flex items-center gap-1 text-[11px] shrink-0 bg-slate-200/70 p-0.5 rounded-lg border border-slate-300/50">
                     <button
                       type="button"
                       onClick={() => setFilter('all')}
-                      className={`px-2 py-0.8 rounded-md font-bold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer whitespace-nowrap ${
                         filter === 'all' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white/60'
                       }`}
                     >
@@ -1876,7 +1892,7 @@ export default function AdminChatDrawer({
                     <button
                       type="button"
                       onClick={() => setFilter('pending')}
-                      className={`px-2 py-0.8 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                         filter === 'pending' ? 'bg-amber-500 text-slate-950 shadow-2xs' : 'text-slate-600 hover:bg-white/60'
                       }`}
                     >
@@ -1886,7 +1902,7 @@ export default function AdminChatDrawer({
                     <button
                       type="button"
                       onClick={() => setFilter('done')}
-                      className={`px-2 py-0.8 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                         filter === 'done' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white/60'
                       }`}
                     >
@@ -2072,7 +2088,7 @@ export default function AdminChatDrawer({
                 </div>
 
                 {/* DM Input Form */}
-                <div className="p-3 bg-white border-t border-slate-200 flex-shrink-0 space-y-2">
+                <div className="p-3 pb-5 md:pb-3 bg-white border-t border-slate-200 flex-shrink-0 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs">
                     <label className="flex items-center gap-1.5 cursor-pointer select-none">
                       <input
