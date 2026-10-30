@@ -53,32 +53,32 @@ export function normalizePhone(raw) {
   return cleaned;
 }
 
+export const ALLOWED_MODERATOR_LID = '114426619383825';
+
 export function isAuthorizedModerator(senderJid) {
   const norm = normalizePhone(senderJid);
   return norm === ALLOWED_MODERATOR_NUMBER;
 }
 
-export function isAuthorizedSender(msg, sock) {
-  const remoteJid = msg?.key?.remoteJid || '';
-  const participant = msg?.key?.participant || '';
+/**
+ * Memeriksa apakah pesan ini berada di ruang chat "Message yourself" (Diri Sendiri).
+ * Jika pesan datang dari chat teman, keluarga, atau orang lain, fungsi ini return FALSE
+ * dan bot WAJIB diam (silent) tanpa membalas apapun.
+ */
+export function isSelfChatOrBotChannel(remoteJid, sock) {
+  if (!remoteJid || remoteJid.includes('@g.us')) return false;
 
-  // 1. If it's "Message yourself" (fromMe is true and not a group)
-  if (msg?.key?.fromMe && !remoteJid.includes('@g.us')) {
+  const cleanRemote = remoteJid.split(':')[0].split('@')[0];
+  const myLid = sock?.user?.lid ? sock.user.lid.split(':')[0].split('@')[0] : ALLOWED_MODERATOR_LID;
+  const myPhone = sock?.user?.id ? normalizePhone(sock.user.id) : ALLOWED_MODERATOR_NUMBER;
+
+  // Hanya izinkan jika chat tersebut adalah chat ke akun sendiri (LID sendiri atau Nomor sendiri)
+  if (cleanRemote === myLid || cleanRemote === ALLOWED_MODERATOR_LID) {
     return true;
   }
 
-  // 2. Check if remoteJid or participant matches allowed phone number
   const normRemote = normalizePhone(remoteJid);
-  const normParticipant = normalizePhone(participant);
-
-  if (normRemote === ALLOWED_MODERATOR_NUMBER || normParticipant === ALLOWED_MODERATOR_NUMBER) {
-    return true;
-  }
-
-  // 3. Check against bot user's LID
-  const myLid = sock?.user?.lid?.split(':')[0]?.split('@')[0];
-  const remoteId = remoteJid.split(':')[0]?.split('@')[0];
-  if (myLid && remoteId && myLid === remoteId) {
+  if (normRemote === myPhone || normRemote === ALLOWED_MODERATOR_NUMBER) {
     return true;
   }
 

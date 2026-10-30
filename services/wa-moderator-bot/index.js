@@ -11,7 +11,7 @@ import pino from 'pino';
 import {
   ALLOWED_MODERATOR_NUMBER,
   isAuthorizedModerator,
-  isAuthorizedSender,
+  isSelfChatOrBotChannel,
   normalizePhone
 } from './config.js';
 import {
@@ -148,16 +148,10 @@ async function startBot() {
       const remoteJid = msg.key?.remoteJid;
       if (!remoteJid || remoteJid.includes('@g.us')) continue; // Abaikan pesan grup (hanya japri)
 
-      // ── KEAMANAN KETAT: Whitelist Nomor Moderator & Message Yourself ──
-      if (!isAuthorizedSender(msg, sock)) {
-        const sender = normalizePhone(remoteJid);
-        console.log(`⛔ Akses ditolak untuk nomor tidak dikenal: +${sender} (${remoteJid})`);
-        await sendBotMessage(remoteJid, {
-          text:
-            `⛔ *Akses Ditolak*\n` +
-            `Bot ini dikonfigurasi secara privat khusus untuk Moderator resmi GBI Jelambar Timur.\n` +
-            `Nomor Anda (+${sender}) tidak terdaftar dalam whitelist.`
-        });
+      // ── FILTER KETAT: Bot HANYA aktif di ruang chat "Message yourself" (Diri Sendiri) ──
+      // Jika Anda sedang chat dengan teman, keluarga, jemaat, atau orang lain chat ke Anda:
+      // BOT HARUS DIAM DAN LEWATI 100%! JANGAN PERNAH BALAS ATAU GANGGU CHAT PRIBADI!
+      if (!isSelfChatOrBotChannel(remoteJid, sock)) {
         continue;
       }
 
