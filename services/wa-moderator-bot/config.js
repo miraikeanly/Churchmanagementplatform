@@ -55,3 +55,30 @@ export function isAuthorizedModerator(senderJid) {
   const norm = normalizePhone(senderJid);
   return norm === ALLOWED_MODERATOR_NUMBER;
 }
+
+export function isAuthorizedSender(msg, sock) {
+  const remoteJid = msg?.key?.remoteJid || '';
+  const participant = msg?.key?.participant || '';
+
+  // 1. If it's "Message yourself" (fromMe is true and not a group)
+  if (msg?.key?.fromMe && !remoteJid.includes('@g.us')) {
+    return true;
+  }
+
+  // 2. Check if remoteJid or participant matches allowed phone number
+  const normRemote = normalizePhone(remoteJid);
+  const normParticipant = normalizePhone(participant);
+
+  if (normRemote === ALLOWED_MODERATOR_NUMBER || normParticipant === ALLOWED_MODERATOR_NUMBER) {
+    return true;
+  }
+
+  // 3. Check against bot user's LID
+  const myLid = sock?.user?.lid?.split(':')[0]?.split('@')[0];
+  const remoteId = remoteJid.split(':')[0]?.split('@')[0];
+  if (myLid && remoteId && myLid === remoteId) {
+    return true;
+  }
+
+  return false;
+}

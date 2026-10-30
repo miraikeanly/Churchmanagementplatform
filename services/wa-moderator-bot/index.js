@@ -11,6 +11,7 @@ import pino from 'pino';
 import {
   ALLOWED_MODERATOR_NUMBER,
   isAuthorizedModerator,
+  isAuthorizedSender,
   normalizePhone
 } from './config.js';
 import {
@@ -46,6 +47,20 @@ if (!fs.existsSync(AUTH_DIR)) {
 let sock = null;
 let lastSeenAlertId = 0n;
 let isPushAlertEnabled = true;
+const botSentMsgIds = new Set();
+
+async function sendBotMessage(jid, content) {
+  if (!sock) return;
+  const sent = await sock.sendMessage(jid, content);
+  if (sent?.key?.id) {
+    botSentMsgIds.add(sent.key.id);
+    if (botSentMsgIds.size > 300) {
+      const first = botSentMsgIds.values().next().value;
+      botSentMsgIds.delete(first);
+    }
+  }
+  return sent;
+}
 
 /**
  * Start WhatsApp Socket Connection
@@ -78,11 +93,11 @@ async function startBot() {
     }
 
     if (connection === 'close') {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log('⚠️ Koneksi terputus. Mencoba menghubungkan kembali...', shouldReconnect);
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      console.log('⚠️ Koneksi terputus (status code:', statusCode, '). Error:', lastDisconnect?.error?.message || lastDisconnect?.error);
       if (shouldReconnect) {
-        setTimeout(startBot, 3000);
+        setTimeout(startBot, 4000);
       } else {
         console.log('❌ Sesi WhatsApp telah keluar (Logged out). Silakan restart bot untuk scan QR baru.');
       }
@@ -109,17 +124,19 @@ async function startBot() {
     if (type !== 'notify') return;
 
     for (const msg of messages) {
-      // Abaikan pesan dari diri sendiri jika bukan ke nomor bot
-      if (msg.key.fromMe) continue;
+      if (!msg.message) continue;
 
-      const remoteJid = msg.key.remoteJid;
+      // Abaikan jika pesan ini adalah pesan balasan yang dikirim oleh bot sendiri
+      if (msg.key?.id && botSentMsgIds.has(msg.key.id)) continue;
+
+      const remoteJid = msg.key?.remoteJid;
       if (!remoteJid || remoteJid.includes('@g.us')) continue; // Abaikan pesan grup (hanya japri)
 
-      // ── KEAMANAN KETAT: Whitelist Nomor Moderator ──
-      if (!isAuthorizedModerator(remoteJid)) {
+      // ── KEAMANAN KETAT: Whitelist Nomor Moderator & Message Yourself ──
+      if (!isAuthorizedSender(msg, sock)) {
         const sender = normalizePhone(remoteJid);
-        console.log(`⛔ Akses ditolak untuk nomor tidak dikenal: +${sender}`);
-        await sock.sendMessage(remoteJid, {
+        console.log(`⛔ Akses ditolak untuk nomor tidak dikenal: +${sender} (${remoteJid})`);
+        await sendBotMessage(remoteJid, {
           text:
             `⛔ *Akses Ditolak*\n` +
             `Bot ini dikonfigurasi secara privat khusus untuk Moderator resmi GBI Jelambar Timur.\n` +
@@ -137,13 +154,29 @@ async function startBot() {
       const trimmed = body.trim().toLowerCase();
       if (!trimmed) continue;
 
-      console.log(`📥 [MODERATOR] Menerima perintah: "${body}"`);
+      // Abaikan jika pesan ini berawalan format khas pesan bot agar tidak looping
+      if (
+        body.startsWith('🏛️') ||
+        body.startsWith('📊') ||
+        body.startsWith('⛪') ||
+        body.startsWith('👥') ||
+        body.startsWith('📝') ||
+        body.startsWith('⚠️') ||
+        body.startsWith('🔔') ||
+        body.startsWith('🚨') ||
+        body.startsWith('⏳') ||
+        body.startsWith('❓')
+      ) {
+        continue;
+      }
+
+      console.log(`📥 [MODERATOR] Menerima perintah: "${body}" dari ${remoteJid}`);
 
       try {
         await handleModeratorCommand(remoteJid, trimmed, body);
       } catch (err) {
         console.error('Error saat memproses perintah:', err);
-        await sock.sendMessage(remoteJid, {
+        await sendBotMessage(remoteJid, {
           text: `❌ Terjadi kesalahan saat memproses data:\n_${err.message}_`
         });
       }
@@ -158,25 +191,25 @@ async function handleModeratorCommand(remoteJid, trimmed, originalBody) {
   // 1. Menu Utama
   if (['menu', 'help', 'bantuan', 'halo', 'hi', 'start', 'p'].includes(trimmed)) {
     const text = formatMainMenu();
-    await sock.sendMessage(remoteJid, { text });
+    await sendBotMessage(remoteJid, { text });
     return;
   }
 
   // 2. Ringkasan Hari Ini
   if (trimmed === '1' || trimmed.startsWith('ringkasan') || trimmed === 'today') {
-    await sock.sendMessage(remoteJid, { text: '⏳ _Mengambil ringkasan data hari ini..._' });
+    await sendBotMessage(remoteJid, { text: '⏳ _Mengambil ringkasan data hari ini..._' });
     const data = await getDailySummary();
     const text = formatDailySummary(data);
-    await sock.sendMessage(remoteJid, { text });
+    await sendBotMessage(remoteJid, { text });
     return;
   }
 
   // 3. Absensi Ibadah Umum
   if (trimmed === '2' || trimmed === 'absen umum' || trimmed === 'ibadah umum') {
-    await sock.sendMessage(remoteJid, { text: '⏳ _Mengambil riwayat absensi ibadah umum..._' });
+    await sendBotMessage(remoteJid, { text: '⏳ _Mengambil riwayat absensi ibadah umum..._' });
     const sessions = await getRecentGeneralSessions();
     const text = formatGeneralSessions(sessions);
-    await sock.sendMessage(remoteJid, { text });
+    await sendBotMessage(remoteJid, { text });
     return;
   }
 
@@ -185,38 +218,38 @@ async function handleModeratorCommand(remoteJid, trimmed, originalBody) {
   if (trimmed.startsWith('absen ') || (dateMatch && !trimmed.startsWith('komisi'))) {
     const targetDate = dateMatch ? dateMatch[1] : trimmed.replace('absen', '').trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
-      await sock.sendMessage(remoteJid, { text: `⏳ _Mencari data kehadiran ibadah tanggal ${targetDate}..._` });
+      await sendBotMessage(remoteJid, { text: `⏳ _Mencari data kehadiran ibadah tanggal ${targetDate}..._` });
       const detail = await getGeneralAttendanceDetail(targetDate);
       const text = formatGeneralDetail(detail);
-      await sock.sendMessage(remoteJid, { text });
+      await sendBotMessage(remoteJid, { text });
       return;
     }
   }
 
   // 5. Absensi Komisi
   if (trimmed === '3' || trimmed === 'absen komisi' || trimmed === 'komisi') {
-    await sock.sendMessage(remoteJid, { text: '⏳ _Mengambil data absensi komisi..._' });
+    await sendBotMessage(remoteJid, { text: '⏳ _Mengambil data absensi komisi..._' });
     const sessions = await getRecentKomisiSessions();
     const text = formatKomisiSessions(sessions);
-    await sock.sendMessage(remoteJid, { text });
+    await sendBotMessage(remoteJid, { text });
     return;
   }
 
   // 6. Log Perubahan Data (Audit Trail)
   if (trimmed === '4' || trimmed === 'log' || trimmed === 'perubahan' || trimmed === 'audit') {
-    await sock.sendMessage(remoteJid, { text: '⏳ _Mengambil catatan riwayat perubahan data terbaru..._' });
+    await sendBotMessage(remoteJid, { text: '⏳ _Mengambil catatan riwayat perubahan data terbaru..._' });
     const logs = await getRecentAuditLogs(8);
     const text = formatAuditLogs(logs);
-    await sock.sendMessage(remoteJid, { text });
+    await sendBotMessage(remoteJid, { text });
     return;
   }
 
   // 7. Kesehatan & Error Sistem
   if (trimmed === '5' || trimmed === 'error' || trimmed === 'bug' || trimmed === 'sistem' || trimmed === 'health') {
-    await sock.sendMessage(remoteJid, { text: '⏳ _Memeriksa kesehatan sistem & log kendala teknis..._' });
+    await sendBotMessage(remoteJid, { text: '⏳ _Memeriksa kesehatan sistem & log kendala teknis..._' });
     const health = await getSystemHealth();
     const text = formatSystemHealth(health);
-    await sock.sendMessage(remoteJid, { text });
+    await sendBotMessage(remoteJid, { text });
     return;
   }
 
@@ -240,12 +273,12 @@ async function handleModeratorCommand(remoteJid, trimmed, originalBody) {
       `💡 _Ketik \`notif on\` untuk menyalakan atau \`notif off\` untuk mematikan._\n` +
       `_Ketik *menu* untuk kembali._`;
 
-    await sock.sendMessage(remoteJid, { text });
+    await sendBotMessage(remoteJid, { text });
     return;
   }
 
   // Perintah Tidak Dikenal
-  await sock.sendMessage(remoteJid, {
+  await sendBotMessage(remoteJid, {
     text:
       `❓ *Perintah Tidak Dikenali*\n` +
       `Ketik *menu* untuk melihat daftar opsi angka pemantauan yang tersedia.`
@@ -270,7 +303,7 @@ function startRealtimeAlertWatcher() {
         for (const alert of res.alerts) {
           console.log(`🚨 [ALERT PUSH] Mengirim notifikasi perubahan data ID #${alert.id} ke Moderator...`);
           const text = formatAlertNotification(alert);
-          await sock.sendMessage(moderatorJid, { text });
+          await sendBotMessage(moderatorJid, { text });
           // Jeda sedikit agar tidak spam
           await new Promise(r => setTimeout(r, 1000));
         }
