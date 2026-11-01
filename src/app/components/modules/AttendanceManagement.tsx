@@ -137,10 +137,14 @@ export function buildAttendanceFamilyGroups(
     memberById.set(m.id, m);
   }
 
-  // Disjoint-set / Union-Find to group related members into family clusters
+  // Disjoint-set / Union-Find with union-by-size to group related members into stable family clusters
   const parentMap = new Map<string, string>();
+  const sizeMap = new Map<string, number>();
   const find = (id: string): string => {
-    if (!parentMap.has(id)) parentMap.set(id, id);
+    if (!parentMap.has(id)) {
+      parentMap.set(id, id);
+      sizeMap.set(id, 1);
+    }
     if (parentMap.get(id) !== id) {
       parentMap.set(id, find(parentMap.get(id)!));
     }
@@ -150,7 +154,16 @@ export function buildAttendanceFamilyGroups(
     const root1 = find(id1);
     const root2 = find(id2);
     if (root1 !== root2) {
-      parentMap.set(root1, root2);
+      const size1 = sizeMap.get(root1) || 1;
+      const size2 = sizeMap.get(root2) || 1;
+      // Preserve existing cluster root: attach smaller/newer root to larger/first root
+      if (size1 >= size2) {
+        parentMap.set(root2, root1);
+        sizeMap.set(root1, size1 + size2);
+      } else {
+        parentMap.set(root1, root2);
+        sizeMap.set(root2, size1 + size2);
+      }
     }
   };
 
@@ -1322,6 +1335,9 @@ function DailyInput({
   const [linkMemberSearch, setLinkMemberSearch] = useState('');
   const [savingLink, setSavingLink] = useState(false);
 
+  const [recentlyEditedFamilyKey, setRecentlyEditedFamilyKey] = useState<string | null>(null);
+  const [keepModalOpenAfterAdd, setKeepModalOpenAfterAdd] = useState(false);
+
   // Load persisted custom family links, unlinks, and role overrides on mount
   useEffect(() => {
     (async () => {
@@ -1347,7 +1363,11 @@ function DailyInput({
   }, []);
 
   // Save custom family link: links a member from congregation data to a family under a specific category
-  const handleAddMemberToFamily = async (selectedMember: Member, category: 'parent' | 'child' | 'grandchild') => {
+  const handleAddMemberToFamily = async (
+    selectedMember: Member,
+    category: 'parent' | 'child' | 'grandchild',
+    keepModalOpen: boolean = keepModalOpenAfterAdd
+  ) => {
     if (!linkTargetFamily || !selectedMember) return;
     const anchorMember = linkTargetFamily.allMembers[0];
     if (!anchorMember || anchorMember.id === selectedMember.id) return;
@@ -1385,12 +1405,54 @@ function DailyInput({
       setCustomFamilyLinks(newLinks);
       setCustomFamilyUnlinks(newUnlinks);
       setFamilyRoleOverrides(newRoles);
-      setIsLinkingMember(false);
-      setLinkTargetFamily(null);
-      setLinkMemberSearch('');
+
+      const targetKey = linkTargetFamily.key;
+
+      // Keep this family explicitly expanded across renders
+      setExpandedFamilies(prev => {
+        const next = new Set(prev);
+        next.add(targetKey);
+        linkTargetFamily.allMembers.forEach(m => next.add(m.id));
+        next.add(selectedMember.id);
+        next.add(anchorMember.id);
+        return next;
+      });
+
+      // Highlight this family card so user immediately sees their place
+      setRecentlyEditedFamilyKey(targetKey);
+      setTimeout(() => setRecentlyEditedFamilyKey(null), 5000);
+
       const categoryLabel = category === 'parent' ? 'Orang Tua / Pasangan' : category === 'child' ? 'Anak' : 'Cucu';
       setSaveSuccessNotice(`${selectedMember.name} berhasil ditambahkan sebagai ${categoryLabel} di ${linkTargetFamily.familyName}!`);
       setTimeout(() => setSaveSuccessNotice(''), 3500);
+
+      if (keepModalOpen) {
+        // Update local modal target family so candidate list refreshes and user can add another person right away
+        setLinkTargetFamily(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            allMembers: [...prev.allMembers, selectedMember],
+            parents: category === 'parent' ? [...prev.parents, selectedMember] : prev.parents,
+            children: category === 'child' ? [...prev.children, selectedMember] : prev.children,
+            grandchildren: category === 'grandchild' ? [...prev.grandchildren, selectedMember] : prev.grandchildren,
+          };
+        });
+        setLinkMemberSearch('');
+      } else {
+        setIsLinkingMember(false);
+        setLinkTargetFamily(null);
+        setLinkMemberSearch('');
+
+        // Smooth scroll back to this family card!
+        setTimeout(() => {
+          const el = document.getElementById(`family-card-${targetKey}`) ||
+                     document.querySelector(`[data-family-key="${targetKey}"]`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      }
     } catch (err) {
       console.error('Failed to save custom family link:', err);
       alert('Gagal menambahkan anggota keluarga. Silakan coba lagi.');
@@ -1476,6 +1538,16 @@ function DailyInput({
         updated_at: new Date().toISOString(),
       });
 
+      // Highlight family and ensure it remains expanded
+      setRecentlyEditedFamilyKey(familyKey);
+      setTimeout(() => setRecentlyEditedFamilyKey(null), 4000);
+      setExpandedFamilies(prev => {
+        const next = new Set(prev);
+        next.add(familyKey);
+        next.add(member.id);
+        return next;
+      });
+
       const label = targetCategory === 'parent' ? 'Orang Tua / Pasangan' : targetCategory === 'child' ? 'Anak' : 'Cucu';
       setSaveSuccessNotice(`${member.name} dipindahkan ke kategori ${label}!`);
       setTimeout(() => setSaveSuccessNotice(''), 3000);
@@ -1528,11 +1600,17 @@ function DailyInput({
   }, [allFamilyGroups, search, filter, sortDir, present]);
 
   // Toggle expand/collapse of a family card
-  const toggleFamilyExpand = (familyKey: string) => {
+  const toggleFamilyExpand = (familyKey: string, groupMembers?: Member[]) => {
     setExpandedFamilies(prev => {
       const next = new Set(prev);
-      if (next.has(familyKey)) next.delete(familyKey);
-      else next.add(familyKey);
+      const isCurrentlyExpanded = next.has(familyKey) || (groupMembers && groupMembers.some(m => next.has(m.id)));
+      if (isCurrentlyExpanded) {
+        next.delete(familyKey);
+        if (groupMembers) groupMembers.forEach(m => next.delete(m.id));
+      } else {
+        next.add(familyKey);
+        if (groupMembers) groupMembers.forEach(m => next.add(m.id));
+      }
       return next;
     });
   };
@@ -1997,17 +2075,27 @@ function DailyInput({
             </div>
           ) : (
             filteredFamilyGroups.map(group => {
-              const isExpanded = expandedFamilies.has(group.key);
+              const isExpanded = expandedFamilies.has(group.key) || group.allMembers.some(m => expandedFamilies.has(m.id));
+              const isRecentlyEdited = recentlyEditedFamilyKey === group.key || group.allMembers.some(m => m.id === recentlyEditedFamilyKey);
               const presentCount = group.presentCount;
               const totalCount = group.totalCount;
               const allPresent = group.allPresent;
               const nonePresent = group.nonePresent;
 
               return (
-                <div key={group.key} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all">
+                <div
+                  id={`family-card-${group.key}`}
+                  data-family-key={group.key}
+                  key={group.key}
+                  className={`bg-white rounded-2xl border transition-all overflow-hidden ${
+                    isRecentlyEdited
+                      ? 'border-blue-500 ring-2 ring-blue-300 shadow-md'
+                      : 'border-gray-100 shadow-sm'
+                  }`}
+                >
                   {/* Family Header Card */}
                   <div
-                    onClick={() => toggleFamilyExpand(group.key)}
+                    onClick={() => toggleFamilyExpand(group.key, group.allMembers)}
                     className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50/80 select-none transition-colors border-b border-gray-50"
                   >
                     <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center flex-shrink-0 text-purple-700">
@@ -2017,6 +2105,11 @@ function DailyInput({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-gray-900 text-sm">{group.familyName}</p>
+                        {isRecentlyEdited && (
+                          <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                            Baru Diedit
+                          </span>
+                        )}
                         <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold border ${
                           allPresent 
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
@@ -2228,7 +2321,8 @@ function DailyInput({
                               if (!isParentOver) setDragOverZone(`${group.key}:parent`);
                             }
                           }}
-                          onDragLeave={() => {
+                          onDragLeave={(e) => {
+                            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
                             if (isParentOver) setDragOverZone(null);
                           }}
                           onDrop={(e) => {
@@ -2266,7 +2360,7 @@ function DailyInput({
                             )}
                           </div>
                           {isParentOver && (
-                            <div className="py-2 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-300 animate-pulse flex items-center justify-center gap-1.5">
+                            <div className="pointer-events-none py-1.5 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-200 flex items-center justify-center gap-1.5 shadow-2xs">
                               <ArrowRightLeft size={13} />
                               <span>Lepaskan di sini untuk pindahkan ke Orang Tua / Pasangan</span>
                             </div>
@@ -2293,7 +2387,8 @@ function DailyInput({
                               if (!isChildOver) setDragOverZone(`${group.key}:child`);
                             }
                           }}
-                          onDragLeave={() => {
+                          onDragLeave={(e) => {
+                            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
                             if (isChildOver) setDragOverZone(null);
                           }}
                           onDrop={(e) => {
@@ -2331,7 +2426,7 @@ function DailyInput({
                             )}
                           </div>
                           {isChildOver && (
-                            <div className="py-2 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-300 animate-pulse flex items-center justify-center gap-1.5">
+                            <div className="pointer-events-none py-1.5 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-200 flex items-center justify-center gap-1.5 shadow-2xs">
                               <ArrowRightLeft size={13} />
                               <span>Lepaskan di sini untuk pindahkan ke Anak-anak</span>
                             </div>
@@ -2358,7 +2453,8 @@ function DailyInput({
                               if (!isGrandchildOver) setDragOverZone(`${group.key}:grandchild`);
                             }
                           }}
-                          onDragLeave={() => {
+                          onDragLeave={(e) => {
+                            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
                             if (isGrandchildOver) setDragOverZone(null);
                           }}
                           onDrop={(e) => {
@@ -2396,7 +2492,7 @@ function DailyInput({
                             )}
                           </div>
                           {isGrandchildOver && (
-                            <div className="py-2 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-300 animate-pulse flex items-center justify-center gap-1.5">
+                            <div className="pointer-events-none py-1.5 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-200 flex items-center justify-center gap-1.5 shadow-2xs">
                               <ArrowRightLeft size={13} />
                               <span>Lepaskan di sini untuk pindahkan ke Cucu-cucu</span>
                             </div>
@@ -2568,7 +2664,7 @@ function DailyInput({
                     <button
                       type="button"
                       disabled={savingLink}
-                      onClick={() => handleAddMemberToFamily(candidate, linkTargetCategory)}
+                      onClick={() => handleAddMemberToFamily(candidate, linkTargetCategory, keepModalOpenAfterAdd)}
                       className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1"
                     >
                       {savingLink ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
@@ -2579,17 +2675,37 @@ function DailyInput({
               })()}
             </div>
 
-            <div className="p-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+            <div className="p-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={keepModalOpenAfterAdd}
+                  onChange={(e) => setKeepModalOpenAfterAdd(e.target.checked)}
+                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="font-semibold text-gray-800">Tetap buka modal untuk tambah anggota lain</span>
+              </label>
+
               <button
                 type="button"
                 onClick={() => {
+                  const targetKey = linkTargetFamily?.key;
                   setIsLinkingMember(false);
                   setLinkTargetFamily(null);
                   setLinkMemberSearch('');
+                  if (targetKey) {
+                    setTimeout(() => {
+                      const el = document.getElementById(`family-card-${targetKey}`) ||
+                                 document.querySelector(`[data-family-key="${targetKey}"]`);
+                      if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
+                    }, 150);
+                  }
                 }}
-                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
-                Tutup
+                Selesai / Tutup
               </button>
             </div>
           </div>
