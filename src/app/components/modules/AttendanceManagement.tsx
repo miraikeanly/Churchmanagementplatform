@@ -1277,49 +1277,8 @@ function DailyInput({
     });
   };
 
-  const markAll = () => {
-    if (!canEdit || isSessionLocked) return;
-    isDirtyRef.current = true;
-    setIsEditing(true);
-    setSaved(false);
-    setSaveSuccessNotice('');
-    const targetIds = filtered.map(m => m.id);
-    targetIds.forEach(id => explicitlyUncheckedRef.current.delete(id));
-    setPresent(prev => {
-      const next = new Set(prev);
-      targetIds.forEach(id => next.add(id));
-      return next;
-    });
-  };
-
-  const clearAll = () => {
-    if (!canEdit || isSessionLocked) return;
-    isDirtyRef.current = true;
-    setIsEditing(true);
-    setSaved(false);
-    setSaveSuccessNotice('');
-    // Mark all currently present filtered items as explicitly unchecked
-    filtered.forEach(m => {
-      explicitlyUncheckedRef.current.add(m.id);
-    });
-    setPresent(prev => {
-      const next = new Set(prev);
-      filtered.forEach(m => next.delete(m.id));
-      return next;
-    });
-  };
-
-  const filtered = useMemo(() => {
-    let list = members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
-    if (filter === 'hadir') list = list.filter(m => present.has(m.id));
-    if (filter === 'absen') list = list.filter(m => !present.has(m.id));
-    list = [...list].sort((a, b) =>
-      sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-    );
-    return list;
-  }, [members, search, filter, sortDir, present]);
-
   const [viewMode, setViewMode] = useState<'individual' | 'family'>('individual');
+  const [singleFilterScope, setSingleFilterScope] = useState<'single_only' | 'all'>('single_only');
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
 
   // Custom family links persisted in database: array of { id1, id2 }
@@ -1562,6 +1521,66 @@ function DailyInput({
     () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides),
     [members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides]
   );
+
+  // Set of all member IDs that belong to any family in attendance
+  const familyMemberIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const group of allFamilyGroups) {
+      for (const m of group.allMembers) {
+        ids.add(m.id);
+      }
+    }
+    return ids;
+  }, [allFamilyGroups]);
+
+  // Filtered members for individual / single attendance
+  // By default (single_only), members who are already grouped in a family are automatically excluded so data is never duplicated
+  const filtered = useMemo(() => {
+    let list = members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+
+    if (singleFilterScope === 'single_only') {
+      list = list.filter(m => !familyMemberIds.has(m.id));
+    }
+
+    if (filter === 'hadir') list = list.filter(m => present.has(m.id));
+    if (filter === 'absen') list = list.filter(m => !present.has(m.id));
+    list = [...list].sort((a, b) =>
+      sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+    );
+    return list;
+  }, [members, search, filter, sortDir, present, singleFilterScope, familyMemberIds]);
+
+  const markAll = () => {
+    if (!canEdit || isSessionLocked) return;
+    isDirtyRef.current = true;
+    setIsEditing(true);
+    setSaved(false);
+    setSaveSuccessNotice('');
+    const targetIds = filtered.map(m => m.id);
+    targetIds.forEach(id => explicitlyUncheckedRef.current.delete(id));
+    setPresent(prev => {
+      const next = new Set(prev);
+      targetIds.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
+  const clearAll = () => {
+    if (!canEdit || isSessionLocked) return;
+    isDirtyRef.current = true;
+    setIsEditing(true);
+    setSaved(false);
+    setSaveSuccessNotice('');
+    // Mark all currently present filtered items as explicitly unchecked
+    filtered.forEach(m => {
+      explicitlyUncheckedRef.current.add(m.id);
+    });
+    setPresent(prev => {
+      const next = new Set(prev);
+      filtered.forEach(m => next.delete(m.id));
+      return next;
+    });
+  };
 
   // Filter family groups based on search and hadir/absen status
   const filteredFamilyGroups = useMemo(() => {
@@ -1916,7 +1935,7 @@ function DailyInput({
 
       {/* Search + Mode Switcher + Sort + Filter */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
-        {/* View Mode Toggle: Per Jemaat (Individu) vs Per Keluarga */}
+        {/* View Mode Toggle: Per Jemaat (Single) vs Per Keluarga */}
         <div className="flex bg-gray-100 rounded-xl p-1 shadow-2xs">
           <button
             type="button"
@@ -1928,7 +1947,10 @@ function DailyInput({
             }`}
           >
             <User size={14} />
-            <span>Per Jemaat</span>
+            <span>Per Jemaat (Single)</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-700 font-bold ml-0.5">
+              {members.filter(m => !familyMemberIds.has(m.id)).length}
+            </span>
           </button>
           <button
             type="button"
@@ -1941,6 +1963,9 @@ function DailyInput({
           >
             <Home size={14} />
             <span>Per Keluarga</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 font-bold ml-0.5">
+              {allFamilyGroups.length}
+            </span>
           </button>
         </div>
 
@@ -2013,10 +2038,50 @@ function DailyInput({
 
       {/* Main Checklist View: Individual vs Family */}
       {viewMode === 'individual' ? (
-        /* ─── Individual Checklist ─── */
+        /* ─── Individual / Single Checklist ─── */
         <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+          {/* Header indicator for Single view */}
+          <div className="px-5 py-3 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-gray-800">
+                {singleFilterScope === 'single_only' ? 'Daftar Jemaat Single / Belum Berkeluarga' : 'Seluruh Jemaat'}
+              </span>
+              <span className="text-gray-400">({filtered.length} jemaat)</span>
+            </div>
+            <div className="flex items-center gap-1 bg-gray-200/60 p-0.5 rounded-lg text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSingleFilterScope('single_only')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  singleFilterScope === 'single_only'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Hanya tampilkan jemaat yang belum masuk ke grup keluarga mana pun"
+              >
+                Hanya Single ({members.filter(m => !familyMemberIds.has(m.id)).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSingleFilterScope('all')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  singleFilterScope === 'all'
+                    ? 'bg-white text-gray-900 shadow-2xs font-bold'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Tampilkan semua jemaat gereja"
+              >
+                Semua ({members.length})
+              </button>
+            </div>
+          </div>
+
           {filtered.length === 0 ? (
-            <div className="py-12 text-center text-gray-400 text-sm">Tidak ada jemaat ditemukan</div>
+            <div className="py-12 text-center text-gray-400 text-sm">
+              {singleFilterScope === 'single_only'
+                ? 'Semua jemaat sudah terdaftar di dalam grup keluarga.'
+                : 'Tidak ada jemaat ditemukan'}
+            </div>
           ) : (
             filtered.map((m, i) => {
               const isPresent = present.has(m.id);
