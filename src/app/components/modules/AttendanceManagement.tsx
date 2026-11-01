@@ -97,35 +97,32 @@ export interface AttendanceFamilyGroup {
   allMembers: Member[];
 }
 
-// Helper to extract clean distinctive tokens from person names, spouses, or notes (e.g. "Helen (istri Bean)" -> ["helen", "bean"])
-function extractNameTokens(name?: string): string[] {
-  if (!name) return [];
-  const STOP_WORDS = new Set([
-    'istri', 'suami', 'anak', 'mama', 'papa', 'ayah', 'ibu', 'bpk', 'bapak', 'keluarga',
-    'alm', 'alm.', 'mr', 'mrs', 'dr', 'pdt', 'ev', 'sdr', 'sdri', 'ci', 'ko', 'cece', 'koko', 'om', 'tante'
-  ]);
-  return name
-    .toLowerCase()
-    .replace(/[()[\]{},._\-+/]/g, ' ')
-    .split(/\s+/)
-    .map(w => w.trim())
-    .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+// Clean and normalize strings for matching (lowercase, letters and numbers only)
+function cleanAlphaNumeric(s?: string): string {
+  if (!s) return '';
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// Check if two name strings refer to each other or match distinctive tokens
-function isNameFuzzyMatch(queryName?: string, targetName?: string, targetNickname?: string): boolean {
-  if (!queryName || (!targetName && !targetNickname)) return false;
-  const qTokens = extractNameTokens(queryName);
-  if (qTokens.length === 0) return false;
+// Generate valid name variants for a person
+// e.g. "(Lele) Budi Harmanto" -> ["lelebudiharmanto", "budiharmanto", "lele"]
+// e.g. "Helen (istri Bean)" -> ["helenistribean", "helen", "bean"]
+function getNameVariants(name?: string): string[] {
+  if (!name) return [];
+  const raw = name.toLowerCase().trim();
+  const withoutParens = raw.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  const parensMatch = raw.match(/\(([^)]+)\)/);
+  const insideParens = parensMatch ? parensMatch[1].replace(/istri|suami/gi, '').trim() : '';
 
-  const tTokens = [...extractNameTokens(targetName), ...extractNameTokens(targetNickname)];
-  if (tTokens.length === 0) return false;
+  const set = new Set<string>();
+  const cRaw = cleanAlphaNumeric(raw);
+  const cNoParens = cleanAlphaNumeric(withoutParens);
+  const cInside = cleanAlphaNumeric(insideParens);
 
-  const tSet = new Set(tTokens);
-  for (const q of qTokens) {
-    if (tSet.has(q)) return true;
-  }
-  return false;
+  if (cRaw.length >= 3) set.add(cRaw);
+  if (cNoParens.length >= 3) set.add(cNoParens);
+  if (cInside.length >= 3) set.add(cInside);
+
+  return Array.from(set);
 }
 
 export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFamilyGroup[] {
@@ -151,6 +148,37 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     }
   };
 
+  // Build index: normalized variant -> Set of member IDs
+  // To avoid ambiguous merges, a variant only matches if it uniquely identifies a person
+  const variantToMembers = new Map<string, Set<string>>();
+  for (const m of allMembers) {
+    const variants = new Set([
+      ...getNameVariants(m.name),
+      ...(m.nickname ? getNameVariants(m.nickname) : [])
+    ]);
+    for (const v of variants) {
+      if (v.length >= 3) {
+        if (!variantToMembers.has(v)) variantToMembers.set(v, new Set());
+        variantToMembers.get(v)!.add(m.id);
+      }
+    }
+  }
+
+  // Find member matching a target string query
+  const findMemberMatch = (targetStr?: string): string | null => {
+    if (!targetStr) return null;
+    const queryVariants = getNameVariants(targetStr);
+    for (const q of queryVariants) {
+      if (q.length >= 3 && variantToMembers.has(q)) {
+        const matches = Array.from(variantToMembers.get(q)!);
+        if (matches.length === 1) {
+          return matches[0];
+        }
+      }
+    }
+    return null;
+  };
+
   // 1. Group by explicit familyId
   const familyIdClusters = new Map<string, string[]>();
   for (const m of allMembers) {
@@ -174,43 +202,36 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     }
   }
 
-  // 3. Link by spouseName (exact or fuzzy token match, e.g. "Andrean (Bean)" <-> "Helen (istri Bean)")
+  // 3. Link by spouseName (e.g. Budi Harmanto <-> Sumiati, Bean <-> Helen)
   for (const m of allMembers) {
     if (m.spouseName && m.spouseName.trim()) {
-      for (const other of allMembers) {
-        if (other.id === m.id) continue;
-        if (
-          isNameFuzzyMatch(m.spouseName, other.name, other.nickname) ||
-          isNameFuzzyMatch(other.spouseName, m.name, m.nickname)
-        ) {
-          union(m.id, other.id);
-        }
+      const matchId = findMemberMatch(m.spouseName);
+      if (matchId && matchId !== m.id) {
+        union(m.id, matchId);
       }
     }
   }
 
-  // 4. Link by parentName (e.g. child has parentName "David" or "Mimi")
+  // 4. Link by parentName
   for (const m of allMembers) {
     if (m.parentName && m.parentName.trim()) {
-      for (const other of allMembers) {
-        if (other.id === m.id) continue;
-        if (isNameFuzzyMatch(m.parentName, other.name, other.nickname)) {
-          union(m.id, other.id);
-        }
+      const matchId = findMemberMatch(m.parentName);
+      if (matchId && matchId !== m.id) {
+        union(m.id, matchId);
       }
     }
   }
 
-  // 5. Link by children list (e.g. parent has children: [{ name: "David" }], matches child "David Zeschil")
+  // 5. Link by children list
+  // Only sync children that actually exist as members in the congregation!
+  // External children or babies without congregation records are ignored as requested.
   for (const m of allMembers) {
     if (Array.isArray(m.children) && m.children.length > 0) {
       for (const c of m.children) {
         if (c?.name && c.name.trim()) {
-          for (const other of allMembers) {
-            if (other.id === m.id) continue;
-            if (isNameFuzzyMatch(c.name, other.name, other.nickname)) {
-              union(m.id, other.id);
-            }
+          const matchId = findMemberMatch(c.name);
+          if (matchId && matchId !== m.id) {
+            union(m.id, matchId);
           }
         }
       }
@@ -242,12 +263,15 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     const others: Member[] = [];
 
     for (const m of groupMembers) {
-      const isParentByChildren = (m.children && m.children.length > 0) || groupMembers.some(other =>
-        other.parentId === m.id || isNameFuzzyMatch(other.parentName, m.name, m.nickname)
-      );
+      // Is this member a parent in this group?
+      const isParentByChildren = (Array.isArray(m.children) && m.children.some(c => groupMembers.some(gm => gm.id !== m.id && findMemberMatch(c?.name) === gm.id))) ||
+        groupMembers.some(other => other.parentId === m.id || (other.parentName && findMemberMatch(other.parentName) === m.id));
+
       const isParentByMarriage = Boolean(m.maritalStatus && m.maritalStatus !== 'single') || Boolean(m.spouseName);
+
+      // Is this member a child of someone in this group?
       const isChildByParent = (m.parentId && groupMembers.some(p => p.id === m.parentId)) ||
-        groupMembers.some(p => isNameFuzzyMatch(m.parentName, p.name, p.nickname) || (Array.isArray(p.children) && p.children.some(c => isNameFuzzyMatch(c?.name, m.name, m.nickname))));
+        groupMembers.some(p => (p.parentName && findMemberMatch(m.parentName) === p.id) || (Array.isArray(p.children) && p.children.some(c => findMemberMatch(c?.name) === m.id)));
 
       if (isChildByParent && !isParentByChildren) {
         children.push(m);
