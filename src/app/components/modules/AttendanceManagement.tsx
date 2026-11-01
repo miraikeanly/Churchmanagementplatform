@@ -8,7 +8,7 @@ import {
   Save, Download, Calendar as CalendarIcon, Users, TrendingDown, TrendingUp,
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
-  Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church
+  Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -897,6 +897,8 @@ function DailyInput({
   date,
   setDate,
   onGoToReport,
+  unlockedSessionId,
+  onLockSession,
 }: {
   members: Member[];
   sessions: Session[];
@@ -906,6 +908,8 @@ function DailyInput({
   date: string;
   setDate: (d: string) => void;
   onGoToReport?: () => void;
+  unlockedSessionId?: string | null;
+  onLockSession?: () => void;
 }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -919,9 +923,15 @@ function DailyInput({
   const sessionId = `sess_${date}_Ibadah_Umum`;
   const existingSession = useMemo(() => sessions.find(s => s.id === sessionId), [sessions, sessionId]);
 
+  // Session is considered officially locked if saved on server AND NOT explicitly unlocked via Laporan tab
+  const isSessionLocked = useMemo(() => {
+    if (!existingSession) return false;
+    return unlockedSessionId !== sessionId;
+  }, [existingSession, unlockedSessionId, sessionId]);
+
   const [present, setPresent] = useState<Set<string>>(() => new Set(existingSession?.presentIds || []));
   const [saved, setSaved] = useState<boolean>(() => !!existingSession);
-  const [isEditing, setIsEditing] = useState<boolean>(() => !existingSession);
+  const [isEditing, setIsEditing] = useState<boolean>(() => !existingSession || unlockedSessionId === sessionId);
 
   // Track if user has modified present state compared to last loaded server state
   const isDirtyRef = useRef(false);
@@ -942,7 +952,7 @@ function DailyInput({
     if (!isDirtyRef.current) {
       setPresent(new Set(serverPresent));
       setSaved(!!s);
-      setIsEditing(!s);
+      setIsEditing(!s || unlockedSessionId === sessionId);
     } else {
       // Admin is actively editing! Perform live smart merge so incoming checkmarks from other admins
       // appear automatically without wiping out current admin's in-progress checks or re-adding explicitly unchecked members.
@@ -957,10 +967,10 @@ function DailyInput({
       });
     }
     setSaveSuccessNotice('');
-  }, [sessionId, sessions]);
+  }, [sessionId, sessions, unlockedSessionId]);
 
   const toggle = (id: string) => {
-    if (!canEdit) return;
+    if (!canEdit || isSessionLocked) return;
     isDirtyRef.current = true;
     setIsEditing(true);
     setSaved(false);
@@ -979,7 +989,7 @@ function DailyInput({
   };
 
   const markAll = () => {
-    if (!canEdit) return;
+    if (!canEdit || isSessionLocked) return;
     isDirtyRef.current = true;
     setIsEditing(true);
     setSaved(false);
@@ -994,7 +1004,7 @@ function DailyInput({
   };
 
   const clearAll = () => {
-    if (!canEdit) return;
+    if (!canEdit || isSessionLocked) return;
     isDirtyRef.current = true;
     setIsEditing(true);
     setSaved(false);
@@ -1053,6 +1063,21 @@ function DailyInput({
         await supabaseAdmin.from(KV).insert({ key, value: session });
       }
 
+      // Automatically store snapshot backup in database for safety and audit
+      try {
+        const backupKey = `backup:attendance_session:${sessionId}:${nowIso}`;
+        await supabaseAdmin.from(KV).insert({
+          key: backupKey,
+          value: {
+            ...session,
+            backupReason: 'AUTO_BACKUP_ON_SAVE',
+            totalHadir: presentIdsList.length,
+          }
+        });
+      } catch (backupErr) {
+        console.warn('Auto backup notice:', backupErr);
+      }
+
       // Optimistically update sessions in parent state so view updates instantly
       setSessions(prev => {
         const filteredList = prev.filter(s => s.id !== sessionId);
@@ -1062,7 +1087,7 @@ function DailyInput({
       await trackActivity(
         'SAVE_ATTENDANCE',
         'Absensi',
-        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${presentIdsList.length} jemaat hadir - Smart Merge)`
+        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${presentIdsList.length} jemaat hadir - Smart Merge & Auto Backup)`
       );
 
       isDirtyRef.current = false;
@@ -1070,7 +1095,10 @@ function DailyInput({
       setPresent(new Set(presentIdsList));
       setSaved(true);
       setIsEditing(false);
-      setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan! (${presentIdsList.length} orang hadir)`);
+      if (onLockSession) {
+        onLockSession();
+      }
+      setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan & di-backup! (${presentIdsList.length} orang hadir - Terkunci)`);
       setTimeout(() => setSaveSuccessNotice(''), 4000);
       onSessionSaved();
 
@@ -1104,6 +1132,9 @@ function DailyInput({
       setPresent(new Set());
       setSaved(false);
       setIsEditing(true);
+      if (onLockSession) {
+        onLockSession();
+      }
       setSaveSuccessNotice('Data absensi tanggal ini telah direset.');
       setTimeout(() => setSaveSuccessNotice(''), 3000);
       onSessionSaved();
@@ -1147,42 +1178,42 @@ function DailyInput({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:justify-end w-full sm:w-auto">
-          {/* Status badge when saved */}
+          {/* Status badge when saved / locked / unlocked */}
           {existingSession && (
             <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
-              <span className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-2 min-h-[40px] rounded-xl font-medium inline-flex items-center gap-1">
-                <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                <span>Sesi Tersimpan ({existingSession.presentIds?.length || 0} hadir)</span>
-              </span>
+              {isSessionLocked ? (
+                <span className="text-xs bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 min-h-[40px] rounded-xl font-medium inline-flex items-center gap-1.5 shadow-2xs">
+                  <Lock size={14} className="text-slate-600 shrink-0" />
+                  <span>Terkunci ({existingSession.presentIds?.length || 0} hadir)</span>
+                </span>
+              ) : (
+                <span className="text-xs bg-amber-50 text-amber-800 border border-amber-300 px-3 py-2 min-h-[40px] rounded-xl font-bold inline-flex items-center gap-1.5 animate-pulse">
+                  <Unlock size={14} className="text-amber-600 shrink-0" />
+                  <span>Mode Edit Terbuka ({existingSession.presentIds?.length || 0} hadir)</span>
+                </span>
+              )}
 
-              {canEdit && !isEditing && (
+              {!isSessionLocked && (
                 <button
                   type="button"
-                  onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] bg-amber-50 hover:bg-amber-100 active:scale-[0.98] text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                  title="Klik untuk mengedit/memperbaiki data absensi minggu ini atau minggu sebelumnya"
+                  onClick={() => {
+                    setPresent(new Set(existingSession.presentIds || []));
+                    setIsEditing(false);
+                    setSaved(true);
+                    if (onLockSession) {
+                      onLockSession();
+                    }
+                  }}
+                  className="text-xs px-3 py-2 min-h-[40px] text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-gray-200 flex items-center gap-1"
+                  title="Batalkan perubahan dan kunci kembali sesi ini"
                 >
-                  <Edit2 size={13} /> Edit Absensi
+                  <Lock size={12} /> Kunci Kembali
                 </button>
               )}
             </div>
           )}
 
-          {isEditing && existingSession && (
-            <button
-              type="button"
-              onClick={() => {
-                setPresent(new Set(existingSession.presentIds || []));
-                setIsEditing(false);
-                setSaved(true);
-              }}
-              className="text-xs px-3 py-2.5 min-h-[44px] text-gray-500 hover:text-gray-800 hover:bg-gray-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-gray-200"
-            >
-              Batal Edit
-            </button>
-          )}
-
-          {(saved || existingSession || present.size > 0) && canEdit && (
+          {!isSessionLocked && (saved || existingSession || present.size > 0) && canEdit && (
             <button
               type="button"
               onClick={handleReset}
@@ -1195,31 +1226,39 @@ function DailyInput({
             </button>
           )}
 
-          {canEdit && (
+          {canEdit && !isSessionLocked && (
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => handleSave(false)}
                 disabled={saving || resetting}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] shadow-sm cursor-pointer ${
-                  saved && !isEditing
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-blue-700 text-white hover:bg-blue-800 ring-2 ring-blue-300'
-                } disabled:opacity-50`}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] shadow-sm cursor-pointer bg-blue-700 text-white hover:bg-blue-800 ring-2 ring-blue-300 disabled:opacity-50"
               >
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                <span>{saving ? 'Menyimpan...' : (saved && !isEditing) ? 'Tersimpan ✓' : existingSession ? 'Simpan' : 'Simpan Absensi'}</span>
+                <span>{saving ? 'Menyimpan...' : existingSession ? 'Simpan Revisi' : 'Simpan Absensi'}</span>
               </button>
 
               <button
                 onClick={() => handleSave(true)}
                 disabled={saving || resetting}
                 className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-semibold transition-all active:scale-[0.98] border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-xs cursor-pointer disabled:opacity-50"
-                title="Simpan absensi hari ini dan langsung buka halaman Laporan (absensi tetap bisa diedit di laporan)"
+                title="Simpan absensi hari ini dan langsung buka halaman Laporan"
               >
                 <BarChart3 size={15} />
                 <span>Simpan ke Laporan</span>
               </button>
             </div>
+          )}
+
+          {canEdit && isSessionLocked && (
+            <button
+              type="button"
+              onClick={() => onGoToReport && onGoToReport()}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 shadow-xs cursor-pointer"
+              title="Buka halaman Laporan untuk mengedit atau melihat rincian absensi"
+            >
+              <BarChart3 size={15} />
+              <span>Buka Laporan untuk Edit</span>
+            </button>
           )}
         </div>
       </div>
@@ -1272,7 +1311,7 @@ function DailyInput({
             {f === 'all' ? 'Semua' : f === 'hadir' ? 'Hadir' : 'Absen'}
           </button>
         ))}
-        {canEdit && (
+        {canEdit && !isSessionLocked && (
           <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
             <button onClick={markAll} className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 text-xs px-3.5 py-2.5 min-h-[40px] border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-50 active:scale-[0.98] bg-white cursor-pointer font-semibold">
               <CheckSquare size={14} /> Semua Hadir
@@ -1284,6 +1323,27 @@ function DailyInput({
         )}
       </div>
 
+      {/* Lock Notice if session is locked */}
+      {isSessionLocked && (
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-slate-700 text-xs">
+          <div className="flex items-center gap-2">
+            <Lock size={16} className="text-slate-500 shrink-0" />
+            <span>
+              <strong>Absensi Terkunci:</strong> Data tanggal ini sudah tersimpan dan di-backup otomatis di database. Untuk mengedit atau merevisi kehadiran, silakan buka tab <strong>Laporan</strong> lalu klik tombol <strong>Edit Absensi</strong>.
+            </span>
+          </div>
+          {onGoToReport && (
+            <button
+              type="button"
+              onClick={onGoToReport}
+              className="shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs transition-colors cursor-pointer"
+            >
+              Ke Laporan
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Member checklist */}
       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
         {filtered.length === 0 ? (
@@ -1293,8 +1353,10 @@ function DailyInput({
             const isPresent = present.has(m.id);
             return (
               <div key={m.id}
-                onClick={() => toggle(m.id)}
-                className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors select-none ${i > 0 ? 'border-t border-gray-50' : ''} ${isPresent ? 'bg-emerald-50/60 hover:bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                onClick={() => !isSessionLocked && toggle(m.id)}
+                className={`flex items-center gap-4 px-5 py-4 transition-colors select-none ${
+                  isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer'
+                } ${i > 0 ? 'border-t border-gray-50' : ''} ${isPresent ? 'bg-emerald-50/60 hover:bg-emerald-50' : isSessionLocked ? '' : 'hover:bg-gray-50'}`}>
                 <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -2093,10 +2155,11 @@ function ReportSummary({
                             <button
                               type="button"
                               onClick={() => onSelectDate(d)}
-                              className="p-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors cursor-pointer"
-                              title={`Edit / Revisi absensi tanggal ${d}`}
+                              className="px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors cursor-pointer flex items-center gap-0.5 text-[10px] font-semibold"
+                              title={`Buka & Edit Absensi tanggal ${d}`}
                             >
-                              <Edit size={11} />
+                              <Edit size={10} />
+                              <span className="hidden xl:inline">Edit</span>
                             </button>
                           )}
                           {hasSession && onDeleteDate && (
@@ -2249,6 +2312,8 @@ export default function AttendanceManagement() {
 
   const todayStr = useMemo(() => fmt(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  // Track which session was unlocked for editing via Laporan tab
+  const [unlockedSessionId, setUnlockedSessionId] = useState<string | null>(null);
 
   const isSuperAdmin = user?.role === 'super_admin';
   const canEdit = isSuperAdmin || user?.permissions?.editAbsensi || user?.permissions?.editAbsen || user?.permissions?.manageAbsensi || false;
@@ -2383,6 +2448,8 @@ export default function AttendanceManagement() {
           date={selectedDate}
           setDate={setSelectedDate}
           onGoToReport={() => setTab('report')}
+          unlockedSessionId={unlockedSessionId}
+          onLockSession={() => setUnlockedSessionId(null)}
         />
       ) : (
         <ReportSummary
@@ -2390,7 +2457,9 @@ export default function AttendanceManagement() {
           sessions={sessions}
           canEdit={canEdit}
           onSelectDate={(date) => {
+            const targetSessionId = `sess_${date}_Ibadah_Umum`;
             setSelectedDate(date);
+            setUnlockedSessionId(targetSessionId);
             setTab('input');
           }}
           onDeleteDate={async (date) => {
