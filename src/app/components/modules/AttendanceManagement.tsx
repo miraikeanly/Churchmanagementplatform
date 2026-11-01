@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
   Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock,
-  ChevronDown, UserCheck, Home
+  ChevronDown, UserCheck, Home, UserPlus
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -125,7 +125,10 @@ function getNameVariants(name?: string): string[] {
   return Array.from(set);
 }
 
-export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFamilyGroup[] {
+export function buildAttendanceFamilyGroups(
+  allMembers: Member[],
+  customLinks?: Array<{ id1: string; id2: string }>
+): AttendanceFamilyGroup[] {
   const memberById = new Map<string, Member>();
   for (const m of allMembers) {
     memberById.set(m.id, m);
@@ -240,6 +243,15 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
             }
           }
         }
+      }
+    }
+  }
+
+  // 5. Apply custom/manual family links (saved from the UI "+ Tambah Anggota" modal)
+  if (Array.isArray(customLinks)) {
+    for (const link of customLinks) {
+      if (link.id1 && link.id2 && memberById.has(link.id1) && memberById.has(link.id2)) {
+        union(link.id1, link.id2);
       }
     }
   }
@@ -1258,8 +1270,60 @@ function DailyInput({
   const [viewMode, setViewMode] = useState<'individual' | 'family'>('individual');
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
 
-  // Build all family groups from the full members array
-  const allFamilyGroups = useMemo(() => buildAttendanceFamilyGroups(members), [members]);
+  // Custom family links persisted in database: array of { id1, id2 }
+  const [customFamilyLinks, setCustomFamilyLinks] = useState<Array<{ id1: string; id2: string }>>([]);
+  const [isLinkingMember, setIsLinkingMember] = useState(false);
+  const [linkTargetFamily, setLinkTargetFamily] = useState<AttendanceFamilyGroup | null>(null);
+  const [linkMemberSearch, setLinkMemberSearch] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
+
+  // Load persisted custom family links on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_links').maybeSingle();
+        if (data?.value && Array.isArray(data.value)) {
+          setCustomFamilyLinks(data.value);
+        }
+      } catch (err) {
+        console.warn('Failed to load custom family links:', err);
+      }
+    })();
+  }, []);
+
+  // Save custom family link: links a member from congregation data to a family
+  const handleAddMemberToFamily = async (selectedMember: Member) => {
+    if (!linkTargetFamily || !selectedMember) return;
+    const anchorMember = linkTargetFamily.allMembers[0];
+    if (!anchorMember || anchorMember.id === selectedMember.id) return;
+
+    setSavingLink(true);
+    try {
+      const newLinks = [...customFamilyLinks, { id1: anchorMember.id, id2: selectedMember.id }];
+      await supabaseAdmin.from(KV).upsert({
+        key: 'attendance:custom_family_links',
+        value: newLinks,
+        updated_at: new Date().toISOString(),
+      });
+      setCustomFamilyLinks(newLinks);
+      setIsLinkingMember(false);
+      setLinkTargetFamily(null);
+      setLinkMemberSearch('');
+      setSaveSuccessNotice(`${selectedMember.name} berhasil ditambahkan ke ${linkTargetFamily.familyName}!`);
+      setTimeout(() => setSaveSuccessNotice(''), 3500);
+    } catch (err) {
+      console.error('Failed to save custom family link:', err);
+      alert('Gagal menambahkan anggota keluarga. Silakan coba lagi.');
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  // Build all family groups from the full members array + custom links
+  const allFamilyGroups = useMemo(
+    () => buildAttendanceFamilyGroups(members, customFamilyLinks),
+    [members, customFamilyLinks]
+  );
 
   // Filter family groups based on search and hadir/absen status
   const filteredFamilyGroups = useMemo(() => {
@@ -1795,22 +1859,38 @@ function DailyInput({
 
                     {/* Quick batch toggle button for the whole family */}
                     {!isSessionLocked && canEdit && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleAllFamilyMembers(group.allMembers);
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ${
-                          allPresent
-                            ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
-                        }`}
-                        title={allPresent ? 'Batal Hadirkan Seluruh Keluarga' : 'Hadirkan Seluruh Anggota Keluarga'}
-                      >
-                        <UserCheck size={14} />
-                        <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan Sekeluarga'}</span>
-                      </button>
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLinkTargetFamily(group);
+                            setLinkMemberSearch('');
+                            setIsLinkingMember(true);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 border border-gray-200 transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+                          title="Tambah anggota jemaat ke keluarga ini dari data jemaat"
+                        >
+                          <UserPlus size={13} className="text-blue-600" />
+                          <span className="hidden sm:inline">Tambah Anggota</span>
+                          <span className="sm:hidden">+</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toggleAllFamilyMembers(group.allMembers);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                            allPresent
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                              : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                          }`}
+                          title={allPresent ? 'Batal Hadirkan Seluruh Keluarga' : 'Hadirkan Seluruh Anggota Keluarga'}
+                        >
+                          <UserCheck size={14} />
+                          <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan Sekeluarga'}</span>
+                        </button>
+                      </div>
                     )}
 
                     <div className="text-gray-400 p-1">
@@ -1996,6 +2076,114 @@ function DailyInput({
         onSelectDate={d => setDate(d)}
         sessions={sessions}
       />
+
+      {/* Add Member to Family Modal (Pilih dari Data Jemaat Umum) */}
+      {isLinkingMember && linkTargetFamily && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <UserPlus size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">Tambah Anggota ke {linkTargetFamily.familyName}</h3>
+                  <p className="text-xs text-gray-500">Pilih anggota dari Data Jemaat Umum (bukan ketik manual)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLinkingMember(false);
+                  setLinkTargetFamily(null);
+                  setLinkMemberSearch('');
+                }}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search input in modal */}
+            <div className="p-4 border-b border-gray-100 bg-white">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={linkMemberSearch}
+                  onChange={(e) => setLinkMemberSearch(e.target.value)}
+                  placeholder="Ketik nama jemaat untuk mencari..."
+                  className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50/50"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Member Candidates List from Congregation */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 divide-y divide-gray-50">
+              {(() => {
+                const existingIds = new Set(linkTargetFamily.allMembers.map(m => m.id));
+                const q = linkMemberSearch.trim().toLowerCase();
+                const candidates = members.filter(m => {
+                  if (existingIds.has(m.id)) return false;
+                  if (!q) return true;
+                  return m.name.toLowerCase().includes(q) || (m.nickname && m.nickname.toLowerCase().includes(q));
+                }).slice(0, 30);
+
+                if (candidates.length === 0) {
+                  return (
+                    <div className="py-8 text-center text-gray-400 text-xs">
+                      {q ? `Tidak ada jemaat dengan nama "${linkMemberSearch}"` : 'Tidak ada jemaat lain'}
+                    </div>
+                  );
+                }
+
+                return candidates.map(candidate => (
+                  <div
+                    key={candidate.id}
+                    className="flex items-center justify-between gap-3 pt-2 first:pt-0"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar name={candidate.name} photoUrl={candidate.photoUrl} present={present.has(candidate.id)} />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm truncate">{candidate.name}</p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {candidate.nickname ? `Panggilan: ${candidate.nickname} • ` : ''}
+                          Status: {STATUS_LABEL[candidate.status || 'active'] || candidate.status || 'Aktif'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={savingLink}
+                      onClick={() => handleAddMemberToFamily(candidate)}
+                      className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {savingLink ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                      <span>Pilih</span>
+                    </button>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            <div className="p-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLinkingMember(false);
+                  setLinkTargetFamily(null);
+                  setLinkMemberSearch('');
+                }}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
