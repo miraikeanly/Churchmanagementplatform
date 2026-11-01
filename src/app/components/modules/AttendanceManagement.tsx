@@ -97,12 +97,41 @@ export interface AttendanceFamilyGroup {
   allMembers: Member[];
 }
 
+// Helper to extract clean distinctive tokens from person names, spouses, or notes (e.g. "Helen (istri Bean)" -> ["helen", "bean"])
+function extractNameTokens(name?: string): string[] {
+  if (!name) return [];
+  const STOP_WORDS = new Set([
+    'istri', 'suami', 'anak', 'mama', 'papa', 'ayah', 'ibu', 'bpk', 'bapak', 'keluarga',
+    'alm', 'alm.', 'mr', 'mrs', 'dr', 'pdt', 'ev', 'sdr', 'sdri', 'ci', 'ko', 'cece', 'koko', 'om', 'tante'
+  ]);
+  return name
+    .toLowerCase()
+    .replace(/[()[\]{},._\-+/]/g, ' ')
+    .split(/\s+/)
+    .map(w => w.trim())
+    .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+}
+
+// Check if two name strings refer to each other or match distinctive tokens
+function isNameFuzzyMatch(queryName?: string, targetName?: string, targetNickname?: string): boolean {
+  if (!queryName || (!targetName && !targetNickname)) return false;
+  const qTokens = extractNameTokens(queryName);
+  if (qTokens.length === 0) return false;
+
+  const tTokens = [...extractNameTokens(targetName), ...extractNameTokens(targetNickname)];
+  if (tTokens.length === 0) return false;
+
+  const tSet = new Set(tTokens);
+  for (const q of qTokens) {
+    if (tSet.has(q)) return true;
+  }
+  return false;
+}
+
 export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFamilyGroup[] {
   const memberById = new Map<string, Member>();
-  const memberByName = new Map<string, Member>();
   for (const m of allMembers) {
     memberById.set(m.id, m);
-    memberByName.set(m.name.toLowerCase().trim(), m);
   }
 
   // Disjoint-set / Union-Find to group related members into family clusters
@@ -122,10 +151,10 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     }
   };
 
-  // Group by explicit familyId
+  // 1. Group by explicit familyId
   const familyIdClusters = new Map<string, string[]>();
   for (const m of allMembers) {
-    if (m.familyId) {
+    if (m.familyId && m.familyId.trim()) {
       if (!familyIdClusters.has(m.familyId)) {
         familyIdClusters.set(m.familyId, []);
       }
@@ -138,36 +167,50 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     }
   }
 
-  // Link by spouseName
-  for (const m of allMembers) {
-    if (m.spouseName) {
-      const spouse = memberByName.get(m.spouseName.toLowerCase().trim());
-      if (spouse) {
-        union(m.id, spouse.id);
-      }
-    }
-  }
-
-  // Link by parentId or parentName
+  // 2. Link by parentId
   for (const m of allMembers) {
     if (m.parentId && memberById.has(m.parentId)) {
       union(m.id, m.parentId);
-    } else if (m.parentName) {
-      const parent = memberByName.get(m.parentName.toLowerCase().trim());
-      if (parent) {
-        union(m.id, parent.id);
+    }
+  }
+
+  // 3. Link by spouseName (exact or fuzzy token match, e.g. "Andrean (Bean)" <-> "Helen (istri Bean)")
+  for (const m of allMembers) {
+    if (m.spouseName && m.spouseName.trim()) {
+      for (const other of allMembers) {
+        if (other.id === m.id) continue;
+        if (
+          isNameFuzzyMatch(m.spouseName, other.name, other.nickname) ||
+          isNameFuzzyMatch(other.spouseName, m.name, m.nickname)
+        ) {
+          union(m.id, other.id);
+        }
       }
     }
   }
 
-  // Link by children list
+  // 4. Link by parentName (e.g. child has parentName "David" or "Mimi")
   for (const m of allMembers) {
-    if (Array.isArray(m.children)) {
+    if (m.parentName && m.parentName.trim()) {
+      for (const other of allMembers) {
+        if (other.id === m.id) continue;
+        if (isNameFuzzyMatch(m.parentName, other.name, other.nickname)) {
+          union(m.id, other.id);
+        }
+      }
+    }
+  }
+
+  // 5. Link by children list (e.g. parent has children: [{ name: "David" }], matches child "David Zeschil")
+  for (const m of allMembers) {
+    if (Array.isArray(m.children) && m.children.length > 0) {
       for (const c of m.children) {
-        if (c?.name) {
-          const child = memberByName.get(c.name.toLowerCase().trim());
-          if (child) {
-            union(m.id, child.id);
+        if (c?.name && c.name.trim()) {
+          for (const other of allMembers) {
+            if (other.id === m.id) continue;
+            if (isNameFuzzyMatch(c.name, other.name, other.nickname)) {
+              union(m.id, other.id);
+            }
           }
         }
       }
@@ -187,16 +230,24 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
   const result: AttendanceFamilyGroup[] = [];
 
   for (const [rootId, groupMembers] of clusters.entries()) {
+    // Only include groups with 2 or more members.
+    // Individuals/youths with no linked family stay in "Per Jemaat" view only and won't clutter "Per Keluarga".
+    if (groupMembers.length < 2) {
+      continue;
+    }
+
     // Separate into parents, children, others
     const parents: Member[] = [];
     const children: Member[] = [];
     const others: Member[] = [];
 
-    // Identify parents: has spouse, has children in members, or maritalStatus !== 'single'
     for (const m of groupMembers) {
-      const isParentByChildren = (m.children && m.children.length > 0) || groupMembers.some(other => other.parentId === m.id || other.parentName?.toLowerCase().trim() === m.name.toLowerCase().trim());
-      const isParentByMarriage = m.maritalStatus && m.maritalStatus !== 'single';
-      const isChildByParent = (m.parentId && groupMembers.some(p => p.id === m.parentId)) || (m.parentName && groupMembers.some(p => p.name.toLowerCase().trim() === m.parentName?.toLowerCase().trim()));
+      const isParentByChildren = (m.children && m.children.length > 0) || groupMembers.some(other =>
+        other.parentId === m.id || isNameFuzzyMatch(other.parentName, m.name, m.nickname)
+      );
+      const isParentByMarriage = Boolean(m.maritalStatus && m.maritalStatus !== 'single') || Boolean(m.spouseName);
+      const isChildByParent = (m.parentId && groupMembers.some(p => p.id === m.parentId)) ||
+        groupMembers.some(p => isNameFuzzyMatch(m.parentName, p.name, p.nickname) || (Array.isArray(p.children) && p.children.some(c => isNameFuzzyMatch(c?.name, m.name, m.nickname))));
 
       if (isChildByParent && !isParentByChildren) {
         children.push(m);
@@ -208,6 +259,7 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     }
 
     // Determine family head / family name
+    // Prefer male parent, then any parent, then oldest/first member
     let head = parents.find(p => p.gender === 'male' || p.gender === 'L');
     if (!head) head = parents[0] || groupMembers[0];
 
