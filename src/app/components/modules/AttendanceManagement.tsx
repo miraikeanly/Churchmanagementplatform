@@ -1187,6 +1187,7 @@ function DailyInput({
   setDate,
   onGoToReport,
   unlockedSessionId,
+  onUnlockSession,
   onLockSession,
 }: {
   members: Member[];
@@ -1198,6 +1199,7 @@ function DailyInput({
   setDate: (d: string) => void;
   onGoToReport?: () => void;
   unlockedSessionId?: string | null;
+  onUnlockSession?: (sessionId: string) => void;
   onLockSession?: () => void;
 }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -1823,33 +1825,51 @@ function DailyInput({
           {existingSession && (
             <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
               {isSessionLocked ? (
-                <span className="text-xs bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 min-h-[40px] rounded-xl font-medium inline-flex items-center gap-1.5 shadow-2xs">
-                  <Lock size={14} className="text-slate-600 shrink-0" />
-                  <span>Terkunci ({existingSession.presentIds?.length || 0} hadir)</span>
-                </span>
-              ) : (
-                <span className="text-xs bg-amber-50 text-amber-800 border border-amber-300 px-3 py-2 min-h-[40px] rounded-xl font-bold inline-flex items-center gap-1.5 animate-pulse">
-                  <Unlock size={14} className="text-amber-600 shrink-0" />
-                  <span>Mode Edit Terbuka ({existingSession.presentIds?.length || 0} hadir)</span>
-                </span>
-              )}
+                <>
+                  <span className="text-xs bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 min-h-[40px] rounded-xl font-medium inline-flex items-center gap-1.5 shadow-2xs">
+                    <Lock size={14} className="text-slate-600 shrink-0" />
+                    <span>Terkunci ({existingSession.presentIds?.length || 0} hadir)</span>
+                  </span>
 
-              {!isSessionLocked && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPresent(new Set(existingSession.presentIds || []));
-                    setIsEditing(false);
-                    setSaved(true);
-                    if (onLockSession) {
-                      onLockSession();
-                    }
-                  }}
-                  className="text-xs px-3 py-2 min-h-[40px] text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-gray-200 flex items-center gap-1"
-                  title="Batalkan perubahan dan kunci kembali sesi ini"
-                >
-                  <Lock size={12} /> Kunci Kembali
-                </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onUnlockSession) onUnlockSession(sessionId);
+                        setIsEditing(true);
+                      }}
+                      className="text-xs px-3 py-2 min-h-[40px] text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-blue-200 font-bold inline-flex items-center gap-1.5 shadow-2xs"
+                      title="Buka kunci absensi tanggal ini agar bisa diedit langsung"
+                    >
+                      <Unlock size={14} className="text-blue-600" />
+                      <span>Buka Kunci / Edit</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-xs bg-amber-50 text-amber-800 border border-amber-300 px-3 py-2 min-h-[40px] rounded-xl font-bold inline-flex items-center gap-1.5 animate-pulse shadow-2xs">
+                    <Unlock size={14} className="text-amber-600 shrink-0" />
+                    <span>Mode Edit Terbuka ({existingSession.presentIds?.length || 0} hadir)</span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPresent(new Set(existingSession.presentIds || []));
+                      setIsEditing(false);
+                      setSaved(true);
+                      if (onLockSession) {
+                        onLockSession();
+                      }
+                    }}
+                    className="text-xs px-3 py-2 min-h-[40px] text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-gray-200 font-semibold inline-flex items-center gap-1 shadow-2xs"
+                    title="Batalkan perubahan dan kunci kembali sesi ini"
+                  >
+                    <Lock size={12} />
+                    <span>Kunci Kembali</span>
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -1893,12 +1913,15 @@ function DailyInput({
           {canEdit && isSessionLocked && (
             <button
               type="button"
-              onClick={() => onGoToReport && onGoToReport()}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold transition-all active:scale-[0.98] border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 shadow-xs cursor-pointer"
-              title="Buka halaman Laporan untuk mengedit atau melihat rincian absensi"
+              onClick={() => {
+                if (onUnlockSession) onUnlockSession(sessionId);
+                setIsEditing(true);
+              }}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all active:scale-[0.98] border border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 shadow-xs cursor-pointer"
+              title="Buka kunci absensi tanggal ini agar bisa diedit langsung tanpa perlu bolak-balik ke tab Laporan"
             >
-              <BarChart3 size={15} />
-              <span>Buka Laporan untuk Edit</span>
+              <Unlock size={16} className="text-blue-600" />
+              <span>Buka Kunci / Edit Absensi</span>
             </button>
           )}
         </div>
@@ -2014,27 +2037,6 @@ function DailyInput({
           </button>
         ))}
       </div>
-
-      {/* Lock Notice if session is locked */}
-      {isSessionLocked && (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-slate-700 text-xs">
-          <div className="flex items-center gap-2">
-            <Lock size={16} className="text-slate-500 shrink-0" />
-            <span>
-              <strong>Absensi Terkunci:</strong> Data tanggal ini sudah tersimpan dan di-backup otomatis di database. Untuk mengedit atau merevisi kehadiran, silakan buka tab <strong>Laporan</strong> lalu klik tombol <strong>Edit Absensi</strong>.
-            </span>
-          </div>
-          {onGoToReport && (
-            <button
-              type="button"
-              onClick={onGoToReport}
-              className="shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs transition-colors cursor-pointer"
-            >
-              Ke Laporan
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Main Checklist View: Individual vs Family */}
       {viewMode === 'individual' ? (
@@ -2161,38 +2163,79 @@ function DailyInput({
                   {/* Family Header Card */}
                   <div
                     onClick={() => toggleFamilyExpand(group.key, group.allMembers)}
-                    className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50/80 select-none transition-colors border-b border-gray-50"
+                    className="p-3.5 sm:px-5 sm:py-4 cursor-pointer hover:bg-gray-50/80 select-none transition-colors border-b border-gray-100"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center flex-shrink-0 text-purple-700">
-                      <Home size={20} />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold text-gray-900 text-sm">{group.familyName}</p>
-                        {isRecentlyEdited && (
-                          <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold animate-pulse">
-                            Baru Diedit
-                          </span>
-                        )}
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold border ${
-                          allPresent 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                            : nonePresent 
-                            ? 'bg-gray-100 text-gray-600 border-gray-200' 
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}>
-                          {presentCount}/{totalCount} Hadir
-                        </span>
+                    <div className="flex items-start sm:items-center gap-2.5 sm:gap-3">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center flex-shrink-0 text-purple-700 mt-0.5 sm:mt-0">
+                        <Home size={18} />
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">
-                        Anggota: {group.allMembers.map(m => m.name).join(', ')}
-                      </p>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <p className="font-bold text-gray-900 text-sm sm:text-base leading-snug">{group.familyName}</p>
+                          {isRecentlyEdited && (
+                            <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                              Baru Diedit
+                            </span>
+                          )}
+                          <span className={`text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full font-semibold border shrink-0 ${
+                            allPresent 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : nonePresent 
+                              ? 'bg-gray-100 text-gray-600 border-gray-200' 
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}>
+                            {presentCount}/{totalCount} Hadir
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1 truncate">
+                          Anggota: {group.allMembers.map(m => m.name).join(', ')}
+                        </p>
+                      </div>
+
+                      {/* On desktop (sm+): Action buttons on the right side */}
+                      {!isSessionLocked && canEdit && (
+                        <div className="hidden sm:flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLinkTargetFamily(group);
+                              setLinkMemberSearch('');
+                              setIsLinkingMember(true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 border border-gray-200 transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+                            title="Tambah anggota jemaat ke keluarga ini dari data jemaat"
+                          >
+                            <UserPlus size={13} className="text-blue-600" />
+                            <span>Tambah Anggota</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              toggleAllFamilyMembers(group.allMembers);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                              allPresent
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                            }`}
+                            title={allPresent ? 'Batal Hadirkan Seluruh Keluarga' : 'Hadirkan Seluruh Anggota Keluarga'}
+                          >
+                            <UserCheck size={14} />
+                            <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan Sekeluarga'}</span>
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="text-gray-400 p-1 shrink-0 mt-0.5 sm:mt-0">
+                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                      </div>
                     </div>
 
-                    {/* Quick batch toggle button for the whole family */}
+                    {/* On mobile (< sm): Action buttons rendered cleanly BELOW title in full-width row */}
                     {!isSessionLocked && canEdit && (
-                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex sm:hidden items-center gap-2 mt-2.5 pt-2.5 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() => {
@@ -2200,12 +2243,10 @@ function DailyInput({
                             setLinkMemberSearch('');
                             setIsLinkingMember(true);
                           }}
-                          className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 border border-gray-200 transition-all active:scale-95 cursor-pointer flex items-center gap-1"
-                          title="Tambah anggota jemaat ke keluarga ini dari data jemaat"
+                          className="flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 active:scale-95 border border-blue-200 flex items-center justify-center gap-1.5 shadow-2xs"
                         >
-                          <UserPlus size={13} className="text-blue-600" />
-                          <span className="hidden sm:inline">Tambah Anggota</span>
-                          <span className="sm:hidden">+</span>
+                          <UserPlus size={13} />
+                          <span>+ Tambah</span>
                         </button>
 
                         <button
@@ -2213,22 +2254,17 @@ function DailyInput({
                           onClick={() => {
                             toggleAllFamilyMembers(group.allMembers);
                           }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                          className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 border shadow-2xs ${
                             allPresent
-                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                              : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-purple-50 text-purple-700 border-purple-200'
                           }`}
-                          title={allPresent ? 'Batal Hadirkan Seluruh Keluarga' : 'Hadirkan Seluruh Anggota Keluarga'}
                         >
-                          <UserCheck size={14} />
-                          <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan Sekeluarga'}</span>
+                          <UserCheck size={13} />
+                          <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan'}</span>
                         </button>
                       </div>
                     )}
-
-                    <div className="text-gray-400 p-1">
-                      {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                    </div>
                   </div>
 
                   {/* Expanded Family Members List with Checkboxes & Drag/Drop */}
@@ -3817,6 +3853,7 @@ export default function AttendanceManagement() {
           setDate={setSelectedDate}
           onGoToReport={() => setTab('report')}
           unlockedSessionId={unlockedSessionId}
+          onUnlockSession={(sid) => setUnlockedSessionId(sid)}
           onLockSession={() => setUnlockedSessionId(null)}
         />
       ) : (
