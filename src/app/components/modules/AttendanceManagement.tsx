@@ -1463,11 +1463,20 @@ function DailyInput({
       explicitlyUncheckedRef.current.clear();
       setPresent(new Set(presentIdsList));
       setSaved(true);
-      setIsEditing(false);
-      if (onLockSession) {
-        onLockSession();
+
+      if (goToReport) {
+        // Locked when explicitly saving to report
+        setIsEditing(false);
+        if (onLockSession) {
+          onLockSession();
+        }
+        setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan & di-backup! (${presentIdsList.length} orang hadir - Terkunci)`);
+      } else {
+        // Keep session open for editing so admin doesn't have to keep going back to Laporan
+        setIsEditing(true);
+        setSaveSuccessNotice(`Perubahan absensi (${presentIdsList.length} hadir) berhasil disimpan! Sesi tetap terbuka untuk diedit.`);
       }
-      setSaveSuccessNotice(`Absensi ${formatDateLabel(date)} berhasil disimpan & di-backup! (${presentIdsList.length} orang hadir - Terkunci)`);
+
       setTimeout(() => setSaveSuccessNotice(''), 4000);
       onSessionSaved();
 
