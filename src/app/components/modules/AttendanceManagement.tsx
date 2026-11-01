@@ -8,7 +8,8 @@ import {
   Save, Download, Calendar as CalendarIcon, Users, TrendingDown, TrendingUp,
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
-  Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock
+  Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock,
+  ChevronDown, UserCheck, Home
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -46,6 +47,7 @@ function toMember(r: { key: string; value: unknown }): Member | null {
     children: m.children,
     parentName: m.parentName,
     parentId: m.parentId,
+    familyId: m.familyId,
     baptismStatus: m.baptismStatus,
     baptismDate: m.baptismDate,
     pelayan: m.pelayan,
@@ -77,12 +79,153 @@ interface Member {
   children?: { name: string; birthDate?: string }[];
   parentName?: string;
   parentId?: string;
+  familyId?: string;
   baptismStatus?: string;
   baptismDate?: string;
   pelayan?: string[];
   ibadah?: string[];
   createdAt?: string;
   _rawKey?: string;
+}
+
+export interface AttendanceFamilyGroup {
+  key: string;
+  familyName: string;
+  parents: Member[];
+  children: Member[];
+  otherMembers: Member[];
+  allMembers: Member[];
+}
+
+export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFamilyGroup[] {
+  const memberById = new Map<string, Member>();
+  const memberByName = new Map<string, Member>();
+  for (const m of allMembers) {
+    memberById.set(m.id, m);
+    memberByName.set(m.name.toLowerCase().trim(), m);
+  }
+
+  // Disjoint-set / Union-Find to group related members into family clusters
+  const parentMap = new Map<string, string>();
+  const find = (id: string): string => {
+    if (!parentMap.has(id)) parentMap.set(id, id);
+    if (parentMap.get(id) !== id) {
+      parentMap.set(id, find(parentMap.get(id)!));
+    }
+    return parentMap.get(id)!;
+  };
+  const union = (id1: string, id2: string) => {
+    const root1 = find(id1);
+    const root2 = find(id2);
+    if (root1 !== root2) {
+      parentMap.set(root1, root2);
+    }
+  };
+
+  // Group by explicit familyId
+  const familyIdClusters = new Map<string, string[]>();
+  for (const m of allMembers) {
+    if (m.familyId) {
+      if (!familyIdClusters.has(m.familyId)) {
+        familyIdClusters.set(m.familyId, []);
+      }
+      familyIdClusters.get(m.familyId)!.push(m.id);
+    }
+  }
+  for (const ids of familyIdClusters.values()) {
+    for (let i = 1; i < ids.length; i++) {
+      union(ids[0], ids[i]);
+    }
+  }
+
+  // Link by spouseName
+  for (const m of allMembers) {
+    if (m.spouseName) {
+      const spouse = memberByName.get(m.spouseName.toLowerCase().trim());
+      if (spouse) {
+        union(m.id, spouse.id);
+      }
+    }
+  }
+
+  // Link by parentId or parentName
+  for (const m of allMembers) {
+    if (m.parentId && memberById.has(m.parentId)) {
+      union(m.id, m.parentId);
+    } else if (m.parentName) {
+      const parent = memberByName.get(m.parentName.toLowerCase().trim());
+      if (parent) {
+        union(m.id, parent.id);
+      }
+    }
+  }
+
+  // Link by children list
+  for (const m of allMembers) {
+    if (Array.isArray(m.children)) {
+      for (const c of m.children) {
+        if (c?.name) {
+          const child = memberByName.get(c.name.toLowerCase().trim());
+          if (child) {
+            union(m.id, child.id);
+          }
+        }
+      }
+    }
+  }
+
+  // Group members by root ID
+  const clusters = new Map<string, Member[]>();
+  for (const m of allMembers) {
+    const root = find(m.id);
+    if (!clusters.has(root)) {
+      clusters.set(root, []);
+    }
+    clusters.get(root)!.push(m);
+  }
+
+  const result: AttendanceFamilyGroup[] = [];
+
+  for (const [rootId, groupMembers] of clusters.entries()) {
+    // Separate into parents, children, others
+    const parents: Member[] = [];
+    const children: Member[] = [];
+    const others: Member[] = [];
+
+    // Identify parents: has spouse, has children in members, or maritalStatus !== 'single'
+    for (const m of groupMembers) {
+      const isParentByChildren = (m.children && m.children.length > 0) || groupMembers.some(other => other.parentId === m.id || other.parentName?.toLowerCase().trim() === m.name.toLowerCase().trim());
+      const isParentByMarriage = m.maritalStatus && m.maritalStatus !== 'single';
+      const isChildByParent = (m.parentId && groupMembers.some(p => p.id === m.parentId)) || (m.parentName && groupMembers.some(p => p.name.toLowerCase().trim() === m.parentName?.toLowerCase().trim()));
+
+      if (isChildByParent && !isParentByChildren) {
+        children.push(m);
+      } else if (isParentByChildren || isParentByMarriage) {
+        parents.push(m);
+      } else {
+        others.push(m);
+      }
+    }
+
+    // Determine family head / family name
+    let head = parents.find(p => p.gender === 'male' || p.gender === 'L');
+    if (!head) head = parents[0] || groupMembers[0];
+
+    const familyName = `Keluarga ${head.name}`;
+
+    result.push({
+      key: rootId,
+      familyName,
+      parents,
+      children,
+      otherMembers: others,
+      allMembers: groupMembers,
+    });
+  }
+
+  // Sort groups alphabetically by familyName
+  result.sort((a, b) => a.familyName.localeCompare(b.familyName, 'id'));
+  return result;
 }
 
 interface Session {
@@ -1030,6 +1173,86 @@ function DailyInput({
     return list;
   }, [members, search, filter, sortDir, present]);
 
+  const [viewMode, setViewMode] = useState<'individual' | 'family'>('individual');
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
+
+  // Build all family groups from the full members array
+  const allFamilyGroups = useMemo(() => buildAttendanceFamilyGroups(members), [members]);
+
+  // Filter family groups based on search and hadir/absen status
+  const filteredFamilyGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return allFamilyGroups
+      .map(group => {
+        // Search matches if familyName matches, OR any member in the family matches name/nickname
+        const matchesSearch = !q || group.familyName.toLowerCase().includes(q) || group.allMembers.some(m => 
+          m.name.toLowerCase().includes(q) || (m.nickname && m.nickname.toLowerCase().includes(q))
+        );
+
+        if (!matchesSearch) return null;
+
+        // Apply hadir / absen filter:
+        // 'hadir': at least 1 member is present
+        // 'absen': at least 1 member is absent
+        const presentCount = group.allMembers.filter(m => present.has(m.id)).length;
+        if (filter === 'hadir' && presentCount === 0) return null;
+        if (filter === 'absen' && presentCount === group.allMembers.length) return null;
+
+        return {
+          ...group,
+          presentCount,
+          totalCount: group.allMembers.length,
+          allPresent: presentCount === group.allMembers.length,
+          nonePresent: presentCount === 0,
+        };
+      })
+      .filter((g): g is NonNullable<typeof g> => g !== null)
+      .sort((a, b) => {
+        return sortDir === 'asc' 
+          ? a.familyName.localeCompare(b.familyName, 'id')
+          : b.familyName.localeCompare(a.familyName, 'id');
+      });
+  }, [allFamilyGroups, search, filter, sortDir, present]);
+
+  // Toggle expand/collapse of a family card
+  const toggleFamilyExpand = (familyKey: string) => {
+    setExpandedFamilies(prev => {
+      const next = new Set(prev);
+      if (next.has(familyKey)) next.delete(familyKey);
+      else next.add(familyKey);
+      return next;
+    });
+  };
+
+  // Toggle attendance for all members in a family at once
+  const toggleAllFamilyMembers = (groupMembers: Member[]) => {
+    if (!canEdit || isSessionLocked) return;
+    isDirtyRef.current = true;
+    setIsEditing(true);
+    setSaved(false);
+    setSaveSuccessNotice('');
+
+    const allPresent = groupMembers.every(m => present.has(m.id));
+    setPresent(prev => {
+      const next = new Set(prev);
+      if (allPresent) {
+        // Uncheck all
+        groupMembers.forEach(m => {
+          next.delete(m.id);
+          explicitlyUncheckedRef.current.add(m.id);
+        });
+      } else {
+        // Check all
+        groupMembers.forEach(m => {
+          next.add(m.id);
+          explicitlyUncheckedRef.current.delete(m.id);
+        });
+      }
+      return next;
+    });
+  };
+
   const handleSave = async (goToReport = false) => {
     if (!canEdit) return;
     setSaving(true);
@@ -1292,35 +1515,80 @@ function DailyInput({
         </div>
       </div>
 
-      {/* Search + Sort + Filter */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[160px]">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Cari nama jemaat..."
-            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+      {/* Search + Mode Switcher + Sort + Filter */}
+      <div className="flex flex-wrap gap-2 items-center justify-between">
+        {/* View Mode Toggle: Per Jemaat (Individu) vs Per Keluarga */}
+        <div className="flex bg-gray-100 rounded-xl p-1 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setViewMode('individual')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'individual'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <User size={14} />
+            <span>Per Jemaat</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('family')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'family'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-gray-600 hover:text-purple-700'
+            }`}
+          >
+            <Home size={14} />
+            <span>Per Keluarga</span>
+          </button>
         </div>
-        <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-          className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-2.5 min-h-[40px] text-sm text-gray-600 hover:bg-gray-50 active:scale-[0.98] bg-white cursor-pointer">
+
+        {/* Action buttons if not locked */}
+        {canEdit && !isSessionLocked && (
+          <div className="flex items-center gap-2 ml-auto">
+            <button onClick={markAll} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-50 active:scale-[0.98] bg-white cursor-pointer font-semibold shadow-2xs">
+              <CheckSquare size={13} /> Semua Hadir
+            </button>
+            <button onClick={clearAll} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 active:scale-[0.98] bg-white cursor-pointer font-semibold shadow-2xs">
+              <Square size={13} /> Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Search & Status Filters */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={viewMode === 'family' ? 'Cari nama keluarga atau anggota keluarga...' : 'Cari nama jemaat...'}
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-2xs"
+          />
+        </div>
+        <button
+          onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+          className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-2.5 min-h-[40px] text-sm text-gray-600 hover:bg-gray-50 active:scale-[0.98] bg-white cursor-pointer shadow-2xs"
+        >
           {sortDir === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
           {sortDir === 'asc' ? 'Asc' : 'Desc'}
         </button>
         {(['all', 'hadir', 'absen'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold border transition-all active:scale-[0.98] cursor-pointer ${filter === f ? 'bg-blue-700 text-white border-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50 bg-white'}`}>
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-3.5 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold border transition-all active:scale-[0.98] cursor-pointer shadow-2xs ${
+              filter === f
+                ? 'bg-blue-700 text-white border-blue-700'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50 bg-white'
+            }`}
+          >
             {f === 'all' ? 'Semua' : f === 'hadir' ? 'Hadir' : 'Absen'}
           </button>
         ))}
-        {canEdit && !isSessionLocked && (
-          <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
-            <button onClick={markAll} className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 text-xs px-3.5 py-2.5 min-h-[40px] border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-50 active:scale-[0.98] bg-white cursor-pointer font-semibold">
-              <CheckSquare size={14} /> Semua Hadir
-            </button>
-            <button onClick={clearAll} className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 text-xs px-3.5 py-2.5 min-h-[40px] border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 active:scale-[0.98] bg-white cursor-pointer font-semibold">
-              <Square size={14} /> Clear
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Lock Notice if session is locked */}
@@ -1344,55 +1612,293 @@ function DailyInput({
         </div>
       )}
 
-      {/* Member checklist */}
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-        {filtered.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-sm">Tidak ada jemaat ditemukan</div>
-        ) : (
-          filtered.map((m, i) => {
-            const isPresent = present.has(m.id);
-            return (
-              <div key={m.id}
-                onClick={() => !isSessionLocked && toggle(m.id)}
-                className={`flex items-center gap-4 px-5 py-4 transition-colors select-none ${
-                  isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer'
-                } ${i > 0 ? 'border-t border-gray-50' : ''} ${isPresent ? 'bg-emerald-50/60 hover:bg-emerald-50' : isSessionLocked ? '' : 'hover:bg-gray-50'}`}>
-                <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-gray-900 truncate">{m.name}</p>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedMemberForInfo(m);
-                      }}
-                      className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                      title="Lihat detail singkat jemaat"
-                    >
-                      <Info size={15} />
-                    </button>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
-                      {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
-                    </span>
-                    {m.pksName && (
-                      <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-medium border border-purple-100">
-                        PKS: {m.pksName}
+      {/* Main Checklist View: Individual vs Family */}
+      {viewMode === 'individual' ? (
+        /* ─── Individual Checklist ─── */
+        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+          {filtered.length === 0 ? (
+            <div className="py-12 text-center text-gray-400 text-sm">Tidak ada jemaat ditemukan</div>
+          ) : (
+            filtered.map((m, i) => {
+              const isPresent = present.has(m.id);
+              return (
+                <div
+                  key={m.id}
+                  onClick={() => !isSessionLocked && toggle(m.id)}
+                  className={`flex items-center gap-4 px-5 py-4 transition-colors select-none ${
+                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer'
+                  } ${i > 0 ? 'border-t border-gray-50' : ''} ${isPresent ? 'bg-emerald-50/60 hover:bg-emerald-50' : isSessionLocked ? '' : 'hover:bg-gray-50'}`}
+                >
+                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-gray-900 truncate">{m.name}</p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedMemberForInfo(m);
+                        }}
+                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                        title="Lihat detail singkat jemaat"
+                      >
+                        <Info size={15} />
+                      </button>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
                       </span>
-                    )}
+                      {m.pksName && (
+                        <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-medium border border-purple-100">
+                          PKS: {m.pksName}
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-sm mt-0.5 ${isPresent ? 'text-emerald-600' : 'text-gray-400'}`}>
+                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
+                    </p>
                   </div>
-                  <p className={`text-sm mt-0.5 ${isPresent ? 'text-emerald-600' : 'text-gray-400'}`}>
-                    {isPresent ? 'Hadir ✓' : 'Belum hadir'}
-                  </p>
+                  {isPresent ? (
+                    <CheckCircle2 size={26} className="text-emerald-500 flex-shrink-0" />
+                  ) : (
+                    <Circle size={26} className="text-gray-300 flex-shrink-0" />
+                  )}
                 </div>
-                {isPresent
-                  ? <CheckCircle2 size={26} className="text-emerald-500 flex-shrink-0" />
-                  : <Circle size={26} className="text-gray-300 flex-shrink-0" />}
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        /* ─── Family View Checklist ─── */
+        <div className="space-y-3">
+          {filteredFamilyGroups.length === 0 ? (
+            <div className="bg-white py-12 text-center text-gray-400 text-sm rounded-2xl border border-gray-100">
+              Tidak ada data keluarga yang sesuai dengan pencarian atau filter ini.
+            </div>
+          ) : (
+            filteredFamilyGroups.map(group => {
+              const isExpanded = expandedFamilies.has(group.key);
+              const presentCount = group.presentCount;
+              const totalCount = group.totalCount;
+              const allPresent = group.allPresent;
+              const nonePresent = group.nonePresent;
+
+              return (
+                <div key={group.key} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all">
+                  {/* Family Header Card */}
+                  <div
+                    onClick={() => toggleFamilyExpand(group.key)}
+                    className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50/80 select-none transition-colors border-b border-gray-50"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center flex-shrink-0 text-purple-700">
+                      <Home size={20} />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-bold text-gray-900 text-sm">{group.familyName}</p>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold border ${
+                          allPresent 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : nonePresent 
+                            ? 'bg-gray-100 text-gray-600 border-gray-200' 
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {presentCount}/{totalCount} Hadir
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">
+                        Anggota: {group.allMembers.map(m => m.name).join(', ')}
+                      </p>
+                    </div>
+
+                    {/* Quick batch toggle button for the whole family */}
+                    {!isSessionLocked && canEdit && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleAllFamilyMembers(group.allMembers);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                          allPresent
+                            ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                        }`}
+                        title={allPresent ? 'Batal Hadirkan Seluruh Keluarga' : 'Hadirkan Seluruh Anggota Keluarga'}
+                      >
+                        <UserCheck size={14} />
+                        <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan Sekeluarga'}</span>
+                      </button>
+                    )}
+
+                    <div className="text-gray-400 p-1">
+                      {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    </div>
+                  </div>
+
+                  {/* Expanded Family Members List with Checkboxes */}
+                  {isExpanded && (
+                    <div className="bg-gray-50/50 p-3 sm:p-4 space-y-2">
+                      {group.parents.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
+                            Orang Tua / Pasangan ({group.parents.length})
+                          </p>
+                          <div className="space-y-1.5">
+                            {group.parents.map(m => {
+                              const isPresent = present.has(m.id);
+                              return (
+                                <div
+                                  key={m.id}
+                                  onClick={() => !isSessionLocked && toggle(m.id)}
+                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
+                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
+                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
+                                >
+                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedMemberForInfo(m);
+                                        }}
+                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                        title="Lihat detail jemaat"
+                                      >
+                                        <Info size={13} />
+                                      </button>
+                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                                      </span>
+                                    </div>
+                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
+                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
+                                    </p>
+                                  </div>
+                                  {isPresent ? (
+                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
+                                  ) : (
+                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {group.children.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
+                            Anak-anak ({group.children.length})
+                          </p>
+                          <div className="space-y-1.5">
+                            {group.children.map(m => {
+                              const isPresent = present.has(m.id);
+                              return (
+                                <div
+                                  key={m.id}
+                                  onClick={() => !isSessionLocked && toggle(m.id)}
+                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
+                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
+                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
+                                >
+                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedMemberForInfo(m);
+                                        }}
+                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                        title="Lihat detail jemaat"
+                                      >
+                                        <Info size={13} />
+                                      </button>
+                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                                      </span>
+                                    </div>
+                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
+                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
+                                    </p>
+                                  </div>
+                                  {isPresent ? (
+                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
+                                  ) : (
+                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {group.otherMembers.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
+                            Anggota Lainnya ({group.otherMembers.length})
+                          </p>
+                          <div className="space-y-1.5">
+                            {group.otherMembers.map(m => {
+                              const isPresent = present.has(m.id);
+                              return (
+                                <div
+                                  key={m.id}
+                                  onClick={() => !isSessionLocked && toggle(m.id)}
+                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
+                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
+                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
+                                >
+                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedMemberForInfo(m);
+                                        }}
+                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                        title="Lihat detail jemaat"
+                                      >
+                                        <Info size={13} />
+                                      </button>
+                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                                      </span>
+                                    </div>
+                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
+                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
+                                    </p>
+                                  </div>
+                                  {isPresent ? (
+                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
+                                  ) : (
+                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Quick Info Modal */}
       <MemberQuickInfoModal
