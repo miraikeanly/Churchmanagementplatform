@@ -195,14 +195,7 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     }
   }
 
-  // 2. Link by parentId
-  for (const m of allMembers) {
-    if (m.parentId && memberById.has(m.parentId)) {
-      union(m.id, m.parentId);
-    }
-  }
-
-  // 3. Link by spouseName (e.g. Budi Harmanto <-> Sumiati, Bean <-> Helen)
+  // 2. Link spouses (e.g. Anton Aprilyanto <-> Christiany, Antoni Hansen <-> Lily, Bean <-> Helen)
   for (const m of allMembers) {
     if (m.spouseName && m.spouseName.trim()) {
       const matchId = findMemberMatch(m.spouseName);
@@ -212,26 +205,39 @@ export function buildAttendanceFamilyGroups(allMembers: Member[]): AttendanceFam
     }
   }
 
-  // 4. Link by parentName
+  // Helper to check if a member is already married (forms their own nuclear household)
+  const isMemberMarried = (member: Member): boolean => {
+    return Boolean(member.spouseName && member.spouseName.trim()) || member.maritalStatus === 'married';
+  };
+
+  // 3. Link parent and children:
+  // Nuclear family unit rule: an unmarried child stays with their parents' family card.
+  // Once a child marries, they form their own separate family card and do not merge into parents' family card!
   for (const m of allMembers) {
-    if (m.parentName && m.parentName.trim()) {
-      const matchId = findMemberMatch(m.parentName);
-      if (matchId && matchId !== m.id) {
-        union(m.id, matchId);
+    if (!isMemberMarried(m)) {
+      if (m.parentId && memberById.has(m.parentId)) {
+        union(m.id, m.parentId);
+      } else if (m.parentName && m.parentName.trim()) {
+        const matchId = findMemberMatch(m.parentName);
+        if (matchId && matchId !== m.id) {
+          union(m.id, matchId);
+        }
       }
     }
   }
 
-  // 5. Link by children list
-  // Only sync children that actually exist as members in the congregation!
-  // External children or babies without congregation records are ignored as requested.
+  // 4. Link by children list from parent:
+  // Only sync children that exist in the congregation and are NOT married
   for (const m of allMembers) {
     if (Array.isArray(m.children) && m.children.length > 0) {
       for (const c of m.children) {
         if (c?.name && c.name.trim()) {
           const matchId = findMemberMatch(c.name);
           if (matchId && matchId !== m.id) {
-            union(m.id, matchId);
+            const childMember = memberById.get(matchId);
+            if (childMember && !isMemberMarried(childMember)) {
+              union(m.id, matchId);
+            }
           }
         }
       }
