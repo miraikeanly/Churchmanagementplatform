@@ -93,6 +93,7 @@ export interface AttendanceFamilyGroup {
   familyName: string;
   parents: Member[];
   children: Member[];
+  grandchildren: Member[];
   otherMembers: Member[];
   allMembers: Member[];
 }
@@ -127,8 +128,9 @@ function getNameVariants(name?: string): string[] {
 
 export function buildAttendanceFamilyGroups(
   allMembers: Member[],
-  customLinks?: Array<{ id1: string; id2: string }>,
-  customUnlinks?: Array<{ memberId: string; familyKey: string }>
+  customLinks?: Array<{ id1: string; id2: string; role?: 'parent' | 'child' | 'grandchild' }>,
+  customUnlinks?: Array<{ memberId: string; familyKey: string }>,
+  roleOverrides?: Record<string, 'parent' | 'child' | 'grandchild'>
 ): AttendanceFamilyGroup[] {
   const memberById = new Map<string, Member>();
   for (const m of allMembers) {
@@ -295,19 +297,35 @@ export function buildAttendanceFamilyGroups(
       continue;
     }
 
-    // Separate into parents, children, others
+    // Separate into parents, children, grandchildren, others
     const parents: Member[] = [];
     const children: Member[] = [];
+    const grandchildren: Member[] = [];
     const others: Member[] = [];
 
     for (const m of groupMembers) {
-      // Is this member a parent in this group?
+      // Check explicit role override first (e.g. from "+ Tambah Anggota")
+      const overrideKey = `${rootId}:${m.id}`;
+      const explicitRole = roleOverrides?.[overrideKey] || roleOverrides?.[m.id];
+      if (explicitRole === 'grandchild') {
+        grandchildren.push(m);
+        continue;
+      }
+      if (explicitRole === 'child') {
+        children.push(m);
+        continue;
+      }
+      if (explicitRole === 'parent') {
+        parents.push(m);
+        continue;
+      }
+
+      // Natural deduction:
       const isParentByChildren = (Array.isArray(m.children) && m.children.some(c => groupMembers.some(gm => gm.id !== m.id && findMemberMatch(c?.name) === gm.id))) ||
         groupMembers.some(other => other.parentId === m.id || (other.parentName && findMemberMatch(other.parentName) === m.id));
 
       const isParentByMarriage = Boolean(m.maritalStatus && m.maritalStatus !== 'single') || Boolean(m.spouseName);
 
-      // Is this member a child of someone in this group?
       const isChildByParent = (m.parentId && groupMembers.some(p => p.id === m.parentId)) ||
         groupMembers.some(p => (p.parentName && findMemberMatch(m.parentName) === p.id) || (Array.isArray(p.children) && p.children.some(c => findMemberMatch(c?.name) === m.id)));
 
@@ -332,6 +350,7 @@ export function buildAttendanceFamilyGroups(
       familyName,
       parents,
       children,
+      grandchildren,
       otherMembers: others,
       allMembers: groupMembers,
     });
@@ -1294,18 +1313,23 @@ function DailyInput({
   const [customFamilyLinks, setCustomFamilyLinks] = useState<Array<{ id1: string; id2: string }>>([]);
   // Custom unlinks / exclusions persisted in database: array of { memberId, familyKey }
   const [customFamilyUnlinks, setCustomFamilyUnlinks] = useState<Array<{ memberId: string; familyKey: string }>>([]);
+  // Role overrides: map of memberId (or familyKey:memberId) -> 'parent' | 'child' | 'grandchild'
+  const [familyRoleOverrides, setFamilyRoleOverrides] = useState<Record<string, 'parent' | 'child' | 'grandchild'>>({});
+
   const [isLinkingMember, setIsLinkingMember] = useState(false);
   const [linkTargetFamily, setLinkTargetFamily] = useState<AttendanceFamilyGroup | null>(null);
+  const [linkTargetCategory, setLinkTargetCategory] = useState<'parent' | 'child' | 'grandchild'>('child');
   const [linkMemberSearch, setLinkMemberSearch] = useState('');
   const [savingLink, setSavingLink] = useState(false);
 
-  // Load persisted custom family links and unlinks on mount
+  // Load persisted custom family links, unlinks, and role overrides on mount
   useEffect(() => {
     (async () => {
       try {
-        const [{ data: linksData }, { data: unlinksData }] = await Promise.all([
+        const [{ data: linksData }, { data: unlinksData }, { data: rolesData }] = await Promise.all([
           supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_links').maybeSingle(),
           supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_unlinks').maybeSingle(),
+          supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_roles').maybeSingle(),
         ]);
         if (linksData?.value && Array.isArray(linksData.value)) {
           setCustomFamilyLinks(linksData.value);
@@ -1313,14 +1337,17 @@ function DailyInput({
         if (unlinksData?.value && Array.isArray(unlinksData.value)) {
           setCustomFamilyUnlinks(unlinksData.value);
         }
+        if (rolesData?.value && typeof rolesData.value === 'object') {
+          setFamilyRoleOverrides(rolesData.value);
+        }
       } catch (err) {
-        console.warn('Failed to load custom family links/unlinks:', err);
+        console.warn('Failed to load custom family links/unlinks/roles:', err);
       }
     })();
   }, []);
 
-  // Save custom family link: links a member from congregation data to a family
-  const handleAddMemberToFamily = async (selectedMember: Member) => {
+  // Save custom family link: links a member from congregation data to a family under a specific category
+  const handleAddMemberToFamily = async (selectedMember: Member, category: 'parent' | 'child' | 'grandchild') => {
     if (!linkTargetFamily || !selectedMember) return;
     const anchorMember = linkTargetFamily.allMembers[0];
     if (!anchorMember || anchorMember.id === selectedMember.id) return;
@@ -1330,6 +1357,12 @@ function DailyInput({
       const newLinks = [...customFamilyLinks, { id1: anchorMember.id, id2: selectedMember.id }];
       // Also remove any existing unlink entry for this member if previously excluded
       const newUnlinks = customFamilyUnlinks.filter(u => u.memberId !== selectedMember.id);
+      // Store category role override
+      const newRoles = {
+        ...familyRoleOverrides,
+        [`${linkTargetFamily.key}:${selectedMember.id}`]: category,
+        [selectedMember.id]: category,
+      };
 
       await Promise.all([
         supabaseAdmin.from(KV).upsert({
@@ -1341,15 +1374,22 @@ function DailyInput({
           key: 'attendance:custom_family_unlinks',
           value: newUnlinks,
           updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_roles',
+          value: newRoles,
+          updated_at: new Date().toISOString(),
         })
       ]);
 
       setCustomFamilyLinks(newLinks);
       setCustomFamilyUnlinks(newUnlinks);
+      setFamilyRoleOverrides(newRoles);
       setIsLinkingMember(false);
       setLinkTargetFamily(null);
       setLinkMemberSearch('');
-      setSaveSuccessNotice(`${selectedMember.name} berhasil ditambahkan ke ${linkTargetFamily.familyName}!`);
+      const categoryLabel = category === 'parent' ? 'Orang Tua / Pasangan' : category === 'child' ? 'Anak' : 'Cucu';
+      setSaveSuccessNotice(`${selectedMember.name} berhasil ditambahkan sebagai ${categoryLabel} di ${linkTargetFamily.familyName}!`);
       setTimeout(() => setSaveSuccessNotice(''), 3500);
     } catch (err) {
       console.error('Failed to save custom family link:', err);
@@ -1372,6 +1412,10 @@ function DailyInput({
         ...customFamilyUnlinks.filter(u => !(u.memberId === memberToRemove.id && u.familyKey === family.key)),
         { memberId: memberToRemove.id, familyKey: family.key }
       ];
+      // 3. Remove role override
+      const newRoles = { ...familyRoleOverrides };
+      delete newRoles[`${family.key}:${memberToRemove.id}`];
+      delete newRoles[memberToRemove.id];
 
       await Promise.all([
         supabaseAdmin.from(KV).upsert({
@@ -1383,11 +1427,17 @@ function DailyInput({
           key: 'attendance:custom_family_unlinks',
           value: newUnlinks,
           updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_roles',
+          value: newRoles,
+          updated_at: new Date().toISOString(),
         })
       ]);
 
       setCustomFamilyLinks(newLinks);
       setCustomFamilyUnlinks(newUnlinks);
+      setFamilyRoleOverrides(newRoles);
       setSaveSuccessNotice(`${memberToRemove.name} berhasil dikeluarkan dari ${family.familyName}`);
       setTimeout(() => setSaveSuccessNotice(''), 3500);
     } catch (err) {
@@ -1396,10 +1446,10 @@ function DailyInput({
     }
   };
 
-  // Build all family groups from the full members array + custom links - custom unlinks
+  // Build all family groups from the full members array + custom links - custom unlinks + role overrides
   const allFamilyGroups = useMemo(
-    () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks),
-    [members, customFamilyLinks, customFamilyUnlinks]
+    () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides),
+    [members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides]
   );
 
   // Filter family groups based on search and hadir/absen status
@@ -1986,12 +2036,36 @@ function DailyInput({
 
                   {/* Expanded Family Members List with Checkboxes */}
                   {isExpanded && (
-                    <div className="bg-gray-50/50 p-3 sm:p-4 space-y-2">
-                      {group.parents.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
+                    <div className="bg-gray-50/50 p-3 sm:p-4 space-y-3">
+                      {/* Orang Tua / Pasangan Section */}
+                      <div>
+                        <div className="flex items-center justify-between px-2 mb-1.5">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                             Orang Tua / Pasangan ({group.parents.length})
                           </p>
+                          {!isSessionLocked && canEdit && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLinkTargetFamily(group);
+                                setLinkTargetCategory('parent');
+                                setLinkMemberSearch('');
+                                setIsLinkingMember(true);
+                              }}
+                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Tambah Orang Tua / Pasangan ke keluarga ini"
+                            >
+                              <UserPlus size={12} />
+                              <span>+ Orang Tua</span>
+                            </button>
+                          )}
+                        </div>
+                        {group.parents.length === 0 ? (
+                          <div className="text-xs text-gray-400 italic px-3 py-2 bg-white rounded-xl border border-dashed border-gray-200">
+                            Belum ada orang tua yang terdaftar
+                          </div>
+                        ) : (
                           <div className="space-y-1.5">
                             {group.parents.map(m => {
                               const isPresent = present.has(m.id);
@@ -2050,14 +2124,38 @@ function DailyInput({
                               );
                             })}
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
 
-                      {group.children.length > 0 && (
-                        <div className="mt-3">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
+                      {/* Anak-anak Section */}
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between px-2 mb-1.5">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                             Anak-anak ({group.children.length})
                           </p>
+                          {!isSessionLocked && canEdit && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLinkTargetFamily(group);
+                                setLinkTargetCategory('child');
+                                setLinkMemberSearch('');
+                                setIsLinkingMember(true);
+                              }}
+                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Tambah Anak ke keluarga ini"
+                            >
+                              <UserPlus size={12} />
+                              <span>+ Anak</span>
+                            </button>
+                          )}
+                        </div>
+                        {group.children.length === 0 ? (
+                          <div className="text-xs text-gray-400 italic px-3 py-2 bg-white rounded-xl border border-dashed border-gray-200">
+                            Belum ada anak yang terdaftar
+                          </div>
+                        ) : (
                           <div className="space-y-1.5">
                             {group.children.map(m => {
                               const isPresent = present.has(m.id);
@@ -2116,9 +2214,100 @@ function DailyInput({
                               );
                             })}
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
 
+                      {/* Cucu-cucu Section */}
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between px-2 mb-1.5">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            Cucu-cucu ({group.grandchildren.length})
+                          </p>
+                          {!isSessionLocked && canEdit && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLinkTargetFamily(group);
+                                setLinkTargetCategory('grandchild');
+                                setLinkMemberSearch('');
+                                setIsLinkingMember(true);
+                              }}
+                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Tambah Cucu ke keluarga ini"
+                            >
+                              <UserPlus size={12} />
+                              <span>+ Cucu</span>
+                            </button>
+                          )}
+                        </div>
+                        {group.grandchildren.length === 0 ? (
+                          <div className="text-xs text-gray-400 italic px-3 py-2 bg-white rounded-xl border border-dashed border-gray-200">
+                            Belum ada cucu yang terdaftar
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {group.grandchildren.map(m => {
+                              const isPresent = present.has(m.id);
+                              return (
+                                <div
+                                  key={m.id}
+                                  onClick={() => !isSessionLocked && toggle(m.id)}
+                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
+                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
+                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
+                                >
+                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedMemberForInfo(m);
+                                        }}
+                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                        title="Lihat detail jemaat"
+                                      >
+                                        <Info size={13} />
+                                      </button>
+                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                                      </span>
+                                    </div>
+                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
+                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
+                                    </p>
+                                  </div>
+
+                                  {!isSessionLocked && canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveMemberFromFamily(m, group);
+                                      }}
+                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                                      title={`Keluarkan ${m.name} dari keluarga ini`}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+
+                                  {isPresent ? (
+                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
+                                  ) : (
+                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Anggota Lainnya Section */}
                       {group.otherMembers.length > 0 && (
                         <div className="mt-3">
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
@@ -2235,6 +2424,44 @@ function DailyInput({
               </button>
             </div>
 
+            {/* Category selection selector tabs */}
+            <div className="px-5 pt-3 pb-2 bg-gray-50/60 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-gray-500 mr-1">Tambahkan sebagai:</span>
+              <button
+                type="button"
+                onClick={() => setLinkTargetCategory('parent')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  linkTargetCategory === 'parent'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Orang Tua / Pasangan
+              </button>
+              <button
+                type="button"
+                onClick={() => setLinkTargetCategory('child')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  linkTargetCategory === 'child'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Anak
+              </button>
+              <button
+                type="button"
+                onClick={() => setLinkTargetCategory('grandchild')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  linkTargetCategory === 'grandchild'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Cucu
+              </button>
+            </div>
+
             {/* Search input in modal */}
             <div className="p-4 border-b border-gray-100 bg-white">
               <div className="relative">
@@ -2288,7 +2515,7 @@ function DailyInput({
                     <button
                       type="button"
                       disabled={savingLink}
-                      onClick={() => handleAddMemberToFamily(candidate)}
+                      onClick={() => handleAddMemberToFamily(candidate, linkTargetCategory)}
                       className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1"
                     >
                       {savingLink ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
