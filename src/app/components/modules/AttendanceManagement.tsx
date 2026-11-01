@@ -127,7 +127,8 @@ function getNameVariants(name?: string): string[] {
 
 export function buildAttendanceFamilyGroups(
   allMembers: Member[],
-  customLinks?: Array<{ id1: string; id2: string }>
+  customLinks?: Array<{ id1: string; id2: string }>,
+  customUnlinks?: Array<{ memberId: string; familyKey: string }>
 ): AttendanceFamilyGroup[] {
   const memberById = new Map<string, Member>();
   for (const m of allMembers) {
@@ -257,13 +258,32 @@ export function buildAttendanceFamilyGroups(
   }
 
   // Group members by root ID
-  const clusters = new Map<string, Member[]>();
+  const rawClusters = new Map<string, Member[]>();
   for (const m of allMembers) {
     const root = find(m.id);
-    if (!clusters.has(root)) {
-      clusters.set(root, []);
+    if (!rawClusters.has(root)) {
+      rawClusters.set(root, []);
     }
-    clusters.get(root)!.push(m);
+    rawClusters.get(root)!.push(m);
+  }
+
+  // Build unlinks set: "familyRoot:memberId" or "memberId"
+  const unlinkPairs = new Set<string>();
+  if (Array.isArray(customUnlinks)) {
+    for (const u of customUnlinks) {
+      if (u.memberId) {
+        unlinkPairs.add(`${u.familyKey}:${u.memberId}`);
+        unlinkPairs.add(u.memberId);
+      }
+    }
+  }
+
+  const clusters = new Map<string, Member[]>();
+  for (const [rootId, groupMembers] of rawClusters.entries()) {
+    const kept = groupMembers.filter(m => !unlinkPairs.has(`${rootId}:${m.id}`) && !unlinkPairs.has(m.id));
+    if (kept.length > 0) {
+      clusters.set(rootId, kept);
+    }
   }
 
   const result: AttendanceFamilyGroup[] = [];
@@ -1272,21 +1292,29 @@ function DailyInput({
 
   // Custom family links persisted in database: array of { id1, id2 }
   const [customFamilyLinks, setCustomFamilyLinks] = useState<Array<{ id1: string; id2: string }>>([]);
+  // Custom unlinks / exclusions persisted in database: array of { memberId, familyKey }
+  const [customFamilyUnlinks, setCustomFamilyUnlinks] = useState<Array<{ memberId: string; familyKey: string }>>([]);
   const [isLinkingMember, setIsLinkingMember] = useState(false);
   const [linkTargetFamily, setLinkTargetFamily] = useState<AttendanceFamilyGroup | null>(null);
   const [linkMemberSearch, setLinkMemberSearch] = useState('');
   const [savingLink, setSavingLink] = useState(false);
 
-  // Load persisted custom family links on mount
+  // Load persisted custom family links and unlinks on mount
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_links').maybeSingle();
-        if (data?.value && Array.isArray(data.value)) {
-          setCustomFamilyLinks(data.value);
+        const [{ data: linksData }, { data: unlinksData }] = await Promise.all([
+          supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_links').maybeSingle(),
+          supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_unlinks').maybeSingle(),
+        ]);
+        if (linksData?.value && Array.isArray(linksData.value)) {
+          setCustomFamilyLinks(linksData.value);
+        }
+        if (unlinksData?.value && Array.isArray(unlinksData.value)) {
+          setCustomFamilyUnlinks(unlinksData.value);
         }
       } catch (err) {
-        console.warn('Failed to load custom family links:', err);
+        console.warn('Failed to load custom family links/unlinks:', err);
       }
     })();
   }, []);
@@ -1300,12 +1328,24 @@ function DailyInput({
     setSavingLink(true);
     try {
       const newLinks = [...customFamilyLinks, { id1: anchorMember.id, id2: selectedMember.id }];
-      await supabaseAdmin.from(KV).upsert({
-        key: 'attendance:custom_family_links',
-        value: newLinks,
-        updated_at: new Date().toISOString(),
-      });
+      // Also remove any existing unlink entry for this member if previously excluded
+      const newUnlinks = customFamilyUnlinks.filter(u => u.memberId !== selectedMember.id);
+
+      await Promise.all([
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_links',
+          value: newLinks,
+          updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_unlinks',
+          value: newUnlinks,
+          updated_at: new Date().toISOString(),
+        })
+      ]);
+
       setCustomFamilyLinks(newLinks);
+      setCustomFamilyUnlinks(newUnlinks);
       setIsLinkingMember(false);
       setLinkTargetFamily(null);
       setLinkMemberSearch('');
@@ -1319,10 +1359,47 @@ function DailyInput({
     }
   };
 
-  // Build all family groups from the full members array + custom links
+  // Remove a member from a family card
+  const handleRemoveMemberFromFamily = async (memberToRemove: Member, family: AttendanceFamilyGroup) => {
+    const confirmRemove = window.confirm(`Keluarkan ${memberToRemove.name} dari ${family.familyName}?`);
+    if (!confirmRemove) return;
+
+    try {
+      // 1. Remove any custom link involving this member
+      const newLinks = customFamilyLinks.filter(l => l.id1 !== memberToRemove.id && l.id2 !== memberToRemove.id);
+      // 2. Add an explicit unlink rule for this member and family
+      const newUnlinks = [
+        ...customFamilyUnlinks.filter(u => !(u.memberId === memberToRemove.id && u.familyKey === family.key)),
+        { memberId: memberToRemove.id, familyKey: family.key }
+      ];
+
+      await Promise.all([
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_links',
+          value: newLinks,
+          updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_unlinks',
+          value: newUnlinks,
+          updated_at: new Date().toISOString(),
+        })
+      ]);
+
+      setCustomFamilyLinks(newLinks);
+      setCustomFamilyUnlinks(newUnlinks);
+      setSaveSuccessNotice(`${memberToRemove.name} berhasil dikeluarkan dari ${family.familyName}`);
+      setTimeout(() => setSaveSuccessNotice(''), 3500);
+    } catch (err) {
+      console.error('Failed to remove member from family:', err);
+      alert('Gagal mengeluarkan anggota keluarga. Silakan coba lagi.');
+    }
+  };
+
+  // Build all family groups from the full members array + custom links - custom unlinks
   const allFamilyGroups = useMemo(
-    () => buildAttendanceFamilyGroups(members, customFamilyLinks),
-    [members, customFamilyLinks]
+    () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks),
+    [members, customFamilyLinks, customFamilyUnlinks]
   );
 
   // Filter family groups based on search and hadir/absen status
@@ -1949,6 +2026,21 @@ function DailyInput({
                                       {isPresent ? 'Hadir ✓' : 'Belum hadir'}
                                     </p>
                                   </div>
+
+                                  {!isSessionLocked && canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveMemberFromFamily(m, group);
+                                      }}
+                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                                      title={`Keluarkan ${m.name} dari keluarga ini`}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+
                                   {isPresent ? (
                                     <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
                                   ) : (
@@ -2000,6 +2092,21 @@ function DailyInput({
                                       {isPresent ? 'Hadir ✓' : 'Belum hadir'}
                                     </p>
                                   </div>
+
+                                  {!isSessionLocked && canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveMemberFromFamily(m, group);
+                                      }}
+                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                                      title={`Keluarkan ${m.name} dari keluarga ini`}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+
                                   {isPresent ? (
                                     <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
                                   ) : (
@@ -2051,6 +2158,21 @@ function DailyInput({
                                       {isPresent ? 'Hadir ✓' : 'Belum hadir'}
                                     </p>
                                   </div>
+
+                                  {!isSessionLocked && canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveMemberFromFamily(m, group);
+                                      }}
+                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                                      title={`Keluarkan ${m.name} dari keluarga ini`}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+
                                   {isPresent ? (
                                     <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
                                   ) : (
