@@ -925,19 +925,36 @@ function DailyInput({
 
   // Track if user has modified present state compared to last loaded server state
   const isDirtyRef = useRef(false);
+  // Track IDs that were explicitly unchecked/removed by this admin during active editing session
+  const explicitlyUncheckedRef = useRef<Set<string>>(new Set());
 
-  // When date changes, reset isDirtyRef so the new session's existing state is loaded
+  // When date changes, reset isDirtyRef and explicitlyUncheckedRef so the new session's existing state is loaded
   useEffect(() => {
     isDirtyRef.current = false;
+    explicitlyUncheckedRef.current.clear();
   }, [sessionId]);
 
-  // Load session only when date changes (sessionId changes) or external session update arrives while not dirty
+  // Load or merge session updates from external sources (e.g. background polling / other admins)
   useEffect(() => {
     const s = sessions.find(item => item.id === sessionId);
+    const serverPresent = s?.presentIds || [];
+
     if (!isDirtyRef.current) {
-      setPresent(new Set(s?.presentIds || []));
+      setPresent(new Set(serverPresent));
       setSaved(!!s);
       setIsEditing(!s);
+    } else {
+      // Admin is actively editing! Perform live smart merge so incoming checkmarks from other admins
+      // appear automatically without wiping out current admin's in-progress checks or re-adding explicitly unchecked members.
+      setPresent(prev => {
+        const next = new Set(prev);
+        serverPresent.forEach(id => {
+          if (!explicitlyUncheckedRef.current.has(id)) {
+            next.add(id);
+          }
+        });
+        return next;
+      });
     }
     setSaveSuccessNotice('');
   }, [sessionId, sessions]);
@@ -950,8 +967,13 @@ function DailyInput({
     setSaveSuccessNotice('');
     setPresent(prev => {
       const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
+      if (n.has(id)) {
+        n.delete(id);
+        explicitlyUncheckedRef.current.add(id);
+      } else {
+        n.add(id);
+        explicitlyUncheckedRef.current.delete(id);
+      }
       return n;
     });
   };
@@ -962,7 +984,13 @@ function DailyInput({
     setIsEditing(true);
     setSaved(false);
     setSaveSuccessNotice('');
-    setPresent(new Set(filtered.map(m => m.id)));
+    const targetIds = filtered.map(m => m.id);
+    targetIds.forEach(id => explicitlyUncheckedRef.current.delete(id));
+    setPresent(prev => {
+      const next = new Set(prev);
+      targetIds.forEach(id => next.add(id));
+      return next;
+    });
   };
 
   const clearAll = () => {
@@ -971,7 +999,15 @@ function DailyInput({
     setIsEditing(true);
     setSaved(false);
     setSaveSuccessNotice('');
-    setPresent(new Set());
+    // Mark all currently present filtered items as explicitly unchecked
+    filtered.forEach(m => {
+      explicitlyUncheckedRef.current.add(m.id);
+    });
+    setPresent(prev => {
+      const next = new Set(prev);
+      filtered.forEach(m => next.delete(m.id));
+      return next;
+    });
   };
 
   const filtered = useMemo(() => {
@@ -991,10 +1027,17 @@ function DailyInput({
       const nowIso = new Date().toISOString();
       const key = `attendance_session:${sessionId}`;
       
+      // Fetch latest server session to perform smart merge
       const { data: latestRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', key).maybeSingle();
 
-      // Directly use present set so unchecking/revision is accurately preserved
-      const presentIdsList = Array.from(present);
+      const serverPresentIds: string[] = Array.isArray(latestRow?.value?.presentIds)
+        ? latestRow.value.presentIds
+        : [];
+
+      // Smart Merge: combine server IDs + current local IDs, minus any intentionally unchecked IDs
+      const mergedSet = new Set<string>([...serverPresentIds, ...Array.from(present)]);
+      explicitlyUncheckedRef.current.forEach(id => mergedSet.delete(id));
+      const presentIdsList = Array.from(mergedSet);
 
       const session: Session = {
         id: sessionId,
@@ -1019,10 +1062,11 @@ function DailyInput({
       await trackActivity(
         'SAVE_ATTENDANCE',
         'Absensi',
-        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${presentIdsList.length} jemaat hadir)`
+        `Menyimpan absensi ${SERVICE_TYPE} untuk tanggal ${date} (${presentIdsList.length} jemaat hadir - Smart Merge)`
       );
 
       isDirtyRef.current = false;
+      explicitlyUncheckedRef.current.clear();
       setPresent(new Set(presentIdsList));
       setSaved(true);
       setIsEditing(false);
