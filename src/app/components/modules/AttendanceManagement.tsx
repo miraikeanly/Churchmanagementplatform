@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
   Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock,
-  ChevronDown, UserCheck, Home, UserPlus
+  ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -1446,6 +1446,45 @@ function DailyInput({
     }
   };
 
+  // Drag and drop states for moving members between categories
+  const [draggingMember, setDraggingMember] = useState<{
+    member: Member;
+    familyKey: string;
+    currentCategory: 'parent' | 'child' | 'grandchild';
+  } | null>(null);
+  const [dragOverZone, setDragOverZone] = useState<string | null>(null);
+
+  // Move a member to a different category (Orang Tua, Anak, Cucu) within their family
+  const handleMoveMemberCategory = async (
+    member: Member,
+    familyKey: string,
+    targetCategory: 'parent' | 'child' | 'grandchild'
+  ) => {
+    try {
+      const newRoles = {
+        ...familyRoleOverrides,
+        [`${familyKey}:${member.id}`]: targetCategory,
+        [member.id]: targetCategory,
+      };
+
+      // Optimistically update UI
+      setFamilyRoleOverrides(newRoles);
+
+      await supabaseAdmin.from(KV).upsert({
+        key: 'attendance:custom_family_roles',
+        value: newRoles,
+        updated_at: new Date().toISOString(),
+      });
+
+      const label = targetCategory === 'parent' ? 'Orang Tua / Pasangan' : targetCategory === 'child' ? 'Anak' : 'Cucu';
+      setSaveSuccessNotice(`${member.name} dipindahkan ke kategori ${label}!`);
+      setTimeout(() => setSaveSuccessNotice(''), 3000);
+    } catch (err) {
+      console.error('Failed to move member category:', err);
+      alert('Gagal memindahkan kategori anggota keluarga.');
+    }
+  };
+
   // Build all family groups from the full members array + custom links - custom unlinks + role overrides
   const allFamilyGroups = useMemo(
     () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides),
@@ -2034,347 +2073,361 @@ function DailyInput({
                     </div>
                   </div>
 
-                  {/* Expanded Family Members List with Checkboxes */}
-                  {isExpanded && (
-                    <div className="bg-gray-50/50 p-3 sm:p-4 space-y-3">
-                      {/* Orang Tua / Pasangan Section */}
-                      <div>
-                        <div className="flex items-center justify-between px-2 mb-1.5">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            Orang Tua / Pasangan ({group.parents.length})
-                          </p>
-                          {!isSessionLocked && canEdit && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLinkTargetFamily(group);
-                                setLinkTargetCategory('parent');
-                                setLinkMemberSearch('');
-                                setIsLinkingMember(true);
-                              }}
-                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                              title="Tambah Orang Tua / Pasangan ke keluarga ini"
-                            >
-                              <UserPlus size={12} />
-                              <span>+ Orang Tua</span>
-                            </button>
-                          )}
-                        </div>
-                        {group.parents.length === 0 ? (
-                          <div className="text-xs text-gray-400 italic px-3 py-2 bg-white rounded-xl border border-dashed border-gray-200">
-                            Belum ada orang tua yang terdaftar
-                          </div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {group.parents.map(m => {
-                              const isPresent = present.has(m.id);
-                              return (
-                                <div
-                                  key={m.id}
-                                  onClick={() => !isSessionLocked && toggle(m.id)}
-                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
-                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
-                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
-                                >
-                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedMemberForInfo(m);
-                                        }}
-                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                        title="Lihat detail jemaat"
-                                      >
-                                        <Info size={13} />
-                                      </button>
-                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
-                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
-                                      </span>
-                                    </div>
-                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
-                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
-                                    </p>
-                                  </div>
+                  {/* Expanded Family Members List with Checkboxes & Drag/Drop */}
+                  {isExpanded && (() => {
+                    const allowEdit = !isSessionLocked && canEdit;
 
-                                  {!isSessionLocked && canEdit && (
+                    const renderMemberRow = (m: Member, currentCat: 'parent' | 'child' | 'grandchild' | 'other') => {
+                      const isPresent = present.has(m.id);
+                      const isBeingDragged = draggingMember?.member.id === m.id;
+
+                      return (
+                        <div
+                          key={m.id}
+                          draggable={allowEdit}
+                          onDragStart={(e) => {
+                            if (!allowEdit) return;
+                            e.dataTransfer.setData('text/plain', m.id);
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggingMember({
+                              member: m,
+                              familyKey: group.key,
+                              currentCategory: currentCat === 'other' ? 'child' : currentCat
+                            });
+                          }}
+                          onDragEnd={() => {
+                            setDraggingMember(null);
+                            setDragOverZone(null);
+                          }}
+                          onClick={() => !isSessionLocked && toggle(m.id)}
+                          className={`flex items-center gap-2.5 px-3.5 py-2.5 bg-white rounded-xl border transition-all select-none ${
+                            isSessionLocked
+                              ? 'cursor-default opacity-90'
+                              : allowEdit
+                              ? 'cursor-pointer hover:border-blue-300'
+                              : 'cursor-default'
+                          } ${
+                            isBeingDragged ? 'opacity-30 border-dashed border-blue-400 bg-blue-50/30 scale-[0.98]' : ''
+                          } ${
+                            isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'
+                          }`}
+                        >
+                          {/* Drag handle */}
+                          {allowEdit && (
+                            <div
+                              className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-0.5 shrink-0"
+                              title="Tarik (drag) untuk memindahkan ke kategori Orang Tua, Anak, atau Cucu"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <GripVertical size={15} />
+                            </div>
+                          )}
+
+                          <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedMemberForInfo(m);
+                                }}
+                                className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                title="Lihat detail jemaat"
+                              >
+                                <Info size={13} />
+                              </button>
+                              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
+                                {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
+                              </span>
+                            </div>
+                            <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
+                              {isPresent ? 'Hadir ✓' : 'Belum hadir'}
+                            </p>
+                          </div>
+
+                          {/* Quick Category Switcher & Remove */}
+                          {allowEdit && (
+                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <div className="relative group/cat">
+                                <button
+                                  type="button"
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                  title="Pindahkan ke kategori lain (Orang Tua, Anak, Cucu)"
+                                >
+                                  <ArrowRightLeft size={13} />
+                                </button>
+                                <div className="absolute right-0 top-full mt-1 hidden group-hover/cat:flex flex-col bg-white border border-gray-200 shadow-xl rounded-xl py-1 z-40 min-w-[130px] animate-in fade-in">
+                                  <span className="px-2.5 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                    Pindah ke:
+                                  </span>
+                                  {currentCat !== 'parent' && (
                                     <button
                                       type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveMemberFromFamily(m, group);
-                                      }}
-                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-                                      title={`Keluarkan ${m.name} dari keluarga ini`}
+                                      onClick={() => handleMoveMemberCategory(m, group.key, 'parent')}
+                                      className="px-2.5 py-1.5 text-left text-xs font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-pointer"
                                     >
-                                      <Trash2 size={14} />
+                                      Orang Tua
                                     </button>
                                   )}
-
-                                  {isPresent ? (
-                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
-                                  ) : (
-                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
+                                  {currentCat !== 'child' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveMemberCategory(m, group.key, 'child')}
+                                      className="px-2.5 py-1.5 text-left text-xs font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-pointer"
+                                    >
+                                      Anak
+                                    </button>
+                                  )}
+                                  {currentCat !== 'grandchild' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveMemberCategory(m, group.key, 'grandchild')}
+                                      className="px-2.5 py-1.5 text-left text-xs font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-pointer"
+                                    >
+                                      Cucu
+                                    </button>
                                   )}
                                 </div>
-                              );
-                            })}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMemberFromFamily(m, group)}
+                                className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                title={`Keluarkan ${m.name} dari keluarga ini`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+
+                          {isPresent ? (
+                            <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
+                          ) : (
+                            <Circle size={22} className="text-gray-300 flex-shrink-0" />
+                          )}
+                        </div>
+                      );
+                    };
+
+                    const isParentOver = dragOverZone === `${group.key}:parent`;
+                    const isChildOver = dragOverZone === `${group.key}:child`;
+                    const isGrandchildOver = dragOverZone === `${group.key}:grandchild`;
+
+                    return (
+                      <div className="bg-gray-50/50 p-3 sm:p-4 space-y-3">
+                        {/* Orang Tua / Pasangan Section Dropzone */}
+                        <div
+                          onDragOver={(e) => {
+                            if (allowEdit && draggingMember && draggingMember.familyKey === group.key && draggingMember.currentCategory !== 'parent') {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              if (!isParentOver) setDragOverZone(`${group.key}:parent`);
+                            }
+                          }}
+                          onDragLeave={() => {
+                            if (isParentOver) setDragOverZone(null);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverZone(null);
+                            if (draggingMember && draggingMember.familyKey === group.key && draggingMember.currentCategory !== 'parent') {
+                              handleMoveMemberCategory(draggingMember.member, group.key, 'parent');
+                              setDraggingMember(null);
+                            }
+                          }}
+                          className={`rounded-2xl transition-all p-2 ${
+                            isParentOver ? 'bg-blue-50/80 border-2 border-dashed border-blue-400 ring-2 ring-blue-200' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-between px-2 mb-1.5">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                              Orang Tua / Pasangan ({group.parents.length})
+                            </p>
+                            {allowEdit && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLinkTargetFamily(group);
+                                  setLinkTargetCategory('parent');
+                                  setLinkMemberSearch('');
+                                  setIsLinkingMember(true);
+                                }}
+                                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Tambah Orang Tua / Pasangan ke keluarga ini"
+                              >
+                                <UserPlus size={12} />
+                                <span>+ Orang Tua</span>
+                              </button>
+                            )}
+                          </div>
+                          {isParentOver && (
+                            <div className="py-2 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-300 animate-pulse flex items-center justify-center gap-1.5">
+                              <ArrowRightLeft size={13} />
+                              <span>Lepaskan di sini untuk pindahkan ke Orang Tua / Pasangan</span>
+                            </div>
+                          )}
+                          {group.parents.length === 0 ? (
+                            <div className={`text-xs text-center py-3 rounded-xl border border-dashed transition-all ${
+                              isParentOver ? 'border-blue-400 bg-blue-100/70 text-blue-800 font-bold' : 'border-gray-200 bg-white text-gray-400 italic'
+                            }`}>
+                              {isParentOver ? 'Lepaskan di sini' : 'Belum ada orang tua yang terdaftar (bisa drag ke sini)'}
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {group.parents.map(m => renderMemberRow(m, 'parent'))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Anak-anak Section Dropzone */}
+                        <div
+                          onDragOver={(e) => {
+                            if (allowEdit && draggingMember && draggingMember.familyKey === group.key && draggingMember.currentCategory !== 'child') {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              if (!isChildOver) setDragOverZone(`${group.key}:child`);
+                            }
+                          }}
+                          onDragLeave={() => {
+                            if (isChildOver) setDragOverZone(null);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverZone(null);
+                            if (draggingMember && draggingMember.familyKey === group.key && draggingMember.currentCategory !== 'child') {
+                              handleMoveMemberCategory(draggingMember.member, group.key, 'child');
+                              setDraggingMember(null);
+                            }
+                          }}
+                          className={`rounded-2xl transition-all p-2 ${
+                            isChildOver ? 'bg-blue-50/80 border-2 border-dashed border-blue-400 ring-2 ring-blue-200' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-between px-2 mb-1.5">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                              Anak-anak ({group.children.length})
+                            </p>
+                            {allowEdit && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLinkTargetFamily(group);
+                                  setLinkTargetCategory('child');
+                                  setLinkMemberSearch('');
+                                  setIsLinkingMember(true);
+                                }}
+                                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Tambah Anak ke keluarga ini"
+                              >
+                                <UserPlus size={12} />
+                                <span>+ Anak</span>
+                              </button>
+                            )}
+                          </div>
+                          {isChildOver && (
+                            <div className="py-2 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-300 animate-pulse flex items-center justify-center gap-1.5">
+                              <ArrowRightLeft size={13} />
+                              <span>Lepaskan di sini untuk pindahkan ke Anak-anak</span>
+                            </div>
+                          )}
+                          {group.children.length === 0 ? (
+                            <div className={`text-xs text-center py-3 rounded-xl border border-dashed transition-all ${
+                              isChildOver ? 'border-blue-400 bg-blue-100/70 text-blue-800 font-bold' : 'border-gray-200 bg-white text-gray-400 italic'
+                            }`}>
+                              {isChildOver ? 'Lepaskan di sini' : 'Belum ada anak yang terdaftar (bisa drag ke sini)'}
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {group.children.map(m => renderMemberRow(m, 'child'))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Cucu-cucu Section Dropzone */}
+                        <div
+                          onDragOver={(e) => {
+                            if (allowEdit && draggingMember && draggingMember.familyKey === group.key && draggingMember.currentCategory !== 'grandchild') {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              if (!isGrandchildOver) setDragOverZone(`${group.key}:grandchild`);
+                            }
+                          }}
+                          onDragLeave={() => {
+                            if (isGrandchildOver) setDragOverZone(null);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverZone(null);
+                            if (draggingMember && draggingMember.familyKey === group.key && draggingMember.currentCategory !== 'grandchild') {
+                              handleMoveMemberCategory(draggingMember.member, group.key, 'grandchild');
+                              setDraggingMember(null);
+                            }
+                          }}
+                          className={`rounded-2xl transition-all p-2 ${
+                            isGrandchildOver ? 'bg-blue-50/80 border-2 border-dashed border-blue-400 ring-2 ring-blue-200' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-between px-2 mb-1.5">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                              Cucu-cucu ({group.grandchildren.length})
+                            </p>
+                            {allowEdit && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLinkTargetFamily(group);
+                                  setLinkTargetCategory('grandchild');
+                                  setLinkMemberSearch('');
+                                  setIsLinkingMember(true);
+                                }}
+                                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Tambah Cucu ke keluarga ini"
+                              >
+                                <UserPlus size={12} />
+                                <span>+ Cucu</span>
+                              </button>
+                            )}
+                          </div>
+                          {isGrandchildOver && (
+                            <div className="py-2 px-3 mb-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-bold text-center border border-blue-300 animate-pulse flex items-center justify-center gap-1.5">
+                              <ArrowRightLeft size={13} />
+                              <span>Lepaskan di sini untuk pindahkan ke Cucu-cucu</span>
+                            </div>
+                          )}
+                          {group.grandchildren.length === 0 ? (
+                            <div className={`text-xs text-center py-3 rounded-xl border border-dashed transition-all ${
+                              isGrandchildOver ? 'border-blue-400 bg-blue-100/70 text-blue-800 font-bold' : 'border-gray-200 bg-white text-gray-400 italic'
+                            }`}>
+                              {isGrandchildOver ? 'Lepaskan di sini' : 'Belum ada cucu yang terdaftar (bisa drag ke sini)'}
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {group.grandchildren.map(m => renderMemberRow(m, 'grandchild'))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Anggota Lainnya Section */}
+                        {group.otherMembers.length > 0 && (
+                          <div className="p-2">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
+                              Anggota Lainnya ({group.otherMembers.length})
+                            </p>
+                            <div className="space-y-1.5">
+                              {group.otherMembers.map(m => renderMemberRow(m, 'other'))}
+                            </div>
                           </div>
                         )}
                       </div>
-
-                      {/* Anak-anak Section */}
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between px-2 mb-1.5">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            Anak-anak ({group.children.length})
-                          </p>
-                          {!isSessionLocked && canEdit && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLinkTargetFamily(group);
-                                setLinkTargetCategory('child');
-                                setLinkMemberSearch('');
-                                setIsLinkingMember(true);
-                              }}
-                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                              title="Tambah Anak ke keluarga ini"
-                            >
-                              <UserPlus size={12} />
-                              <span>+ Anak</span>
-                            </button>
-                          )}
-                        </div>
-                        {group.children.length === 0 ? (
-                          <div className="text-xs text-gray-400 italic px-3 py-2 bg-white rounded-xl border border-dashed border-gray-200">
-                            Belum ada anak yang terdaftar
-                          </div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {group.children.map(m => {
-                              const isPresent = present.has(m.id);
-                              return (
-                                <div
-                                  key={m.id}
-                                  onClick={() => !isSessionLocked && toggle(m.id)}
-                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
-                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
-                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
-                                >
-                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedMemberForInfo(m);
-                                        }}
-                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                        title="Lihat detail jemaat"
-                                      >
-                                        <Info size={13} />
-                                      </button>
-                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
-                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
-                                      </span>
-                                    </div>
-                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
-                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
-                                    </p>
-                                  </div>
-
-                                  {!isSessionLocked && canEdit && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveMemberFromFamily(m, group);
-                                      }}
-                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-                                      title={`Keluarkan ${m.name} dari keluarga ini`}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  )}
-
-                                  {isPresent ? (
-                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
-                                  ) : (
-                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Cucu-cucu Section */}
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between px-2 mb-1.5">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            Cucu-cucu ({group.grandchildren.length})
-                          </p>
-                          {!isSessionLocked && canEdit && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLinkTargetFamily(group);
-                                setLinkTargetCategory('grandchild');
-                                setLinkMemberSearch('');
-                                setIsLinkingMember(true);
-                              }}
-                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                              title="Tambah Cucu ke keluarga ini"
-                            >
-                              <UserPlus size={12} />
-                              <span>+ Cucu</span>
-                            </button>
-                          )}
-                        </div>
-                        {group.grandchildren.length === 0 ? (
-                          <div className="text-xs text-gray-400 italic px-3 py-2 bg-white rounded-xl border border-dashed border-gray-200">
-                            Belum ada cucu yang terdaftar
-                          </div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {group.grandchildren.map(m => {
-                              const isPresent = present.has(m.id);
-                              return (
-                                <div
-                                  key={m.id}
-                                  onClick={() => !isSessionLocked && toggle(m.id)}
-                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
-                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
-                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
-                                >
-                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedMemberForInfo(m);
-                                        }}
-                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                        title="Lihat detail jemaat"
-                                      >
-                                        <Info size={13} />
-                                      </button>
-                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
-                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
-                                      </span>
-                                    </div>
-                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
-                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
-                                    </p>
-                                  </div>
-
-                                  {!isSessionLocked && canEdit && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveMemberFromFamily(m, group);
-                                      }}
-                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-                                      title={`Keluarkan ${m.name} dari keluarga ini`}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  )}
-
-                                  {isPresent ? (
-                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
-                                  ) : (
-                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Anggota Lainnya Section */}
-                      {group.otherMembers.length > 0 && (
-                        <div className="mt-3">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1.5">
-                            Anggota Lainnya ({group.otherMembers.length})
-                          </p>
-                          <div className="space-y-1.5">
-                            {group.otherMembers.map(m => {
-                              const isPresent = present.has(m.id);
-                              return (
-                                <div
-                                  key={m.id}
-                                  onClick={() => !isSessionLocked && toggle(m.id)}
-                                  className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all select-none ${
-                                    isSessionLocked ? 'cursor-default opacity-90' : 'cursor-pointer hover:border-blue-300'
-                                  } ${isPresent ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}
-                                >
-                                  <Avatar name={m.name} photoUrl={m.photoUrl} present={isPresent} />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="font-semibold text-gray-900 text-sm truncate">{m.name}</p>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedMemberForInfo(m);
-                                        }}
-                                        className="p-1 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                        title="Lihat detail jemaat"
-                                      >
-                                        <Info size={13} />
-                                      </button>
-                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${STATUS_STYLE[m.status || 'active'] || STATUS_STYLE.active}`}>
-                                        {STATUS_LABEL[m.status || 'active'] || m.status || 'Aktif'}
-                                      </span>
-                                    </div>
-                                    <p className={`text-xs mt-0.5 ${isPresent ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
-                                      {isPresent ? 'Hadir ✓' : 'Belum hadir'}
-                                    </p>
-                                  </div>
-
-                                  {!isSessionLocked && canEdit && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveMemberFromFamily(m, group);
-                                      }}
-                                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-                                      title={`Keluarkan ${m.name} dari keluarga ini`}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  )}
-
-                                  {isPresent ? (
-                                    <CheckCircle2 size={22} className="text-emerald-500 flex-shrink-0" />
-                                  ) : (
-                                    <Circle size={22} className="text-gray-300 flex-shrink-0" />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })
