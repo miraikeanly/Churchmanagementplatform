@@ -356,32 +356,60 @@ export default function FaceAttendanceScannerModal({
           if (faceMatcherRef.current && detections.length > 0) {
             const resizedDetections = faceapi.resizeResults(detections, displaySize);
 
-            for (const detection of resizedDetections) {
-              const bestMatch = faceMatcherRef.current.findBestMatch(detection.descriptor);
-              const box = detection.detection.box;
+            // Process and match each detected face
+            const matchResults = resizedDetections.map(detection => {
+              const bestMatch = faceMatcherRef.current!.findBestMatch(detection.descriptor);
               const isUnknown = bestMatch.label === 'unknown';
               const memberId = bestMatch.label;
               const matchedMember = members.find(m => m.id === memberId);
-              const confidence = Math.max(0, Math.round((1 - bestMatch.distance) * 100));
+              // Confidence is inverse of distance (e.g. distance 0.35 => ~65% confidence)
+              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance) * 100)));
+
+              return {
+                detection,
+                box: detection.detection.box,
+                bestMatch,
+                isUnknown,
+                memberId,
+                matchedMember,
+                confidence,
+                distance: bestMatch.distance,
+              };
+            });
+
+            // Sort to ensure highest confidence / closest distance matches take top priority
+            matchResults.sort((a, b) => a.distance - b.distance);
+
+            for (const res of matchResults) {
+              const { box, isUnknown, memberId, matchedMember, confidence } = res;
 
               if (isUnknown) {
                 hasUnrecognized = true;
               }
 
-              // Draw bounding box
+              const isAlreadyPresent = memberId ? presentIds.has(memberId) : false;
+
+              // Draw bounding box on video canvas
               if (ctx) {
                 ctx.lineWidth = 3;
-                ctx.strokeStyle = isUnknown ? '#ef4444' : '#10b981'; // red for unknown, emerald for recognized
+                // Green for recognized, blue for already checked in, red for unknown
+                ctx.strokeStyle = isUnknown ? '#ef4444' : isAlreadyPresent ? '#3b82f6' : '#10b981';
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
 
                 // Label background
                 const labelText = isUnknown
                   ? 'Wajah Belum Terdaftar'
+                  : isAlreadyPresent
+                  ? `✓ ${matchedMember?.name || 'Jemaat'} (Sudah Hadir)`
                   : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
                 
                 ctx.font = 'bold 15px sans-serif';
                 const textWidth = ctx.measureText(labelText).width;
-                ctx.fillStyle = isUnknown ? 'rgba(239, 68, 68, 0.9)' : 'rgba(16, 185, 129, 0.95)';
+                ctx.fillStyle = isUnknown
+                  ? 'rgba(239, 68, 68, 0.9)'
+                  : isAlreadyPresent
+                  ? 'rgba(37, 99, 235, 0.9)'
+                  : 'rgba(16, 185, 129, 0.95)';
                 ctx.fillRect(box.x, Math.max(0, box.y - 28), textWidth + 16, 26);
 
                 // Label text
@@ -389,32 +417,46 @@ export default function FaceAttendanceScannerModal({
                 ctx.fillText(labelText, box.x + 8, Math.max(18, box.y - 9));
               }
 
-              // Auto-checkin trigger if recognized with good confidence (>= 50% match)
+              // Auto-checkin trigger:
+              // 1. Must be recognized (!isUnknown)
+              // 2. Must meet confidence threshold (>= 50%)
+              // 3. Must be highest matching candidate for this frame
               if (!isUnknown && matchedMember && confidence >= 50) {
-                const now = Date.now();
-                const lastCheckin = lastCheckinTimesRef.current.get(memberId) || 0;
+                // If member is not yet checked in in the session:
+                if (!isAlreadyPresent) {
+                  const now = Date.now();
+                  const lastCheckin = lastCheckinTimesRef.current.get(memberId) || 0;
 
-                // Debounce checkin per member for 6 seconds
-                if (now - lastCheckin > 6000) {
-                  lastCheckinTimesRef.current.set(memberId, now);
-                  const isAlreadyPresent = presentIds.has(memberId);
+                  // Debounce to prevent multiple trigger in rapid succession
+                  if (now - lastCheckin > 8000) {
+                    lastCheckinTimesRef.current.set(memberId, now);
 
-                  if (!isAlreadyPresent) {
+                    // Mark present in attendance system
                     onMarkPresent(memberId);
                     playChime(true);
-                  }
 
-                  // Record in recent scans feed
-                  setRecentScans(prev => [
-                    {
-                      id: memberId,
-                      name: matchedMember.name,
-                      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                      confidence,
-                      alreadyPresent: isAlreadyPresent,
-                    },
-                    ...prev.slice(0, 19),
-                  ]);
+                    // Only push to recentScans feed ONCE when freshly checked in (NO spam!)
+                    setRecentScans(prev => {
+                      // Prevent duplicate card if already present in recent list
+                      if (prev.some(s => s.id === memberId)) return prev;
+                      return [
+                        {
+                          id: memberId,
+                          name: matchedMember.name,
+                          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                          confidence,
+                          alreadyPresent: false,
+                        },
+                        ...prev.slice(0, 19),
+                      ];
+                    });
+                  }
+                } else {
+                  // Jemaat SUDAH diabsen sebelumnya:
+                  // Tetap update status live box di kamera jadi biru ("Sudah Hadir"),
+                  // TAPI TIDAK mengirim notifikasi spam lagi ke feed kanan!
+                  const now = Date.now();
+                  lastCheckinTimesRef.current.set(memberId, now);
                 }
               }
             }
