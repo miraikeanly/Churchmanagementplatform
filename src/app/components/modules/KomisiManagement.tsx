@@ -3255,18 +3255,19 @@ export default function KomisiManagement() {
                 type="button"
                 onClick={handleSaveMember} 
                 disabled={!memberForm.name.trim() || savingMember}
-                className="px-5 py-2.5 min-w-[140px] rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="relative px-5 py-2.5 min-w-[155px] h-10 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center overflow-hidden notranslate"
+                translate="no"
               >
                 {savingMember ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin shrink-0" />
+                  <div key="saving" className="flex items-center justify-center gap-2 whitespace-nowrap animate-in fade-in duration-150">
+                    <RefreshCw size={14} className="animate-spin shrink-0 text-white" />
                     <span>Menyimpan...</span>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <Check size={14} className="shrink-0" />
+                  <div key="idle" className="flex items-center justify-center gap-1.5 whitespace-nowrap animate-in fade-in duration-150">
+                    <Check size={14} className="shrink-0 text-white" />
                     <span>{editMember ? 'Simpan Perubahan' : 'Tambah Anggota'}</span>
-                  </>
+                  </div>
                 )}
               </button>
             </div>

@@ -3047,17 +3047,19 @@ export default function CongregationManagement() {
             <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
               <button onClick={() => setOpenDialog(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">Batal</button>
               <button onClick={handleSubmit} disabled={!formData.name.trim() || saving}
-                className="flex-1 min-w-[140px] py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md">
+                className="flex-1 min-w-[155px] h-11 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl text-sm font-bold flex items-center justify-center cursor-pointer transition-colors shadow-md overflow-hidden notranslate"
+                translate="no"
+              >
                 {saving ? (
-                  <>
+                  <div key="saving" className="flex items-center justify-center gap-2 whitespace-nowrap animate-in fade-in duration-150">
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
                     <span>Menyimpan...</span>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <Check size={14} className="shrink-0" />
+                  <div key="idle" className="flex items-center justify-center gap-2 whitespace-nowrap animate-in fade-in duration-150">
+                    <Check size={16} className="shrink-0 text-white" />
                     <span>{editingMember ? 'Simpan Perubahan' : 'Tambah Jemaat'}</span>
-                  </>
+                  </div>
                 )}
               </button>
             </div>

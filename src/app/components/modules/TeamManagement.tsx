@@ -658,18 +658,19 @@ export default function TeamManagement() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-2"
+                className="flex-1 min-w-[155px] h-10 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-xs cursor-pointer flex items-center justify-center overflow-hidden notranslate"
+                translate="no"
               >
                 {saving ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
+                  <div key="saving" className="flex items-center justify-center gap-2 whitespace-nowrap animate-in fade-in duration-150">
+                    <Loader2 size={14} className="animate-spin shrink-0 text-white" />
                     <span>Menyimpan...</span>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <Check size={14} />
+                  <div key="idle" className="flex items-center justify-center gap-1.5 whitespace-nowrap animate-in fade-in duration-150">
+                    <Check size={14} className="shrink-0 text-white" />
                     <span>{editId ? 'Simpan Perubahan' : 'Tambah Anggota'}</span>
-                  </>
+                  </div>
                 )}
               </button>
             </div>

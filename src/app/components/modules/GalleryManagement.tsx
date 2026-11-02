@@ -490,18 +490,19 @@ export default function GalleryManagement() {
                 type="button"
                 onClick={handleSaveAlbum} 
                 disabled={!albumForm.name.trim() || savingAlbum}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-2"
+                className="px-5 py-2.5 min-w-[155px] h-10 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center overflow-hidden notranslate"
+                translate="no"
               >
                 {savingAlbum ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div key="saving" className="flex items-center justify-center gap-2 whitespace-nowrap animate-in fade-in duration-150">
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
                     <span>Menyimpan...</span>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <Check size={14} />
+                  <div key="idle" className="flex items-center justify-center gap-1.5 whitespace-nowrap animate-in fade-in duration-150">
+                    <Check size={14} className="shrink-0 text-white" />
                     <span>{editingAlbum ? 'Simpan Perubahan' : 'Buat Album'}</span>
-                  </>
+                  </div>
                 )}
               </button>
             </div>
