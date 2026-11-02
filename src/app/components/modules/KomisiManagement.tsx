@@ -612,6 +612,8 @@ export default function KomisiManagement() {
   });
   const [savingMember, setSavingMember] = useState(false);
   const [selectedJemaatId, setSelectedJemaatId] = useState('');
+  const [autoAddToJemaat, setAutoAddToJemaat] = useState(true);
+  const [syncingToJemaatId, setSyncingToJemaatId] = useState<string | null>(null);
   const [linkSearch, setLinkSearch] = useState('');
   const [spouseSearch, setSpouseSearch] = useState('');
   const [spouseDropdownOpen, setSpouseDropdownOpen] = useState(false);
@@ -1081,6 +1083,7 @@ export default function KomisiManagement() {
       role: 'anggota'
     });
     setSelectedJemaatId('');
+    setAutoAddToJemaat(true);
     setLinkSearch('');
     setSelectedSpouseJemaatId('');
     setSpouseSearch('');
@@ -1090,6 +1093,7 @@ export default function KomisiManagement() {
 
   const openEditMember = (m: KomisiMember) => {
     setEditMember(m);
+    setAutoAddToJemaat(!m.jemaatId);
     const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
     const resolvedBirthDate = m.birthDate || linked?.birthDate || '';
     const resolvedMarriageDate = m.marriageDate || linked?.marriageDate || '';
@@ -1163,12 +1167,102 @@ export default function KomisiManagement() {
     setSpouseDropdownOpen(false);
   };
 
+  const syncKomisiMemberToJemaat = async (m: KomisiMember, existingJemaatId?: string) => {
+    try {
+      const now = new Date().toISOString();
+      const rawId = (existingJemaatId || m.jemaatId || '').replace(/^congregation:member:/, '').replace(/^member:/, '');
+      const primaryJemaatKey = rawId ? `congregation:member:${rawId}` : `congregation:member:${crypto.randomUUID()}`;
+      const targetJemaatId = rawId || primaryJemaatKey.replace('congregation:member:', '');
+
+      let existingRecord: any = null;
+      let targetKey = primaryJemaatKey;
+
+      if (rawId) {
+        const { data: dPrimary } = await supabaseAdmin.from(KV).select('key, value').eq('key', primaryJemaatKey).maybeSingle();
+        if (dPrimary?.value) {
+          existingRecord = dPrimary.value;
+          targetKey = dPrimary.key || primaryJemaatKey;
+        } else {
+          const { data: dLegacy } = await supabaseAdmin.from(KV).select('key, value').eq('key', `member:${rawId}`).maybeSingle();
+          if (dLegacy?.value) {
+            existingRecord = dLegacy.value;
+            targetKey = dLegacy.key;
+          }
+        }
+      }
+
+      // Tentukan ibadah code berdasarkan activeKomisi jika belum ada
+      const komisiToIbadahCode: Record<string, string> = {
+        'wbi': 'WBI',
+        'sekolah-minggu': 'ABI',
+        'teens': 'RBI',
+        'vessel': 'PBI',
+        'kompas': 'KOMPAS',
+        'kowari': 'KOWARI',
+        'koemas': 'KOEMAS',
+      };
+      const ibadahCode = komisiToIbadahCode[m.komisiId];
+
+      if (existingRecord) {
+        // Update data jemaat yang sudah ada
+        const existingIbadah: string[] = Array.isArray(existingRecord.ibadah) ? existingRecord.ibadah : [];
+        const newIbadah = (ibadahCode && !existingIbadah.includes(ibadahCode))
+          ? [...existingIbadah, ibadahCode]
+          : existingIbadah;
+
+        const updated = {
+          ...existingRecord,
+          name: m.name.trim(),
+          birthDate: m.birthDate || existingRecord.birthDate,
+          marriageDate: m.marriageDate || existingRecord.marriageDate,
+          spouseName: m.spouseName?.trim() || existingRecord.spouseName,
+          photoUrl: m.photoUrl || existingRecord.photoUrl,
+          phone: m.phone?.trim() || existingRecord.phone,
+          address: m.address?.trim() || existingRecord.address,
+          ibadah: newIbadah.length > 0 ? newIbadah : undefined,
+          updatedAt: now,
+        };
+        await supabaseAdmin.from(KV).update({ value: updated }).eq('key', targetKey);
+        return targetJemaatId;
+      } else {
+        // Buat data jemaat umum baru
+        const newRecord = {
+          id: targetJemaatId,
+          name: m.name.trim(),
+          phone: m.phone?.trim() || '',
+          phones: m.phone?.trim() ? [m.phone.trim()] : [],
+          address: m.address?.trim() || '',
+          birthDate: m.birthDate || '',
+          gender: (m.komisiId === 'wbi' || m.komisiId === 'kowari') ? 'female' : 'male',
+          maritalStatus: (m.komisiId === 'kompas' || m.spouseName) ? 'married' : 'single',
+          marriageDate: m.marriageDate || undefined,
+          spouseName: m.spouseName?.trim() || undefined,
+          photoUrl: m.photoUrl || undefined,
+          status: 'new', // Jemaat baru
+          joinDate: now.slice(0, 10),
+          ibadah: ibadahCode ? [ibadahCode] : undefined,
+          note: `Terdaftar dari Komisi ${KOMISI_LIST.find(k => k.id === m.komisiId)?.label || m.komisiId}`,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await supabaseAdmin.from(KV).insert({ key: primaryJemaatKey, value: newRecord });
+        return targetJemaatId;
+      }
+    } catch (err) {
+      console.warn('Sync/create jemaat umum failed:', err);
+      return null;
+    }
+  };
+
   const handleSaveMember = async () => {
     if (!memberForm.name.trim()) return;
     setSavingMember(true);
     try {
       const id = editMember?.id || crypto.randomUUID();
-      const member: KomisiMember = {
+      let resolvedJemaatId = selectedJemaatId;
+
+      // Buat payload komisi member awal
+      let member: KomisiMember = {
         id,
         komisiId: activeKomisi,
         name: memberForm.name.trim(),
@@ -1180,43 +1274,30 @@ export default function KomisiManagement() {
         photoUrl: memberForm.photoUrl || undefined,
         role: memberForm.role,
         joinedAt: editMember?.joinedAt || new Date().toISOString(),
-        ...(selectedJemaatId ? { jemaatId: selectedJemaatId } : {}),
+        ...(resolvedJemaatId ? { jemaatId: resolvedJemaatId } : {}),
       };
+
+      // ── Auto Sync / Add ke Data Jemaat Umum jika diaktifkan ────────────────
+      if (autoAddToJemaat) {
+        try {
+          const syncedJId = await syncKomisiMemberToJemaat(member, resolvedJemaatId);
+          if (syncedJId) {
+            resolvedJemaatId = syncedJId;
+            member = { ...member, jemaatId: syncedJId };
+          }
+        } catch (syncErr) {
+          console.warn('Auto sync to jemaat failed:', syncErr);
+        }
+      } else if (resolvedJemaatId) {
+        // Jika sudah terhubung tapi autoAddToJemaat tidak dicentang, tetap update profilnya
+        await syncKomisiMemberToJemaat(member, resolvedJemaatId);
+      }
+
       const key = `komisi:${activeKomisi}:member:${id}`;
       if (editMember) {
         await supabaseAdmin.from(KV).update({ value: member }).eq('key', key);
       } else {
         await supabaseAdmin.from(KV).insert({ key, value: member });
-      }
-
-      // If linked to Data Jemaat, sync updated info (including photoUrl & spouse) back to Data Jemaat if exists
-      if (selectedJemaatId) {
-        try {
-          const rawId = selectedJemaatId.replace(/^congregation:member:/, '').replace(/^member:/, '');
-          const primaryJemaatKey = `congregation:member:${rawId}`;
-          const legacyJemaatKey = `member:${rawId}`;
-          const { data: jRow } = await supabaseAdmin.from(KV).select('key, value').eq('key', primaryJemaatKey).maybeSingle()
-            || await supabaseAdmin.from(KV).select('key, value').eq('key', legacyJemaatKey).maybeSingle()
-            || await supabaseAdmin.from(KV).select('key, value').eq('key', selectedJemaatId).maybeSingle();
-
-          if (jRow && jRow.value) {
-            const updatedJemaat = {
-              ...jRow.value,
-              name: memberForm.name.trim(),
-              birthDate: memberForm.birthDate || jRow.value.birthDate,
-              marriageDate: memberForm.marriageDate || jRow.value.marriageDate,
-              spouseName: memberForm.spouseName?.trim() || jRow.value.spouseName,
-              photoUrl: memberForm.photoUrl || jRow.value.photoUrl,
-              phone: memberForm.phone.trim() || jRow.value.phone,
-              address: memberForm.address.trim() || jRow.value.address,
-              updatedAt: new Date().toISOString(),
-            };
-            const targetKey = jRow.key || primaryJemaatKey;
-            await supabaseAdmin.from(KV).update({ value: updatedJemaat }).eq('key', targetKey);
-          }
-        } catch (syncErr) {
-          console.warn('Sync back to jemaat error (non-fatal):', syncErr);
-        }
       }
 
       // Khusus Komisi Kompas (Pasutri): Sinkronkan data pasangan dua arah
@@ -1231,7 +1312,7 @@ export default function KomisiManagement() {
           );
 
           if (foundSpouseJemaat) {
-            // 1. Sync data pasangan di Data Jemaat Umum agar pasangan juga memiliki spouseName = selfName & marriageDate
+            // 1. Sync data pasangan di Data Jemaat Umum
             try {
               const spouseRawId = foundSpouseJemaat.id.replace(/^congregation:member:/, '').replace(/^member:/, '');
               const spousePrimary = `congregation:member:${spouseRawId}`;
@@ -1304,6 +1385,25 @@ export default function KomisiManagement() {
       setError(e.message || 'Gagal menyimpan anggota');
     }
     setSavingMember(false);
+  };
+
+  const handleManualSyncToJemaat = async (m: KomisiMember) => {
+    setSyncingToJemaatId(m.id);
+    try {
+      const syncedJId = await syncKomisiMemberToJemaat(m, m.jemaatId);
+      if (syncedJId) {
+        // Update member jemaatId di DB komisi jika belum terisi
+        if (!m.jemaatId || m.jemaatId !== syncedJId) {
+          await supabaseAdmin.from(KV).update({
+            value: { ...m, jemaatId: syncedJId },
+          }).eq('key', `komisi:${activeKomisi}:member:${m.id}`);
+        }
+        await Promise.all([loadMembers(), loadJemaat()]);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Gagal menyinkronkan jemaat ke data umum');
+    }
+    setSyncingToJemaatId(null);
   };
 
   const handleDeleteMember = (m: KomisiMember) => setDeletingMember(m);
@@ -1767,7 +1867,25 @@ export default function KomisiManagement() {
 
                               {/* Action edit/delete */}
                               {canEdit && (
-                                <div className="flex items-center gap-0.5 flex-shrink-0">
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {notInDb && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleManualSyncToJemaat(m)}
+                                      disabled={syncingToJemaatId === m.id}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                                      title="Daftarkan langsung ke Data Jemaat Umum & Absensi Ibadah Raya"
+                                    >
+                                      {syncingToJemaatId === m.id ? (
+                                        <RefreshCw size={11} className="animate-spin" />
+                                      ) : (
+                                        <>
+                                          <UserPlus size={11} />
+                                          <span>+ Jemaat</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => openEditMember(m)}
@@ -1922,6 +2040,27 @@ export default function KomisiManagement() {
                       {/* Action buttons */}
                       {canEdit && (
                         <div className="flex items-center gap-1 flex-shrink-0">
+                          {notInDb && (
+                            <button
+                              type="button"
+                              onClick={() => handleManualSyncToJemaat(m)}
+                              disabled={syncingToJemaatId === m.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                              title="Daftarkan langsung ke Data Jemaat Umum & Absensi Ibadah Raya"
+                            >
+                              {syncingToJemaatId === m.id ? (
+                                <>
+                                  <RefreshCw size={13} className="animate-spin" />
+                                  <span className="hidden sm:inline">Menyinkronkan...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlus size={13} />
+                                  <span>+ Jemaat Umum</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => openEditMember(m)}
@@ -2469,6 +2608,28 @@ export default function KomisiManagement() {
                     {linkSearch.length >= 2 && formSuggestions.length === 0 && (
                       <p className="text-[11px] text-slate-400 px-1">Tidak ditemukan jemaat dengan nama tersebut. Anda bisa input manual di bawah.</p>
                     )}
+                  </div>
+                )}
+
+                {/* Checkbox Otomatis Tambah / Sinkronkan ke Data Jemaat Umum */}
+                {!selectedJemaatId && (
+                  <div className="pt-2 border-t border-slate-100 flex items-start gap-2.5 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/80">
+                    <input
+                      type="checkbox"
+                      id="autoAddToJemaatCheck"
+                      checked={autoAddToJemaat}
+                      onChange={e => setAutoAddToJemaat(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="autoAddToJemaatCheck" className="text-xs text-slate-700 cursor-pointer leading-tight">
+                      <span className="font-bold text-blue-900 block flex items-center gap-1">
+                        <UserPlus size={12} className="text-blue-600" />
+                        Otomatis Tambahkan ke Data Jemaat Umum
+                      </span>
+                      <span className="text-[11px] text-slate-500 block mt-0.5">
+                        Jika belum ada di data umum jemaat, data ini akan otomatis didaftarkan ke Data Jemaat Umum &amp; Absensi Ibadah Raya.
+                      </span>
+                    </label>
                   </div>
                 )}
               </div>
