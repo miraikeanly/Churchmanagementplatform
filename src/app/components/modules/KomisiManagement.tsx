@@ -637,6 +637,7 @@ export default function KomisiManagement() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [deletingMember, setDeletingMember] = useState<KomisiMember | null>(null);
+  const [highlightedMemberId, setHighlightedMemberId] = useState<string | null>(null);
 
   const komisiInfo = KOMISI_LIST.find(k => k.id === activeKomisi)!;
 
@@ -678,9 +679,9 @@ export default function KomisiManagement() {
     } catch {}
   }, []);
 
-  // ── Load komisi members ───────────────────────────────────────────────────
-  const loadMembers = useCallback(async () => {
-    setLoadingMembers(true);
+  // ── Load komisi members (with silent option to prevent UI glitch/flicker) ──
+  const loadMembers = useCallback(async (silent = false) => {
+    if (!silent) setLoadingMembers(true);
     try {
       const { data, error: err } = await supabaseAdmin
         .from(KV).select('key, value')
@@ -690,7 +691,9 @@ export default function KomisiManagement() {
       list.sort((a, b) => a.name.localeCompare(b.name, 'id'));
       setMembers(list);
     } catch (e: any) { setError(e.message); }
-    setLoadingMembers(false);
+    finally {
+      if (!silent) setLoadingMembers(false);
+    }
   }, [activeKomisi]);
 
   // ── Load attendance sessions ──────────────────────────────────────────────
@@ -1570,7 +1573,21 @@ export default function KomisiManagement() {
       }
 
       setShowMemberForm(false);
-      await Promise.all([loadMembers(), loadJemaat()]);
+      setHighlightedMemberId(id);
+      await Promise.all([loadMembers(true), loadJemaat()]);
+
+      // Scroll smoothly ke elemen anggota yang baru saja diedit agar tidak hilang/glitch
+      setTimeout(() => {
+        const el = document.getElementById(`komisi-member-${id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+
+      // Hilangkan highlight secara halus setelah 4 detik
+      setTimeout(() => {
+        setHighlightedMemberId(prev => (prev === id ? null : prev));
+      }, 4000);
     } catch (e: any) {
       setError(e.message || 'Gagal menyimpan anggota');
     }
@@ -2135,8 +2152,19 @@ export default function KomisiManagement() {
                 const age = birthDate ? getAge(birthDate) : -1;
                 const range = KOMISI_AGE_RANGE[activeKomisi];
                 const outOfRange = !!range && age >= 0 && (age < range[0] || age > range[1]);
+                const isRecentlyEdited = highlightedMemberId === m.id;
                 return (
-                  <div key={m.id} className={`bg-white border rounded-2xl p-4 sm:p-5 shadow-xs transition-all hover:shadow-sm ${notInDb ? 'border-amber-200 bg-amber-50/20' : 'border-gray-200/80 hover:border-blue-200'}`}>
+                  <div
+                    key={m.id}
+                    id={`komisi-member-${m.id}`}
+                    className={`bg-white border rounded-2xl p-4 sm:p-5 shadow-xs transition-all duration-300 hover:shadow-sm ${
+                      isRecentlyEdited
+                        ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-50/20 shadow-md scale-[1.005]'
+                        : notInDb
+                        ? 'border-amber-200 bg-amber-50/20'
+                        : 'border-gray-200/80 hover:border-blue-200'
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3.5 min-w-0 flex-1">
                         {/* Avatar Foto atau Inisial */}
@@ -2163,13 +2191,24 @@ export default function KomisiManagement() {
                                 <AlertTriangle size={11} className="text-amber-600" /> Belum di database jemaat umum
                               </span>
                             )}
+                            {isRecentlyEdited && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full animate-pulse">
+                                Baru Disimpan
+                              </span>
+                            )}
                           </div>
 
-                          {/* Detail Badges: Usia & Rentang Komisi */}
+                          {/* Detail Badges: Usia, Orang Tua (Sejajar), Rentang Komisi */}
                           <div className="flex items-center gap-2 flex-wrap mt-2">
                             {age >= 0 && (
                               <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${AGE_GROUP_STYLES[getAgeGroup(birthDate)]}`}>
                                 {age} thn ({getAgeGroup(birthDate)})
+                              </span>
+                            )}
+                            {parentDisplayName && (
+                              <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1.5 shadow-2xs">
+                                <Users size={12} className="text-purple-600" />
+                                <span>Orang Tua: {parentDisplayName}</span>
                               </span>
                             )}
                             {activeKomisi !== 'sekolah-minggu' && anniYears >= 0 && (
@@ -2191,7 +2230,7 @@ export default function KomisiManagement() {
                             )}
                           </div>
 
-                          {/* Data Rinci: HP, Tgl Lahir, Tgl Pernikahan / Orang Tua, Alamat */}
+                          {/* Data Rinci: HP, Tgl Lahir, Tgl Pernikahan, Alamat */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600">
                             {m.phone && (
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -2216,12 +2255,6 @@ export default function KomisiManagement() {
                               <div className="flex items-center gap-1.5 min-w-0 text-rose-700 font-semibold">
                                 <HeartHandshake size={13} className="text-rose-500 flex-shrink-0" />
                                 <span>Anniversary: {formatDate(marriageDate)}{anniYears >= 0 ? ` (${anniYears} thn)` : ''}</span>
-                              </div>
-                            )}
-                            {parentDisplayName && (
-                              <div className="flex items-center gap-1.5 min-w-0 text-purple-700 font-semibold">
-                                <Users size={13} className="text-purple-500 flex-shrink-0" />
-                                <span className="truncate">Orang Tua: {parentDisplayName}</span>
                               </div>
                             )}
                             {m.address && (
@@ -3222,16 +3255,16 @@ export default function KomisiManagement() {
                 type="button"
                 onClick={handleSaveMember} 
                 disabled={!memberForm.name.trim() || savingMember}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-2"
+                className="px-5 py-2.5 min-w-[140px] rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 {savingMember ? (
                   <>
-                    <RefreshCw size={14} className="animate-spin" />
+                    <RefreshCw size={14} className="animate-spin shrink-0" />
                     <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
-                    <Check size={14} />
+                    <Check size={14} className="shrink-0" />
                     <span>{editMember ? 'Simpan Perubahan' : 'Tambah Anggota'}</span>
                   </>
                 )}

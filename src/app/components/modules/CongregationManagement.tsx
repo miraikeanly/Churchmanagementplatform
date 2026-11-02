@@ -228,11 +228,13 @@ function MemberCard({
   onEdit,
   onDelete,
   onViewDetail,
+  isHighlighted = false,
 }: {
   m: Member;
   onEdit?: (m: Member) => void;
   onDelete?: (id: string) => void;
   onViewDetail?: (m: Member) => void;
+  isHighlighted?: boolean;
 }) {
   const navigate = useNavigate();
   const age = getAge(m.birthDate);
@@ -240,7 +242,14 @@ function MemberCard({
   const phones = m.phones && m.phones.length > 0 ? m.phones : m.phone ? [m.phone] : [];
   const row = 'flex items-start gap-2 text-xs text-gray-600';
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3 h-full hover:border-blue-200 hover:shadow-md transition-all">
+    <div
+      id={`congregation-member-${m.id}`}
+      className={`rounded-2xl border p-4 flex flex-col gap-3 h-full transition-all duration-300 ${
+        isHighlighted
+          ? 'bg-blue-50/20 border-blue-400 ring-2 ring-blue-500 shadow-md scale-[1.005]'
+          : 'bg-white border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-md'
+      }`}
+    >
       <div
         className={`flex items-start gap-3 ${onViewDetail ? 'cursor-pointer group' : ''}`}
         onClick={() => onViewDetail?.(m)}
@@ -248,14 +257,21 @@ function MemberCard({
       >
         <Avatar m={m} />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-gray-900 leading-snug break-words group-hover:text-blue-600 transition-colors flex items-center justify-between gap-1.5">
-            <span>{m.name}</span>
-            {onViewDetail && (
+          <div className="flex items-center justify-between gap-1.5">
+            <p className="font-semibold text-gray-900 leading-snug break-words group-hover:text-blue-600 transition-colors">
+              {m.name}
+            </p>
+            {isHighlighted && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-600 text-white animate-pulse shrink-0">
+                Baru Disimpan
+              </span>
+            )}
+            {onViewDetail && !isHighlighted && (
               <span className="text-[11px] text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
                 Detail <ChevronRight size={12} />
               </span>
             )}
-          </p>
+          </div>
           {m.nickname && <p className="text-xs text-gray-400 break-words">({m.nickname})</p>}
           {m.note && (
             <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200/70 rounded-md px-1.5 py-0.5 mt-1 break-words inline-block">
@@ -265,6 +281,12 @@ function MemberCard({
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLE[m.status] || STATUS_STYLE.inactive}`}>{STATUS_LABEL[m.status] || m.status}</span>
             {age >= 0 && <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${AGE_GROUP_STYLES[ageGroup]}`}>{ageGroup} · {age} thn</span>}
+            {m.parentName && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shadow-2xs">
+                <Users size={11} className="text-purple-600 shrink-0" />
+                <span>Orang Tua: {m.parentName}</span>
+              </span>
+            )}
             {m._storeKey?.startsWith('member:') && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">Data Lama</span>}
           </div>
         </div>
@@ -288,12 +310,6 @@ function MemberCard({
           </div>
         )}
         {m.maritalStatus && m.maritalStatus !== 'single' && m.children && m.children.length > 0 && <div className={row}><Baby size={13} className="mt-0.5 text-sky-400 flex-shrink-0" /><span className="break-words">{m.children.map(c => c.name).join(', ')}</span></div>}
-        {m.parentName && (
-          <div className={row}>
-            <Users size={13} className="mt-0.5 text-blue-500 flex-shrink-0" />
-            <span className="break-words">Anak dari: <strong className="text-gray-800">{m.parentName}</strong></span>
-          </div>
-        )}
       </div>
 
       {(m.pksName || (m.ibadah && m.ibadah.length > 0) || (m.pelayan && m.pelayan.length > 0)) && (
@@ -432,9 +448,10 @@ interface FamilyViewProps {
   onDelete?: (id: string) => void;
   onViewDetail?: (m: Member) => void;
   onCreateChild?: (name: string, birthDate?: string) => void;
+  highlightedMemberId?: string | null;
 }
 
-function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onViewDetail, onCreateChild }: FamilyViewProps) {
+function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onViewDetail, onCreateChild, highlightedMemberId }: FamilyViewProps) {
   const groups = useMemo(() => buildFamilyGroups(members), [members]);
 
   if (groups.length === 0) {
@@ -476,8 +493,8 @@ function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onV
                 <div className="px-5 py-3.5 bg-blue-50/40 border-b border-gray-100">
                   <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-3">Orang Tua</p>
                   <div className="space-y-3">
-                    <MemberCard m={parent} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} />
-                    {coParent && <MemberCard m={coParent} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} />}
+                    <MemberCard m={parent} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} isHighlighted={highlightedMemberId === parent.id} />
+                    {coParent && <MemberCard m={coParent} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} isHighlighted={highlightedMemberId === coParent.id} />}
                   </div>
                 </div>
 
@@ -487,7 +504,7 @@ function FamilyView({ members, expandedFamilies, onToggle, onEdit, onDelete, onV
                     <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-3">Anak-anak ({totalChildren})</p>
                     <div className="space-y-3">
                       {dbChildren.map(m => (
-                        <MemberCard key={m.id} m={m} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} />
+                        <MemberCard key={m.id} m={m} onEdit={onEdit} onDelete={onDelete} onViewDetail={onViewDetail} isHighlighted={highlightedMemberId === m.id} />
                       ))}
                       {nameOnlyChildren.map((c, i) => {
                         const birthYear = c.birthDate ? new Date(c.birthDate).getFullYear() : null;
@@ -1773,12 +1790,15 @@ export default function CongregationManagement() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ komisi: number; skipped: number } | null>(null);
 
+  const [highlightedMemberId, setHighlightedMemberId] = useState<string | null>(null);
+
   const isSuperAdmin = user?.role === 'super_admin';
   const canEdit = isSuperAdmin || user?.permissions?.editJemaat || false;
   const canDelete = isSuperAdmin || user?.permissions?.deleteJemaat || user?.permissions?.editJemaat || false;
 
   // ── Load members from both key formats, union by id ──────────────────────
-  const loadMembers = async () => {
+  const loadMembers = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const toMember = (r: any): Member | null => {
         const m = r.value as any;
@@ -1801,7 +1821,9 @@ export default function CongregationManagement() {
       list.sort((a, b) => a.name.localeCompare(b.name, 'id'));
       setMembers(list);
     } catch (e: any) { setError(e.message); }
-    finally { setLoading(false); }
+    finally {
+      if (!silent) setLoading(false);
+    }
   };
 
   // ── Load PKS names from kv_store ─────────────────────────────────────────
@@ -2162,8 +2184,20 @@ export default function CongregationManagement() {
         }
       }
 
-      await loadMembers();
+      setHighlightedMemberId(id);
+      await loadMembers(true);
       setOpenDialog(false);
+
+      setTimeout(() => {
+        const el = document.getElementById(`congregation-member-${id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+
+      setTimeout(() => {
+        setHighlightedMemberId(prev => (prev === id ? null : prev));
+      }, 4000);
     } catch (e: any) { setError(e.message); }
     setSaving(false);
   };
@@ -2594,6 +2628,7 @@ export default function CongregationManagement() {
             setFormData({ ...BLANK_FORM, name, birthDate: birthDate || '' });
             setOpenDialog(true);
           } : undefined}
+          highlightedMemberId={highlightedMemberId}
         />
       ) : filteredMembers.length === 0 ? (
         <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-100">
@@ -2609,6 +2644,7 @@ export default function CongregationManagement() {
                 onEdit={canEdit ? handleOpenDialog : undefined}
                 onDelete={canDelete ? handleDelete : undefined}
                 onViewDetail={handleOpenDetail}
+                isHighlighted={highlightedMemberId === m.id}
               />
             ))}
           </div>
@@ -2999,11 +3035,20 @@ export default function CongregationManagement() {
             </div>
 
             <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
-              <button onClick={() => setOpenDialog(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">Batal</button>
+              <button onClick={() => setOpenDialog(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">Batal</button>
               <button onClick={handleSubmit} disabled={!formData.name.trim() || saving}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
-                {saving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={14} />}
-                {editingMember ? 'Simpan Perubahan' : 'Tambah Jemaat'}
+                className="flex-1 min-w-[140px] py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md">
+                {saving ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} className="shrink-0" />
+                    <span>{editingMember ? 'Simpan Perubahan' : 'Tambah Jemaat'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
