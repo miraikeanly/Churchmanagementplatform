@@ -9,7 +9,8 @@ import {
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
   Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock,
-  ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft, ZoomIn, ExternalLink
+  ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft, ZoomIn, ExternalLink,
+  Camera
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -18,6 +19,7 @@ import {
 import { Info } from 'lucide-react';
 import { getAge, parseLocalDate } from '../../../lib/age';
 import { IBADAH_LABEL } from '../../../lib/ibadahOptions';
+import FaceAttendanceScannerModal from './FaceAttendanceScannerModal';
 
 const KV = 'kv_store_561004a0';
 const SERVICE_TYPE = 'Ibadah Umum';
@@ -1379,6 +1381,21 @@ function DailyInput({
   const [viewMode, setViewMode] = useState<'individual' | 'family'>('individual');
   const [singleFilterScope, setSingleFilterScope] = useState<'single_only' | 'all'>('single_only');
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
+  const [showFaceScanner, setShowFaceScanner] = useState(false);
+
+  // Callback from AI Face Recognition Scanner to mark member present
+  const handleFaceScanPresent = useCallback((memberId: string) => {
+    if (!canEdit || isSessionLocked) return;
+    isDirtyRef.current = true;
+    setIsEditing(true);
+    setSaved(false);
+    explicitlyUncheckedRef.current.delete(memberId);
+    setPresent(prev => {
+      const next = new Set(prev);
+      next.add(memberId);
+      return next;
+    });
+  }, [canEdit, isSessionLocked]);
 
   // Custom family links persisted in database: array of { id1, id2 }
   const [customFamilyLinks, setCustomFamilyLinks] = useState<Array<{ id1: string; id2: string }>>([]);
@@ -2076,7 +2093,21 @@ function DailyInput({
 
         {/* Action buttons if not locked */}
         {canEdit && !isSessionLocked && (
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            {/* AI Face Recognition Camera Scanner Trigger */}
+            <button
+              type="button"
+              onClick={() => setShowFaceScanner(true)}
+              className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 border border-purple-300 text-purple-700 bg-purple-50/80 hover:bg-purple-100 active:scale-[0.98] rounded-xl cursor-pointer font-bold shadow-2xs transition-all group"
+              title="Buka kamera webcam / tablet untuk memindai wajah jemaat secara otomatis"
+            >
+              <Camera size={14} className="text-purple-600 group-hover:scale-110 transition-transform" />
+              <span>Scan Wajah AI</span>
+              <span className="text-[10px] bg-purple-200 text-purple-900 px-1.5 py-0.2 rounded-full font-extrabold ml-0.5">
+                Fast
+              </span>
+            </button>
+
             <button onClick={markAll} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-50 active:scale-[0.98] bg-white cursor-pointer font-semibold shadow-2xs">
               <CheckSquare size={13} /> Semua Hadir
             </button>
@@ -2894,6 +2925,15 @@ function DailyInput({
           </div>
         </div>
       )}
+
+      {/* AI Face Recognition Camera Attendance Scanner Modal */}
+      <FaceAttendanceScannerModal
+        isOpen={showFaceScanner}
+        onClose={() => setShowFaceScanner(false)}
+        members={members}
+        presentIds={present}
+        onMarkPresent={handleFaceScanPresent}
+      />
     </div>
   );
 }
