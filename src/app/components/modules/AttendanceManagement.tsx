@@ -894,22 +894,22 @@ function MemberQuickInfoModal({
         </div>
       </div>
 
-      {/* Pop up Preview Foto Besar (Auto HD Enhanced) */}
+      {/* Pop up Preview Foto Besar */}
       {showPhotoPreview && member.photoUrl && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-2 sm:p-6 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md animate-in fade-in duration-200"
           onClick={(e) => {
             e.stopPropagation();
             setShowPhotoPreview(false);
           }}
         >
           <div
-            className="relative max-w-lg sm:max-w-2xl w-full bg-slate-900/95 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 sm:p-5 flex flex-col items-center max-h-[96vh]"
+            className="relative max-w-2xl sm:max-w-3xl w-full bg-slate-900/95 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 sm:p-6 flex flex-col items-center max-h-[94vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header / Tombol Close */}
-            <div className="w-full flex items-center justify-between pb-3 border-b border-white/10 text-white shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
+            <div className="w-full flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10 text-white shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <span className="font-bold text-sm sm:text-base truncate text-white">
                   Foto {member.name}
                 </span>
@@ -918,17 +918,14 @@ function MemberQuickInfoModal({
                     ({member.nickname})
                   </span>
                 )}
-                <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full shrink-0">
-                  ✨ Auto HD
-                </span>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <a
                   href={member.photoUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 sm:p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
-                  title="Buka Foto Ukuran Asli di Tab Baru"
+                  title="Buka Foto Asli"
                 >
                   <ExternalLink size={18} />
                 </a>
@@ -944,26 +941,16 @@ function MemberQuickInfoModal({
             </div>
 
             {/* Container Foto Besar */}
-            <div className="relative my-3 flex items-center justify-center w-full overflow-hidden rounded-2xl bg-black/70 p-2 sm:p-3">
+            <div className="relative my-3 sm:my-4 flex items-center justify-center w-full flex-1 min-h-[280px] max-h-[76vh] overflow-hidden rounded-2xl bg-black/50 p-2">
               <img
                 src={member.photoUrl}
                 alt={member.name}
-                decoding="async"
-                loading="eager"
-                className="w-auto h-auto max-w-full max-h-[72vh] object-contain rounded-xl shadow-2xl border border-white/15 transition-all"
-                style={{
-                  minWidth: '240px',
-                  imageRendering: '-webkit-optimize-contrast',
-                  filter: 'contrast(1.05) saturate(1.04) brightness(1.01)',
-                }}
+                className="max-h-[74vh] w-auto max-w-full object-contain rounded-xl shadow-2xl transition-transform duration-200"
               />
             </div>
 
             {/* Tombol Tutup Bawah */}
-            <div className="w-full flex items-center justify-between gap-3 pt-2 shrink-0">
-              <span className="text-[11px] text-white/60 hidden sm:inline">
-                Resolusi ditingkatkan secara otomatis (Auto-HD)
-              </span>
+            <div className="w-full flex items-center justify-end gap-3 pt-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowPhotoPreview(false)}
