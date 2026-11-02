@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as faceapi from '@vladmandic/face-api';
 import {
   Camera, X, Loader2, CheckCircle2, AlertCircle, RefreshCw,
-  Sparkles, Users, UserCheck, ShieldCheck, Volume2, VolumeX, Eye
+  Sparkles, Users, UserCheck, ShieldCheck, Volume2, VolumeX, Eye,
+  Search, Sliders, Check, Zap, HelpCircle
 } from 'lucide-react';
 
 interface FaceScannerProps {
@@ -13,15 +14,30 @@ interface FaceScannerProps {
     name: string;
     photoUrl?: string;
     phone?: string;
+    address?: string;
   }>;
   presentIds: Set<string>;
   onMarkPresent: (memberId: string) => void;
 }
 
-interface LabeledDescriptor {
-  id: string;
-  name: string;
-  descriptor: Float32Array;
+// Global memory cache for descriptors across modal opens so re-opening is INSTANT (0 seconds!)
+const GLOBAL_DESCRIPTOR_CACHE = new Map<string, Float32Array>();
+
+// Load image into an HTMLImageElement with crossOrigin & promise
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      // Fallback: try without crossOrigin in case local or data URI
+      const imgFallback = new Image();
+      imgFallback.onload = () => resolve(imgFallback);
+      imgFallback.onerror = (e) => reject(e);
+      imgFallback.src = src;
+    };
+    img.src = src;
+  });
 }
 
 export default function FaceAttendanceScannerModal({
@@ -41,6 +57,15 @@ export default function FaceAttendanceScannerModal({
   const [enrolledCount, setEnrolledCount] = useState<number>(0);
   const [totalPhotosCount, setTotalPhotosCount] = useState<number>(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
+
+  // Sensitivity threshold: lower distance = stricter, higher distance = more forgiving (Default 0.58 distance / ~60% match)
+  const [matchTolerance, setMatchTolerance] = useState<number>(0.58);
+  const [showSettings, setShowSettings] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
+
+  // Unregistered face quick manual checkin popup
+  const [unrecognizedDetected, setUnrecognizedDetected] = useState(false);
+
   const [recentScans, setRecentScans] = useState<Array<{
     id: string;
     name: string;
@@ -51,9 +76,8 @@ export default function FaceAttendanceScannerModal({
 
   const streamRef = useRef<MediaStream | null>(null);
   const faceMatcherRef = useRef<faceapi.FaceMatcher | null>(null);
-  const enrolledMembersRef = useRef<LabeledDescriptor[]>([]);
   const isDetectingRef = useRef(false);
-  const lastCheckinTimesRef = useRef<Map<string, number>>(new Map()); // Debounce check-in per member
+  const lastCheckinTimesRef = useRef<Map<string, number>>(new Map()); // Debounce check-in per member (5s)
 
   // Play audio chime on detection
   const playChime = useCallback((success = true) => {
@@ -66,19 +90,19 @@ export default function FaceAttendanceScannerModal({
       gain.connect(audioCtx.destination);
 
       if (success) {
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1); // A5
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime); // E5
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.08); // A5
         gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
         osc.start(audioCtx.currentTime);
         osc.stop(audioCtx.currentTime + 0.35);
       }
     } catch {
-      // AudioContext maybe blocked by browser autoplay policy until user gesture
+      // AudioContext maybe blocked by browser autoplay policy
     }
   }, [soundEnabled]);
 
-  // 1. Load Face-API models
+  // 1. Load Face-API models fast
   useEffect(() => {
     if (!isOpen) return;
 
@@ -97,7 +121,7 @@ export default function FaceAttendanceScannerModal({
 
         if (isMounted) {
           setModelLoaded(true);
-          setLoadingStatus('Model AI siap! Menyiapkan data wajah jemaat...');
+          setLoadingStatus('Model AI siap! Memproses foto wajah jemaat...');
         }
       } catch (err: any) {
         console.error('Failed to load faceapi models:', err);
@@ -113,53 +137,104 @@ export default function FaceAttendanceScannerModal({
     };
   }, [isOpen]);
 
-  // 2. Pre-extract face descriptors from members with photos
+  // 2. Pre-extract face descriptors with parallel batching and robust fallback detectors
   useEffect(() => {
     if (!isOpen || !modelLoaded) return;
 
     let isMounted = true;
     async function enrollMemberFaces() {
-      const membersWithPhoto = members.filter(m => m.photoUrl && m.photoUrl.startsWith('http'));
+      // Filter members with valid photos
+      const membersWithPhoto = members.filter(
+        m => m.photoUrl && (m.photoUrl.startsWith('http') || m.photoUrl.startsWith('data:') || m.photoUrl.startsWith('/'))
+      );
       setTotalPhotosCount(membersWithPhoto.length);
 
       if (membersWithPhoto.length === 0) {
-        setLoadingStatus('Belum ada foto jemaat terdaftar. Anda bisa tetap membuka kamera.');
+        setLoadingStatus('Belum ada foto jemaat terdaftar. Tambahkan foto di Data Jemaat.');
         return;
       }
 
-      setLoadingStatus(`Menganalisis foto ${membersWithPhoto.length} jemaat...`);
+      setLoadingStatus(`Menyiapkan data wajah ${membersWithPhoto.length} jemaat...`);
       const descriptors: faceapi.LabeledFaceDescriptors[] = [];
       let enrolled = 0;
 
-      // Extract in batches or sequential to avoid overwhelming memory
+      // Check cache first for immediate readiness!
+      const unanalyzedMembers: typeof membersWithPhoto = [];
       for (const m of membersWithPhoto) {
-        if (!isMounted) return;
-        try {
-          const img = await faceapi.fetchImage(m.photoUrl!);
-          const detection = await faceapi
-            .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
-            .withFaceLandmarks(true)
-            .withFaceDescriptor();
-
-          if (detection && detection.descriptor) {
-            descriptors.push(new faceapi.LabeledFaceDescriptors(m.id, [detection.descriptor]));
-            enrolled++;
-            if (isMounted) {
-              setEnrolledCount(enrolled);
-            }
-          }
-        } catch {
-          // Ignore individual photo fetch / CORS error silently
+        const cached = GLOBAL_DESCRIPTOR_CACHE.get(m.photoUrl || m.id);
+        if (cached) {
+          descriptors.push(new faceapi.LabeledFaceDescriptors(m.id, [cached]));
+          enrolled++;
+        } else {
+          unanalyzedMembers.push(m);
         }
+      }
+
+      if (isMounted && enrolled > 0) {
+        setEnrolledCount(enrolled);
+        faceMatcherRef.current = new faceapi.FaceMatcher(descriptors, matchTolerance);
+        setLoadingStatus(`${enrolled} wajah jemaat siap dikenali secara instan!`);
+      }
+
+      // If all were cached, we are already 100% done!
+      if (unanalyzedMembers.length === 0) {
+        return;
+      }
+
+      // Process unanalyzed photos in parallel batches of 4
+      const BATCH_SIZE = 4;
+      for (let i = 0; i < unanalyzedMembers.length; i += BATCH_SIZE) {
+        if (!isMounted) return;
+        const batch = unanalyzedMembers.slice(i, i + BATCH_SIZE);
+
+        await Promise.all(
+          batch.map(async m => {
+            try {
+              const img = await loadImageElement(m.photoUrl!);
+
+              // Try detection with standard sensitivity (score 0.4, size 224)
+              let detection = await faceapi
+                .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 }))
+                .withFaceLandmarks(true)
+                .withFaceDescriptor();
+
+              // Fallback with larger inputSize 320 and lower threshold 0.3 for smaller/distant avatar photos
+              if (!detection) {
+                detection = await faceapi
+                  .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+                  .withFaceLandmarks(true)
+                  .withFaceDescriptor();
+              }
+
+              // Fallback with inputSize 160 for small icons
+              if (!detection) {
+                detection = await faceapi
+                  .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.25 }))
+                  .withFaceLandmarks(true)
+                  .withFaceDescriptor();
+              }
+
+              if (detection && detection.descriptor) {
+                GLOBAL_DESCRIPTOR_CACHE.set(m.photoUrl || m.id, detection.descriptor);
+                descriptors.push(new faceapi.LabeledFaceDescriptors(m.id, [detection.descriptor]));
+                enrolled++;
+                if (isMounted) {
+                  setEnrolledCount(enrolled);
+                }
+              }
+            } catch {
+              // Ignore image load/fetch errors
+            }
+          })
+        );
       }
 
       if (isMounted) {
         if (descriptors.length > 0) {
-          // Threshold 0.55 means distance <= 0.55 is match (~80%+ similarity)
-          faceMatcherRef.current = new faceapi.FaceMatcher(descriptors, 0.55);
-          setLoadingStatus(`Siap! ${descriptors.length} jemaat terdaftar dalam sistem AI.`);
+          faceMatcherRef.current = new faceapi.FaceMatcher(descriptors, matchTolerance);
+          setLoadingStatus(`AI Siap! ${descriptors.length} wajah jemaat siap discan.`);
         } else {
-          setLoadingStatus('Foto jemaat belum dapat dikenali atau terhalang CORS. Siap memindai.');
+          setLoadingStatus('Foto profil belum dapat dideteksi AI. Arahkan wajah ke kamera.');
         }
       }
     }
@@ -168,9 +243,25 @@ export default function FaceAttendanceScannerModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, modelLoaded, members]);
+  }, [isOpen, modelLoaded, members, matchTolerance]);
 
-  // 3. Start Camera
+  // Re-instantiate face matcher when matchTolerance slider changes
+  useEffect(() => {
+    if (GLOBAL_DESCRIPTOR_CACHE.size > 0 && members.length > 0) {
+      const descriptors: faceapi.LabeledFaceDescriptors[] = [];
+      for (const m of members) {
+        const cached = GLOBAL_DESCRIPTOR_CACHE.get(m.photoUrl || m.id);
+        if (cached) {
+          descriptors.push(new faceapi.LabeledFaceDescriptors(m.id, [cached]));
+        }
+      }
+      if (descriptors.length > 0) {
+        faceMatcherRef.current = new faceapi.FaceMatcher(descriptors, matchTolerance);
+      }
+    }
+  }, [matchTolerance, members]);
+
+  // 3. Start Camera (Natural aspect ratio & auto dimensions)
   const startCamera = useCallback(async () => {
     try {
       if (streamRef.current) {
@@ -221,12 +312,13 @@ export default function FaceAttendanceScannerModal({
     };
   }, [isOpen, modelLoaded, startCamera, stopCamera]);
 
-  // 4. Real-time Detection Loop
+  // 4. Real-time Detection Loop with synchronized canvas coordinates
   useEffect(() => {
     if (!isOpen || !cameraActive || !videoRef.current) return;
 
     let animationFrameId: number;
     isDetectingRef.current = true;
+    let frameSkip = 0;
 
     async function detectFaces() {
       if (!isDetectingRef.current || !videoRef.current || videoRef.current.paused || videoRef.current.ended) {
@@ -236,55 +328,74 @@ export default function FaceAttendanceScannerModal({
       const video = videoRef.current;
       const canvas = canvasRef.current;
 
+      // Process every frame (smooth 30-60fps)
       if (video.readyState === 4 && canvas) {
-        const displaySize = { width: video.videoWidth || 640, height: video.videoHeight || 480 };
-        faceapi.matchDimensions(canvas, displaySize);
+        const videoWidth = video.videoWidth || 640;
+        const videoHeight = video.videoHeight || 480;
+
+        if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
+          canvas.width = videoWidth;
+          canvas.height = videoHeight;
+        }
+
+        const displaySize = { width: videoWidth, height: videoHeight };
 
         try {
+          // Use inputSize 224 with low threshold (0.4) for ultra fast & responsive video detection
           const detections = await faceapi
-            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 }))
             .withFaceLandmarks(true)
             .withFaceDescriptors();
 
-          const resizedDetections = faceapi.resizeResults(detections, displaySize);
           const ctx = canvas.getContext('2d');
           if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+          let hasUnrecognized = false;
+
           // If we have enrolled faces and faceMatcher
-          if (faceMatcherRef.current && resizedDetections.length > 0) {
+          if (faceMatcherRef.current && detections.length > 0) {
+            const resizedDetections = faceapi.resizeResults(detections, displaySize);
+
             for (const detection of resizedDetections) {
               const bestMatch = faceMatcherRef.current.findBestMatch(detection.descriptor);
               const box = detection.detection.box;
               const isUnknown = bestMatch.label === 'unknown';
               const memberId = bestMatch.label;
               const matchedMember = members.find(m => m.id === memberId);
-              const confidence = Math.round((1 - bestMatch.distance) * 100);
+              const confidence = Math.max(0, Math.round((1 - bestMatch.distance) * 100));
+
+              if (isUnknown) {
+                hasUnrecognized = true;
+              }
 
               // Draw bounding box
               if (ctx) {
                 ctx.lineWidth = 3;
-                ctx.strokeStyle = isUnknown ? '#e11d48' : '#10b981'; // red for unknown, emerald for recognized
+                ctx.strokeStyle = isUnknown ? '#ef4444' : '#10b981'; // red for unknown, emerald for recognized
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
 
                 // Label background
-                const labelText = isUnknown ? 'Wajah Belum Terdaftar' : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
-                ctx.font = 'bold 14px sans-serif';
+                const labelText = isUnknown
+                  ? 'Wajah Belum Terdaftar'
+                  : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
+                
+                ctx.font = 'bold 15px sans-serif';
                 const textWidth = ctx.measureText(labelText).width;
-                ctx.fillStyle = isUnknown ? 'rgba(225, 29, 72, 0.85)' : 'rgba(16, 185, 129, 0.9)';
-                ctx.fillRect(box.x, Math.max(0, box.y - 26), textWidth + 14, 24);
+                ctx.fillStyle = isUnknown ? 'rgba(239, 68, 68, 0.9)' : 'rgba(16, 185, 129, 0.95)';
+                ctx.fillRect(box.x, Math.max(0, box.y - 28), textWidth + 16, 26);
 
                 // Label text
                 ctx.fillStyle = '#ffffff';
-                ctx.fillText(labelText, box.x + 7, Math.max(16, box.y - 9));
+                ctx.fillText(labelText, box.x + 8, Math.max(18, box.y - 9));
               }
 
-              // Auto-checkin trigger if recognized with good confidence (>= 60%)
-              if (!isUnknown && matchedMember && confidence >= 60) {
+              // Auto-checkin trigger if recognized with good confidence (>= 50% match)
+              if (!isUnknown && matchedMember && confidence >= 50) {
                 const now = Date.now();
                 const lastCheckin = lastCheckinTimesRef.current.get(memberId) || 0;
 
-                // Debounce checkin to avoid repeated calls within 15 seconds
-                if (now - lastCheckin > 15000) {
+                // Debounce checkin per member for 6 seconds
+                if (now - lastCheckin > 6000) {
                   lastCheckinTimesRef.current.set(memberId, now);
                   const isAlreadyPresent = presentIds.has(memberId);
 
@@ -307,15 +418,18 @@ export default function FaceAttendanceScannerModal({
                 }
               }
             }
-          } else if (resizedDetections.length > 0 && ctx) {
-            // No face matcher enrolled yet, just draw face detection frame
+          } else if (detections.length > 0 && ctx) {
+            // No matcher ready yet, draw neutral blue tracking box
+            const resizedDetections = faceapi.resizeResults(detections, displaySize);
             for (const d of resizedDetections) {
               const box = d.detection.box;
               ctx.lineWidth = 2;
-              ctx.strokeStyle = '#3b82f6';
+              ctx.strokeStyle = '#38bdf8';
               ctx.strokeRect(box.x, box.y, box.width, box.height);
             }
           }
+
+          setUnrecognizedDetected(hasUnrecognized);
         } catch {
           // Ignore transient detection errors
         }
@@ -334,31 +448,48 @@ export default function FaceAttendanceScannerModal({
     };
   }, [isOpen, cameraActive, members, presentIds, onMarkPresent, playChime]);
 
+  // Filtered members list for quick manual click in scanner modal
+  const filteredQuickList = useMemo(() => {
+    if (!searchFilter.trim()) return [];
+    const q = searchFilter.toLowerCase();
+    return members.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [members, searchFilter]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-      <div className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in">
+      <div className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[95vh]">
         {/* Modal Header */}
-        <div className="px-5 py-4 bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20">
+            <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-inner">
               <Camera size={20} className="animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white">AI Face Recognition Absensi</h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-400 text-emerald-950 flex items-center gap-1 shadow-2xs">
-                  <Sparkles size={10} /> Real-Time
+                  <Zap size={10} /> Fast Match
                 </span>
               </div>
               <p className="text-xs text-blue-100 mt-0.5">
-                Kamera mendeteksi jemaat secara otomatis dan mencentang absensi kehadiran seketika.
+                Arahkan kamera ke jemaat — sistem mengenali wajah dan otomatis mencentang kehadiran.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowSettings(p => !p)}
+              className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                showSettings ? 'bg-white/20 text-white' : 'text-white/80 hover:text-white hover:bg-white/10'
+              }`}
+              title="Sensitivitas / Pengaturan AI"
+            >
+              <Sliders size={18} />
+            </button>
             <button
               type="button"
               onClick={() => setSoundEnabled(p => !p)}
@@ -377,10 +508,34 @@ export default function FaceAttendanceScannerModal({
           </div>
         </div>
 
+        {/* Optional Settings Drawer */}
+        {showSettings && (
+          <div className="bg-slate-900 text-white px-5 py-3 border-b border-slate-800 text-xs flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-3">
+              <span className="font-semibold text-slate-300">Tingkat Sensitivitas AI:</span>
+              <input
+                type="range"
+                min="0.4"
+                max="0.75"
+                step="0.02"
+                value={matchTolerance}
+                onChange={e => setMatchTolerance(parseFloat(e.target.value))}
+                className="w-32 accent-emerald-500 cursor-pointer"
+              />
+              <span className="font-bold text-emerald-400">
+                {matchTolerance >= 0.65 ? 'Sangat Ramah / Cepat' : matchTolerance >= 0.55 ? 'Standar Seimbang' : 'Sangat Ketat'}
+              </span>
+            </div>
+            <div className="text-slate-400 text-[11px]">
+              Jika wajah jemaat sulit kedetect, geser ke kanan untuk lebih mempermudah pencocokan.
+            </div>
+          </div>
+        )}
+
         {/* Modal Body */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
           {/* Column 1 & 2: Video Viewfinder */}
-          <div className="lg:col-span-2 bg-slate-950 p-4 flex flex-col items-center justify-center relative overflow-hidden min-h-[360px] sm:min-h-[460px]">
+          <div className="lg:col-span-2 bg-slate-950 p-3 sm:p-4 flex flex-col items-center justify-center relative overflow-hidden min-h-[380px] sm:min-h-[480px]">
             {/* Video Viewport Container */}
             <div className="relative w-full h-full max-w-2xl max-h-[500px] flex items-center justify-center rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl">
               <video
@@ -396,7 +551,7 @@ export default function FaceAttendanceScannerModal({
 
               {/* Status overlay if not ready */}
               {(!modelLoaded || !cameraActive) && (
-                <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center text-white space-y-3">
+                <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center text-white space-y-3 z-20">
                   <Loader2 size={36} className="text-blue-400 animate-spin" />
                   <p className="text-sm font-semibold text-slate-200">{loadingStatus}</p>
                 </div>
@@ -404,7 +559,7 @@ export default function FaceAttendanceScannerModal({
 
               {/* Live Badge */}
               {cameraActive && (
-                <div className="absolute top-3 left-3 bg-red-600/90 text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
+                <div className="absolute top-3 left-3 bg-red-600/90 text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md z-10">
                   <span className="w-2 h-2 rounded-full bg-white animate-ping" />
                   <span>LIVE KAMERA</span>
                 </div>
@@ -412,9 +567,22 @@ export default function FaceAttendanceScannerModal({
 
               {/* Enrolled Badge */}
               {cameraActive && (
-                <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md text-slate-200 text-[11px] font-medium px-3 py-1 rounded-full border border-slate-700/80 flex items-center gap-1.5">
+                <div className="absolute top-3 right-3 bg-slate-900/85 backdrop-blur-md text-slate-200 text-[11px] font-semibold px-3 py-1 rounded-full border border-slate-700/80 flex items-center gap-1.5 z-10 shadow-md">
                   <ShieldCheck size={13} className="text-emerald-400" />
-                  <span>{enrolledCount} Wajah Terdaftar</span>
+                  <span>{enrolledCount} Wajah Siap Dikenali</span>
+                </div>
+              )}
+
+              {/* Notice if face seen but not in database */}
+              {unrecognizedDetected && cameraActive && (
+                <div className="absolute bottom-3 inset-x-3 bg-rose-950/90 border border-rose-500/80 backdrop-blur-md p-2.5 rounded-xl text-white text-xs flex items-center justify-between gap-2 z-10 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={15} className="text-rose-400 shrink-0" />
+                    <span>Wajah terdeteksi tetapi belum terdaftar fotonya di database.</span>
+                  </div>
+                  <span className="text-[10px] text-rose-300 font-bold uppercase bg-rose-900/60 px-2 py-0.5 rounded">
+                    Centang Manual
+                  </span>
                 </div>
               )}
             </div>
@@ -422,13 +590,13 @@ export default function FaceAttendanceScannerModal({
             {/* Bottom status bar */}
             <div className="mt-3 w-full max-w-2xl flex items-center justify-between text-xs text-slate-400 px-1">
               <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
-                <span>{loadingStatus}</span>
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${enrolledCount > 0 ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+                <span className="truncate max-w-xs">{loadingStatus}</span>
               </div>
               <button
                 type="button"
                 onClick={startCamera}
-                className="hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                className="hover:text-white flex items-center gap-1 transition-colors cursor-pointer shrink-0 ml-2"
                 title="Muat ulang kamera"
               >
                 <RefreshCw size={12} />
@@ -437,8 +605,8 @@ export default function FaceAttendanceScannerModal({
             </div>
           </div>
 
-          {/* Column 3: Live Feed & Recognition Activity */}
-          <div className="bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-4 flex flex-col max-h-[400px] lg:max-h-full overflow-hidden">
+          {/* Column 3: Live Feed & Quick Search */}
+          <div className="bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-4 flex flex-col max-h-[420px] lg:max-h-full overflow-hidden">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <UserCheck size={16} className="text-indigo-600" />
@@ -447,18 +615,18 @@ export default function FaceAttendanceScannerModal({
                 </h4>
               </div>
               <span className="text-[11px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
-                {recentScans.length} terdeteksi
+                {recentScans.length} hadir
               </span>
             </div>
 
             {/* Feed List */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 space-y-1">
               {recentScans.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 px-4">
+                <div className="py-10 text-center text-slate-400 px-4">
                   <Eye size={28} className="mx-auto mb-2 opacity-40 text-slate-400" />
                   <p className="text-xs font-semibold text-slate-600">Arahkan wajah ke kamera</p>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Jemaat yang menghadap kamera dan cocok dengan foto profil akan otomatis dicentang hadir di sini.
+                    Jemaat yang menghadap kamera langsung otomatis dicentang hadir di sini.
                   </p>
                 </div>
               ) : (
@@ -491,14 +659,44 @@ export default function FaceAttendanceScannerModal({
               )}
             </div>
 
-            {/* Information Tips */}
-            <div className="pt-3 border-t border-slate-200 text-[11px] text-slate-500 bg-white p-2.5 rounded-xl border border-slate-200/80">
-              <p className="font-semibold text-slate-700 flex items-center gap-1 mb-1">
-                <Sparkles size={12} className="text-amber-500" /> Tips Pencahayaan
-              </p>
-              <p className="leading-tight text-slate-500">
-                Pastikan wajah jemaat terkena cahaya cukup saat menghadap laptop / tablet agar kamera mengenali dengan cepat.
-              </p>
+            {/* Quick manual checkin fallback search right inside scanner modal */}
+            <div className="pt-3 border-t border-slate-200 space-y-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchFilter}
+                  onChange={e => setSearchFilter(e.target.value)}
+                  placeholder="Cari & centang jemaat manual jika belum ada foto..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {filteredQuickList.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-xl max-h-36 overflow-y-auto divide-y divide-slate-100 shadow-sm">
+                  {filteredQuickList.map(m => {
+                    const isPres = presentIds.has(m.id);
+                    return (
+                      <div key={m.id} className="p-2 flex items-center justify-between hover:bg-slate-50">
+                        <span className="text-xs font-semibold text-slate-800 truncate pr-2">{m.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onMarkPresent(m.id);
+                            playChime(true);
+                            setSearchFilter('');
+                          }}
+                          className={`text-[10px] px-2 py-1 rounded-lg font-bold cursor-pointer ${
+                            isPres ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                        >
+                          {isPres ? 'Sudah Hadir' : '+ Hadir'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -508,7 +706,7 @@ export default function FaceAttendanceScannerModal({
           <div className="text-xs text-slate-500 flex items-center gap-1.5">
             <Users size={14} className="text-slate-400" />
             <span>
-              Total jemaat dengan foto: <strong className="text-slate-800">{totalPhotosCount}</strong> dari {members.length} jemaat
+              Total jemaat dengan foto: <strong className="text-slate-800">{totalPhotosCount}</strong> · Terdaftar AI: <strong className="text-emerald-700">{enrolledCount}</strong>
             </span>
           </div>
 
