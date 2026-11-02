@@ -160,6 +160,11 @@ function currentWeekSunday(): string {
 /** Age bands of the age-based komisi; used to flag members who have outgrown theirs. */
 const KOMISI_AGE_RANGE: Record<string, [number, number]> = { 'sekolah-minggu': [0, 12], teens: [13, 17], vessel: [18, 30] };
 
+/** Komisi anak & remaja/pemuda (Sekolah Minggu, Teens, Vessel) yang tidak memerlukan input pernikahan/pasangan melainkan menautkan orang tua */
+export const isYouthKomisi = (komisiId: string) => {
+  return komisiId === 'sekolah-minggu' || komisiId === 'teens' || komisiId === 'vessel';
+};
+
 export function KomisiBadge({ id }: { id: string }) {
   const k = KOMISI_LIST.find(k => k.id === id);
   if (!k) return null;
@@ -1316,8 +1321,8 @@ export default function KomisiManagement() {
           ...existingRecord,
           name: m.name.trim(),
           birthDate: m.birthDate || existingRecord.birthDate,
-          marriageDate: m.komisiId === 'sekolah-minggu' ? undefined : (m.marriageDate || existingRecord.marriageDate),
-          spouseName: m.komisiId === 'sekolah-minggu' ? undefined : (m.spouseName?.trim() || existingRecord.spouseName),
+          marriageDate: isYouthKomisi(m.komisiId) ? undefined : (m.marriageDate || existingRecord.marriageDate),
+          spouseName: isYouthKomisi(m.komisiId) ? undefined : (m.spouseName?.trim() || existingRecord.spouseName),
           parentName: m.parentName?.trim() || existingRecord.parentName,
           parentId: m.parentId || existingRecord.parentId,
           photoUrl: m.photoUrl || existingRecord.photoUrl,
@@ -1338,9 +1343,9 @@ export default function KomisiManagement() {
           address: m.address?.trim() || '',
           birthDate: m.birthDate || '',
           gender: (m.komisiId === 'wbi' || m.komisiId === 'kowari') ? 'female' : 'male',
-          maritalStatus: (m.komisiId === 'sekolah-minggu' || m.komisiId === 'teens' || m.komisiId === 'vessel') ? 'single' : ((m.komisiId === 'kompas' || m.spouseName) ? 'married' : 'single'),
-          marriageDate: m.komisiId === 'sekolah-minggu' ? undefined : (m.marriageDate || undefined),
-          spouseName: m.komisiId === 'sekolah-minggu' ? undefined : (m.spouseName?.trim() || undefined),
+          maritalStatus: isYouthKomisi(m.komisiId) ? 'single' : ((m.komisiId === 'kompas' || m.spouseName) ? 'married' : 'single'),
+          marriageDate: isYouthKomisi(m.komisiId) ? undefined : (m.marriageDate || undefined),
+          spouseName: isYouthKomisi(m.komisiId) ? undefined : (m.spouseName?.trim() || undefined),
           parentName: m.parentName?.trim() || undefined,
           parentId: m.parentId || undefined,
           photoUrl: m.photoUrl || undefined,
@@ -1375,8 +1380,8 @@ export default function KomisiManagement() {
         phone: memberForm.phone.trim(),
         address: memberForm.address.trim(),
         birthDate: memberForm.birthDate || undefined,
-        marriageDate: activeKomisi === 'sekolah-minggu' ? undefined : (memberForm.marriageDate || undefined),
-        spouseName: activeKomisi === 'sekolah-minggu' ? undefined : (memberForm.spouseName?.trim() || undefined),
+        marriageDate: isYouthKomisi(activeKomisi) ? undefined : (memberForm.marriageDate || undefined),
+        spouseName: isYouthKomisi(activeKomisi) ? undefined : (memberForm.spouseName?.trim() || undefined),
         parentName: memberForm.parentName?.trim() || undefined,
         parentId: selectedParentJemaatId || memberForm.parentId || undefined,
         photoUrl: memberForm.photoUrl || undefined,
@@ -1408,8 +1413,8 @@ export default function KomisiManagement() {
         await supabaseAdmin.from(KV).insert({ key, value: member });
       }
 
-      // Khusus Komisi Sekolah Minggu: Sinkronkan anak ke kartu keluarga orang tua di Data Jemaat Umum
-      if (activeKomisi === 'sekolah-minggu' && (member.parentId || member.parentName)) {
+      // Khusus Komisi Anak & Pemuda (Sekolah Minggu, Teens, Vessel): Sinkronkan anak ke kartu keluarga orang tua di Data Jemaat Umum
+      if (isYouthKomisi(activeKomisi) && (member.parentId || member.parentName)) {
         try {
           const pId = member.parentId;
           const pName = member.parentName || '';
@@ -2211,13 +2216,13 @@ export default function KomisiManagement() {
                                 <span>Orang Tua: {parentDisplayName}</span>
                               </span>
                             )}
-                            {activeKomisi !== 'sekolah-minggu' && anniYears >= 0 && (
+                            {!isYouthKomisi(activeKomisi) && anniYears >= 0 && (
                               <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
                                 <HeartHandshake size={11} className="text-rose-500" />
                                 {anniYears} thn Pernikahan
                               </span>
                             )}
-                            {activeKomisi !== 'sekolah-minggu' && spouseName && (
+                            {!isYouthKomisi(activeKomisi) && spouseName && (
                               <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-pink-50 text-pink-700 border border-pink-200 flex items-center gap-1">
                                 <Heart size={11} className="text-pink-500 fill-pink-500" />
                                 Pasangan: {spouseName}
@@ -2251,7 +2256,7 @@ export default function KomisiManagement() {
                                 <span>Lahir: {formatDate(birthDate)}</span>
                               </div>
                             )}
-                            {activeKomisi !== 'sekolah-minggu' && marriageDate && (
+                            {!isYouthKomisi(activeKomisi) && marriageDate && (
                               <div className="flex items-center gap-1.5 min-w-0 text-rose-700 font-semibold">
                                 <HeartHandshake size={13} className="text-rose-500 flex-shrink-0" />
                                 <span>Anniversary: {formatDate(marriageDate)}{anniYears >= 0 ? ` (${anniYears} thn)` : ''}</span>
@@ -2947,8 +2952,8 @@ export default function KomisiManagement() {
                   </div>
                 </div>
 
-                {/* Tanggal Pernikahan / Anniversary (Sembunyikan untuk Sekolah Minggu) */}
-                {activeKomisi !== 'sekolah-minggu' && (
+                {/* Tanggal Pernikahan / Anniversary (Sembunyikan untuk Sekolah Minggu, Teens, dan Vessel) */}
+                {!isYouthKomisi(activeKomisi) && (
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -2980,8 +2985,8 @@ export default function KomisiManagement() {
                   </div>
                 )}
 
-                {/* Nama Pasangan (Suami / Istri) - Sembunyikan untuk Sekolah Minggu */}
-                {activeKomisi !== 'sekolah-minggu' && (
+                {/* Nama Pasangan (Suami / Istri) - Sembunyikan untuk Sekolah Minggu, Teens, dan Vessel */}
+                {!isYouthKomisi(activeKomisi) && (
                   <div className="relative">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -3093,8 +3098,8 @@ export default function KomisiManagement() {
                   </div>
                 )}
 
-                {/* Khusus Sekolah Minggu: Nama Orang Tua / Wali (Auto ngelink ke Data Jemaat Umum & Kartu Keluarga) */}
-                {activeKomisi === 'sekolah-minggu' && (
+                {/* Khusus Anak & Pemuda (Sekolah Minggu, Teens, Vessel): Nama Orang Tua / Wali (Auto ngelink ke Data Jemaat Umum & Kartu Keluarga) */}
+                {isYouthKomisi(activeKomisi) && (
                   <div className="relative">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
