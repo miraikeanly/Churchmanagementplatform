@@ -1105,6 +1105,29 @@ export default function KomisiManagement() {
 
   const linkedCount = members.filter(m => m.jemaatId && jemaatMap[m.jemaatId]).length;
 
+  // Helper untuk menampilkan kedua orang tua jika salah satu atau keduanya memiliki pasangan terdata
+  const getParentDisplayName = useCallback((m: KomisiMember, linkedJemaat?: JemaatMember | null): string => {
+    const rawParentName = m.parentName || linkedJemaat?.parentName || '';
+    const parentId = m.parentId || linkedJemaat?.parentId || '';
+    if (!rawParentName && !parentId) return '';
+
+    // Cari objek jemaat orang tua
+    const pRecord = (parentId ? jemaatMap[parentId] : null) || (rawParentName ? jemaatList.find(j => isNameMatching(rawParentName, j.name)) : null);
+    if (!pRecord) return rawParentName;
+
+    // Jika orang tua memiliki pasangan terdaftar (suami / istri)
+    const spouseName = pRecord.spouseName?.trim();
+    if (spouseName) {
+      // Pastikan nama rawParentName tidak sudah mengandung tanda & atau dan
+      if (rawParentName.includes('&') || rawParentName.toLowerCase().includes(' dan ')) {
+        return rawParentName;
+      }
+      return `${pRecord.name} & ${spouseName}`;
+    }
+
+    return pRecord.name || rawParentName;
+  }, [jemaatMap, jemaatList]);
+
   const openAddMember = () => {
     setEditMember(null);
     setMemberForm({
@@ -1231,14 +1254,15 @@ export default function KomisiManagement() {
 
   const selectParentToForm = (j: JemaatMember) => {
     setSelectedParentJemaatId(j.id);
+    const parentDisplay = j.spouseName?.trim() ? `${j.name} & ${j.spouseName.trim()}` : j.name;
     setMemberForm(prev => ({
       ...prev,
-      parentName: j.name,
+      parentName: parentDisplay,
       parentId: j.id,
       address: prev.address || j.address || '',
       phone: prev.phone || j.phone || '',
     }));
-    setParentSearch(j.name);
+    setParentSearch(parentDisplay);
     setParentDropdownOpen(false);
   };
 
@@ -1385,8 +1409,23 @@ export default function KomisiManagement() {
       if (activeKomisi === 'sekolah-minggu' && (member.parentId || member.parentName)) {
         try {
           const pId = member.parentId;
-          const pName = member.parentName;
-          const parentJemaat = (pId ? jemaatMap[pId] : null) || (pName ? jemaatList.find(j => isNameMatching(pName, j.name)) : null);
+          const pName = member.parentName || '';
+
+          // Cari parentJemaat: dukung nama tunggal maupun nama gabungan "A & B"
+          let parentJemaat = pId ? jemaatMap[pId] : null;
+          if (!parentJemaat && pName) {
+            const parts = pName.split(/&|dan|\//i).map(s => s.trim()).filter(Boolean);
+            for (const part of parts) {
+              const found = jemaatList.find(j => isNameMatching(part, j.name));
+              if (found) {
+                parentJemaat = found;
+                break;
+              }
+            }
+            if (!parentJemaat) {
+              parentJemaat = jemaatList.find(j => isNameMatching(pName, j.name)) || null;
+            }
+          }
 
           if (parentJemaat) {
             const rawParentId = parentJemaat.id.replace(/^congregation:member:/, '').replace(/^member:/, '');
@@ -2091,6 +2130,7 @@ export default function KomisiManagement() {
                 const birthDate = linked?.birthDate || m.birthDate || '';
                 const marriageDate = m.marriageDate || linked?.marriageDate || '';
                 const spouseName = m.spouseName || linked?.spouseName || '';
+                const parentDisplayName = getParentDisplayName(m, linked);
                 const anniYears = marriageDate ? getAnniversaryYears(marriageDate) : -1;
                 const age = birthDate ? getAge(birthDate) : -1;
                 const range = KOMISI_AGE_RANGE[activeKomisi];
@@ -2144,12 +2184,6 @@ export default function KomisiManagement() {
                                 Pasangan: {spouseName}
                               </span>
                             )}
-                            {(m.parentName || linked?.parentName) && (
-                              <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                                <Users size={11} className="text-purple-500" />
-                                Orang Tua: {m.parentName || linked?.parentName}
-                              </span>
-                            )}
                             {outOfRange && (
                               <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
                                 Usia di luar rentang komisi
@@ -2184,10 +2218,10 @@ export default function KomisiManagement() {
                                 <span>Anniversary: {formatDate(marriageDate)}{anniYears >= 0 ? ` (${anniYears} thn)` : ''}</span>
                               </div>
                             )}
-                            {(m.parentName || linked?.parentName) && (
+                            {parentDisplayName && (
                               <div className="flex items-center gap-1.5 min-w-0 text-purple-700 font-semibold">
                                 <Users size={13} className="text-purple-500 flex-shrink-0" />
-                                <span className="truncate">Orang Tua: {m.parentName || linked?.parentName}</span>
+                                <span className="truncate">Orang Tua: {parentDisplayName}</span>
                               </div>
                             )}
                             {m.address && (
@@ -3115,15 +3149,21 @@ export default function KomisiManagement() {
                               <div className="min-w-0 flex-1">
                                 <p className="font-bold text-xs text-slate-900 group-hover:text-purple-700 truncate">
                                   {j.name}
+                                  {j.spouseName && (
+                                    <span className="ml-1.5 text-[11px] font-semibold text-purple-600 bg-purple-50 px-2 py-0.2 rounded-full border border-purple-100">
+                                      &amp; {j.spouseName}
+                                    </span>
+                                  )}
                                 </p>
                                 <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 truncate">
+                                  {j.spouseName && <span>Pasangan: {j.spouseName} · </span>}
                                   {j.phone && <span>{j.phone}</span>}
                                   {j.address && <span>· {j.address}</span>}
                                 </div>
                               </div>
                             </div>
                             <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-lg border border-purple-100 flex items-center gap-1 group-hover:bg-purple-600 group-hover:text-white transition-colors flex-shrink-0 ml-2">
-                              <Users size={10} /> Pilih Orang Tua
+                              <Users size={10} /> {j.spouseName ? 'Pilih Orang Tua (Keduanya)' : 'Pilih Orang Tua'}
                             </span>
                           </button>
                         ))}
