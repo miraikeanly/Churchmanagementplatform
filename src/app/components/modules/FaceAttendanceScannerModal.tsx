@@ -58,8 +58,8 @@ export default function FaceAttendanceScannerModal({
   const [totalPhotosCount, setTotalPhotosCount] = useState<number>(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Sensitivity threshold: lower distance = stricter, higher distance = more forgiving (Default 0.52 distance / ~55%+ match)
-  const [matchTolerance, setMatchTolerance] = useState<number>(0.52);
+  // Strict Sensitivity threshold: lower distance = stricter (Default 0.42 distance / ~70%+ match)
+  const [matchTolerance, setMatchTolerance] = useState<number>(0.42);
   const [showSettings, setShowSettings] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
@@ -77,7 +77,8 @@ export default function FaceAttendanceScannerModal({
   const streamRef = useRef<MediaStream | null>(null);
   const faceMatcherRef = useRef<faceapi.FaceMatcher | null>(null);
   const isDetectingRef = useRef(false);
-  const lastCheckinTimesRef = useRef<Map<string, number>>(new Map()); // Debounce check-in per member (5s)
+  const lastCheckinTimesRef = useRef<Map<string, number>>(new Map()); // Debounce check-in per member
+  const consecutiveMatchCountsRef = useRef<Map<string, number>>(new Map()); // Anti-passby: requires person to be steady for 3 consecutive frames
 
   // Play audio chime on detection
   const playChime = useCallback((success = true) => {
@@ -357,23 +358,41 @@ export default function FaceAttendanceScannerModal({
           if (faceMatcherRef.current && detections.length > 0) {
             const resizedDetections = faceapi.resizeResults(detections, displaySize);
 
-            // Process and match each detected face with strict criteria
-            const matchResults = resizedDetections.map(detection => {
+            // 1. Strict Filter: Filter out small/distant faces (passers-by in background)
+            // Faces must have minimum bounding box width and height (at least 90px)
+            const prominentDetections = resizedDetections.filter(d => {
+              const b = d.detection.box;
+              return b.width >= 90 && b.height >= 90;
+            });
+
+            // Calculate video center coordinates
+            const centerX = videoWidth / 2;
+            const centerY = videoHeight / 2;
+
+            // 2. Process and match each prominent face
+            const matchResults = prominentDetections.map(detection => {
               const bestMatch = faceMatcherRef.current!.findBestMatch(detection.descriptor);
               const isUnknown = bestMatch.label === 'unknown';
               const memberId = bestMatch.label;
               const matchedMember = members.find(m => m.id === memberId);
+              const box = detection.detection.box;
 
-              // Standard Euclidean distance to percentage conversion:
-              // Distance 0.0 -> 100%, 0.40 -> ~70%, 0.50 -> ~60%, 0.60 -> ~50%
-              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 1.1) * 100)));
+              // Euclidean distance to percentage conversion:
+              // 0.0 -> 100%, 0.35 -> ~65%, 0.42 -> ~58%, 0.50 -> ~50%
+              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 1.0) * 100)));
 
-              // Highly accurate if match distance is within tolerance (default <= 0.52 distance / ~52%+ confidence)
-              const isHighlyAccurate = !isUnknown && matchedMember && bestMatch.distance <= matchTolerance && confidence >= 50;
+              // Strict accuracy: Distance must be <= matchTolerance (default 0.42) and confidence >= 55%
+              const isHighlyAccurate = !isUnknown && matchedMember && bestMatch.distance <= matchTolerance && confidence >= 55;
+
+              // Distance from frame center (center-weighted priority)
+              const faceCenterX = box.x + box.width / 2;
+              const faceCenterY = box.y + box.height / 2;
+              const distFromCenter = Math.hypot(faceCenterX - centerX, faceCenterY - centerY);
+              const faceArea = box.width * box.height;
 
               return {
                 detection,
-                box: detection.detection.box,
+                box,
                 bestMatch,
                 isUnknown,
                 isHighlyAccurate,
@@ -381,14 +400,24 @@ export default function FaceAttendanceScannerModal({
                 matchedMember,
                 confidence,
                 distance: bestMatch.distance,
+                distFromCenter,
+                faceArea,
               };
             });
 
-            // Sort so the single highest confidence / closest distance face is processed first
-            matchResults.sort((a, b) => a.distance - b.distance);
+            // 3. Sort: prioritize closest to center and largest face, then lowest Euclidean distance
+            matchResults.sort((a, b) => {
+              if (a.isHighlyAccurate !== b.isHighlyAccurate) {
+                return a.isHighlyAccurate ? -1 : 1;
+              }
+              return a.distance - b.distance;
+            });
 
-            for (const res of matchResults) {
-              const { box, isUnknown, isHighlyAccurate, memberId, matchedMember, confidence } = res;
+            const seenMemberIdsThisFrame = new Set<string>();
+
+            for (let i = 0; i < matchResults.length; i++) {
+              const res = matchResults[i];
+              const { box, isHighlyAccurate, memberId, matchedMember, confidence } = res;
 
               if (!isHighlyAccurate) {
                 hasUnrecognized = true;
@@ -405,7 +434,7 @@ export default function FaceAttendanceScannerModal({
 
                 // Label background
                 const labelText = !isHighlyAccurate
-                  ? 'Wajah Kurang Mirip / Belum Terdaftar'
+                  ? 'Wajah Kurang Mirip / Lewat Saja'
                   : isAlreadyPresent
                   ? `✓ ${matchedMember?.name || 'Jemaat'} (Sudah Hadir)`
                   : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
@@ -424,37 +453,45 @@ export default function FaceAttendanceScannerModal({
                 ctx.fillText(labelText, box.x + 8, Math.max(18, box.y - 9));
               }
 
-              // Auto-checkin trigger:
-              // 1. MUST be highly accurate and pass strict similarity threshold
-              // 2. ONLY mark the highest matching person
-              if (isHighlyAccurate && matchedMember) {
+              // Auto-checkin trigger with Anti-Passby Multi-Frame Confirmation:
+              // Only process check-in for the primary match (first item) to prevent multi-person spam
+              if (i === 0 && isHighlyAccurate && matchedMember && memberId) {
+                seenMemberIdsThisFrame.add(memberId);
+
                 // If member is not yet checked in in the session:
                 if (!isAlreadyPresent) {
-                  const now = Date.now();
-                  const lastCheckin = lastCheckinTimesRef.current.get(memberId) || 0;
+                  // Count consecutive frames this member was recognized (Anti-Passby verification)
+                  const currentStreak = (consecutiveMatchCountsRef.current.get(memberId) || 0) + 1;
+                  consecutiveMatchCountsRef.current.set(memberId, currentStreak);
 
-                  // Debounce to prevent multiple triggers in rapid succession
-                  if (now - lastCheckin > 8000) {
-                    lastCheckinTimesRef.current.set(memberId, now);
+                  // Must be stable for at least 3 consecutive frames (~200-300ms) to ensure they are actually looking at camera
+                  if (currentStreak >= 3) {
+                    const now = Date.now();
+                    const lastCheckin = lastCheckinTimesRef.current.get(memberId) || 0;
 
-                    // Mark present in attendance system
-                    onMarkPresent(memberId);
-                    playChime(true);
+                    // Debounce to prevent multiple triggers in rapid succession
+                    if (now - lastCheckin > 8000) {
+                      lastCheckinTimesRef.current.set(memberId, now);
 
-                    // Only push to recentScans feed ONCE when freshly checked in (NO spam!)
-                    setRecentScans(prev => {
-                      if (prev.some(s => s.id === memberId)) return prev;
-                      return [
-                        {
-                          id: memberId,
-                          name: matchedMember.name,
-                          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                          confidence,
-                          alreadyPresent: false,
-                        },
-                        ...prev.slice(0, 19),
-                      ];
-                    });
+                      // Mark present in attendance system
+                      onMarkPresent(memberId);
+                      playChime(true);
+
+                      // Only push to recentScans feed ONCE when freshly checked in (NO spam!)
+                      setRecentScans(prev => {
+                        if (prev.some(s => s.id === memberId)) return prev;
+                        return [
+                          {
+                            id: memberId,
+                            name: matchedMember.name,
+                            time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                            confidence,
+                            alreadyPresent: false,
+                          },
+                          ...prev.slice(0, 19),
+                        ];
+                      });
+                    }
                   }
                 } else {
                   // Jemaat SUDAH diabsen sebelumnya:
@@ -462,6 +499,13 @@ export default function FaceAttendanceScannerModal({
                   const now = Date.now();
                   lastCheckinTimesRef.current.set(memberId, now);
                 }
+              }
+            }
+
+            // Reset streak for members not seen in this frame
+            for (const [id] of consecutiveMatchCountsRef.current) {
+              if (!seenMemberIdsThisFrame.has(id)) {
+                consecutiveMatchCountsRef.current.delete(id);
               }
             }
           } else if (detections.length > 0 && ctx) {
@@ -558,22 +602,22 @@ export default function FaceAttendanceScannerModal({
         {showSettings && (
           <div className="bg-slate-900 text-white px-5 py-3 border-b border-slate-800 text-xs flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
             <div className="flex items-center gap-3">
-              <span className="font-semibold text-slate-300">Tingkat Sensitivitas AI:</span>
+              <span className="font-semibold text-slate-300">Tingkat Ketat AI:</span>
               <input
                 type="range"
-                min="0.4"
-                max="0.75"
+                min="0.32"
+                max="0.52"
                 step="0.02"
                 value={matchTolerance}
                 onChange={e => setMatchTolerance(parseFloat(e.target.value))}
                 className="w-32 accent-emerald-500 cursor-pointer"
               />
               <span className="font-bold text-emerald-400">
-                {matchTolerance >= 0.65 ? 'Sangat Ramah / Cepat' : matchTolerance >= 0.55 ? 'Standar Seimbang' : 'Sangat Ketat'}
+                {matchTolerance <= 0.38 ? 'Ultra Ketat (Hanya Sangat Mirip)' : matchTolerance <= 0.44 ? 'Sangat Ketat & Akurat (Rekomendasi)' : 'Sedang'}
               </span>
             </div>
             <div className="text-slate-400 text-[11px]">
-              Jika wajah jemaat sulit kedetect, geser ke kanan untuk lebih mempermudah pencocokan.
+              Toleransi default 0.42 mencegah orang lewat atau wajah mirip terabsen salah.
             </div>
           </div>
         )}
