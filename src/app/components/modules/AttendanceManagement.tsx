@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
   Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock,
-  ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft, ZoomIn
+  ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft, ZoomIn, ExternalLink
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -894,22 +894,22 @@ function MemberQuickInfoModal({
         </div>
       </div>
 
-      {/* Pop up Preview Foto Besar */}
+      {/* Pop up Preview Foto Besar (Auto HD Enhanced) */}
       {showPhotoPreview && member.photoUrl && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-2 sm:p-6 backdrop-blur-md animate-in fade-in duration-200"
           onClick={(e) => {
             e.stopPropagation();
             setShowPhotoPreview(false);
           }}
         >
           <div
-            className="relative max-w-md sm:max-w-lg w-full bg-slate-900/95 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 sm:p-5 flex flex-col items-center max-h-[94vh]"
+            className="relative max-w-lg sm:max-w-2xl w-full bg-slate-900/95 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 sm:p-5 flex flex-col items-center max-h-[96vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header / Tombol Close */}
-            <div className="w-full flex items-center justify-between pb-3 sm:pb-3.5 border-b border-white/10 text-white shrink-0">
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-full flex items-center justify-between pb-3 border-b border-white/10 text-white shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
                 <span className="font-bold text-sm sm:text-base truncate text-white">
                   Foto {member.name}
                 </span>
@@ -918,29 +918,52 @@ function MemberQuickInfoModal({
                     ({member.nickname})
                   </span>
                 )}
+                <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full shrink-0">
+                  ✨ Auto HD
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowPhotoPreview(false)}
-                className="p-1.5 sm:p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
-                title="Tutup Foto"
-              >
-                <X size={22} />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <a
+                  href={member.photoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 sm:p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                  title="Buka Foto Ukuran Asli di Tab Baru"
+                >
+                  <ExternalLink size={18} />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowPhotoPreview(false)}
+                  className="p-1.5 sm:p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                  title="Tutup Foto"
+                >
+                  <X size={22} />
+                </button>
+              </div>
             </div>
 
             {/* Container Foto Besar */}
-            <div className="relative my-3 sm:my-4 flex items-center justify-center w-full overflow-hidden rounded-2xl bg-black/60 p-2">
+            <div className="relative my-3 flex items-center justify-center w-full overflow-hidden rounded-2xl bg-black/70 p-2 sm:p-3">
               <img
                 src={member.photoUrl}
                 alt={member.name}
-                className="w-full h-auto max-h-[65vh] object-contain rounded-xl shadow-2xl border border-white/15"
-                style={{ minWidth: '280px', minHeight: '280px' }}
+                decoding="async"
+                loading="eager"
+                className="w-auto h-auto max-w-full max-h-[72vh] object-contain rounded-xl shadow-2xl border border-white/15 transition-all"
+                style={{
+                  minWidth: '240px',
+                  imageRendering: '-webkit-optimize-contrast',
+                  filter: 'contrast(1.05) saturate(1.04) brightness(1.01)',
+                }}
               />
             </div>
 
             {/* Tombol Tutup Bawah */}
-            <div className="w-full flex items-center justify-end gap-3 pt-2 shrink-0">
+            <div className="w-full flex items-center justify-between gap-3 pt-2 shrink-0">
+              <span className="text-[11px] text-white/60 hidden sm:inline">
+                Resolusi ditingkatkan secara otomatis (Auto-HD)
+              </span>
               <button
                 type="button"
                 onClick={() => setShowPhotoPreview(false)}
