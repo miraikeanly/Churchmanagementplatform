@@ -372,19 +372,23 @@ export default function FaceAttendanceScannerModal({
 
             // 2. Process and match each prominent face
             const matchResults = prominentDetections.map(detection => {
-              const bestMatch = faceMatcherRef.current!.findBestMatch(detection.descriptor);
+              // Get all matches sorted by distance
+              const allMatches = faceMatcherRef.current!.findBestMatch(detection.descriptor);
+              const bestMatch = allMatches;
               const isUnknown = bestMatch.label === 'unknown';
               const memberId = bestMatch.label;
               const matchedMember = members.find(m => m.id === memberId);
               const box = detection.detection.box;
 
               // Euclidean distance to percentage conversion:
-              // Distance <= 0.30 -> >80%, 0.38 -> ~72%, 0.45 -> ~60%
-              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 0.75) * 100)));
+              // Distance <= 0.30 -> >80%, 0.38 -> ~72%, 0.44 -> ~65%
+              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 0.85) * 100)));
 
-              // Strict accuracy: Distance must be <= matchTolerance (default 0.38) and confidence >= 65%
-              // An unknown match is NEVER accurate.
-              const isHighlyAccurate = !isUnknown && Boolean(matchedMember) && bestMatch.distance <= matchTolerance && confidence >= 65;
+              // Strict accuracy:
+              // 1. Distance must be within matchTolerance (default 0.42)
+              // 2. Must not be unknown
+              // 3. Matched member must exist
+              const isHighlyAccurate = !isUnknown && Boolean(matchedMember) && bestMatch.distance <= matchTolerance;
 
               // Distance from frame center (center-weighted priority)
               const faceCenterX = box.x + box.width / 2;
@@ -409,14 +413,19 @@ export default function FaceAttendanceScannerModal({
 
             // 3. Sort: prioritize closest to center and largest face, then lowest Euclidean distance
             matchResults.sort((a, b) => {
+              // Prioritize accurate matches
               if (a.isHighlyAccurate !== b.isHighlyAccurate) {
                 return a.isHighlyAccurate ? -1 : 1;
               }
-              return a.distance - b.distance;
+              // If both are accurate or both not, prioritize larger face closer to center
+              const scoreA = a.faceArea - a.distFromCenter * 50;
+              const scoreB = b.faceArea - b.distFromCenter * 50;
+              return scoreB - scoreA;
             });
 
             const seenMemberIdsThisFrame = new Set<string>();
 
+            // Draw and handle matches
             for (let i = 0; i < matchResults.length; i++) {
               const res = matchResults[i];
               const { box, isHighlyAccurate, memberId, matchedMember, confidence } = res;
@@ -427,36 +436,43 @@ export default function FaceAttendanceScannerModal({
 
               const isAlreadyPresent = (isHighlyAccurate && memberId) ? presentIds.has(memberId) : false;
 
-              // Draw bounding box on video canvas
+              // Only highlight the primary person in front of the camera (i === 0) with rich details,
+              // or known secondary members. Far/unrelated people get subtle outlines to prevent clutter.
               if (ctx) {
-                ctx.lineWidth = 3;
-                // Green for high-confidence match, Blue for already checked in, Red for unknown / not similar enough
-                ctx.strokeStyle = !isHighlyAccurate ? '#ef4444' : isAlreadyPresent ? '#3b82f6' : '#10b981';
+                ctx.lineWidth = i === 0 ? 3 : 2;
+                // Green for high-confidence match, Blue for already checked in, Amber for scanning, Red for mismatch
+                ctx.strokeStyle = !isHighlyAccurate 
+                  ? 'rgba(239, 68, 68, 0.6)' 
+                  : isAlreadyPresent 
+                  ? '#3b82f6' 
+                  : '#10b981';
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
 
-                // Label background
-                const labelText = !isHighlyAccurate
-                  ? 'Wajah Kurang Mirip / Lewat Saja'
-                  : isAlreadyPresent
-                  ? `✓ ${matchedMember?.name || 'Jemaat'} (Sudah Hadir)`
-                  : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
-                
-                ctx.font = 'bold 15px sans-serif';
-                const textWidth = ctx.measureText(labelText).width;
-                ctx.fillStyle = !isHighlyAccurate
-                  ? 'rgba(239, 68, 68, 0.9)'
-                  : isAlreadyPresent
-                  ? 'rgba(37, 99, 235, 0.9)'
-                  : 'rgba(16, 185, 129, 0.95)';
-                ctx.fillRect(box.x, Math.max(0, box.y - 28), textWidth + 16, 26);
+                // Label background only for primary or recognized
+                if (i === 0 || isHighlyAccurate) {
+                  const labelText = !isHighlyAccurate
+                    ? 'Wajah Belum Terdaftar'
+                    : isAlreadyPresent
+                    ? `✓ ${matchedMember?.name || 'Jemaat'} (Sudah Hadir)`
+                    : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
+                  
+                  ctx.font = 'bold 15px sans-serif';
+                  const textWidth = ctx.measureText(labelText).width;
+                  ctx.fillStyle = !isHighlyAccurate
+                    ? 'rgba(239, 68, 68, 0.85)'
+                    : isAlreadyPresent
+                    ? 'rgba(37, 99, 235, 0.9)'
+                    : 'rgba(16, 185, 129, 0.95)';
+                  ctx.fillRect(box.x, Math.max(0, box.y - 28), textWidth + 16, 26);
 
-                // Label text
-                ctx.fillStyle = '#ffffff';
-                ctx.fillText(labelText, box.x + 8, Math.max(18, box.y - 9));
+                  // Label text
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillText(labelText, box.x + 8, Math.max(18, box.y - 9));
+                }
               }
 
               // Auto-checkin trigger with Anti-Passby Multi-Frame Confirmation:
-              // Only process check-in for the primary match (first item) to prevent multi-person spam
+              // ONLY process check-in for the primary target (i === 0) facing center of camera
               if (i === 0 && isHighlyAccurate && matchedMember && memberId) {
                 seenMemberIdsThisFrame.add(memberId);
 
@@ -466,13 +482,13 @@ export default function FaceAttendanceScannerModal({
                   const currentStreak = (consecutiveMatchCountsRef.current.get(memberId) || 0) + 1;
                   consecutiveMatchCountsRef.current.set(memberId, currentStreak);
 
-                  // Must be stable for at least 3 consecutive frames (~200-300ms) to ensure they are actually looking at camera
-                  if (currentStreak >= 3) {
+                  // Must be stable for at least 4 consecutive frames (~350ms) to ensure steady face & no accidental pass-by
+                  if (currentStreak >= 4) {
                     const now = Date.now();
                     const lastCheckin = lastCheckinTimesRef.current.get(memberId) || 0;
 
-                    // Debounce to prevent multiple triggers in rapid succession
-                    if (now - lastCheckin > 8000) {
+                    // Debounce to prevent multiple triggers in rapid succession (10 seconds)
+                    if (now - lastCheckin > 10000) {
                       lastCheckinTimesRef.current.set(memberId, now);
 
                       // Mark present in attendance system
@@ -604,22 +620,26 @@ export default function FaceAttendanceScannerModal({
         {showSettings && (
           <div className="bg-slate-900 text-white px-5 py-3 border-b border-slate-800 text-xs flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
             <div className="flex items-center gap-3">
-              <span className="font-semibold text-slate-300">Tingkat Ketat AI:</span>
+              <span className="font-semibold text-slate-300">Toleransi Wajah / Kacamata:</span>
               <input
                 type="range"
                 min="0.32"
-                max="0.52"
+                max="0.46"
                 step="0.02"
                 value={matchTolerance}
                 onChange={e => setMatchTolerance(parseFloat(e.target.value))}
                 className="w-32 accent-emerald-500 cursor-pointer"
               />
               <span className="font-bold text-emerald-400">
-                {matchTolerance <= 0.35 ? 'Maksimal Ketat (Jarang Salah)' : matchTolerance <= 0.38 ? 'Ultra Ketat & Presisi (Rekomendasi)' : 'Toleransi Sedang'}
+                {matchTolerance <= 0.36 
+                  ? 'Ketat Ekstrem' 
+                  : matchTolerance <= 0.40 
+                  ? 'Optimal (Akurat & Kacamata Lolos)' 
+                  : 'Lebih Toleran'}
               </span>
             </div>
             <div className="text-slate-400 text-[11px]">
-              Toleransi default 0.38 memastikan nama jemaat tidak akan tertukar dengan orang lain.
+              Geser sedikit jika jemaat memakai kacamata atau pencahayaan ruangan agak redup.
             </div>
           </div>
         )}
