@@ -11,8 +11,12 @@ import {
   Activity, Users, ShieldAlert, Clock, Search, Filter, RefreshCw,
   CheckCircle, AlertTriangle, Trash2, Edit3, PlusCircle, LogIn, LogOut,
   Monitor, Smartphone, Globe, ArrowUpDown, ChevronLeft, ChevronRight,
-  ExternalLink, ShieldCheck, UserCheck, Calendar, Info, ArrowRight, ChevronDown
+  ExternalLink, ShieldCheck, UserCheck, Calendar, Info, ArrowRight, ChevronDown,
+  Check, X as XIcon, User as UserIcon
 } from 'lucide-react';
+import { EdgeKV as supabaseAdmin } from '../../../lib/edgeKvClient';
+
+const KV = 'kv_store_561004a0';
 
 // Format date to local Indonesian time
 function formatDateTime(isoStr?: string | null) {
@@ -86,6 +90,37 @@ export default function ActivityLogManagement() {
   const [filterAction, setFilterAction] = useState('ALL');
   const [filterTarget, setFilterTarget] = useState('ALL');
   const [filterAdminId, setFilterAdminId] = useState('ALL');
+  const [memberMap, setMemberMap] = useState<Map<string, string>>(new Map());
+
+  // Helper to resolve human readable member name
+  const resolveMemberName = useCallback((id: string): string => {
+    if (!id) return '';
+    const cleanId = String(id).replace(/^congregation:member:/, '').replace(/^member:/, '').trim().toLowerCase();
+    return memberMap.get(cleanId) || memberMap.get(id) || '';
+  }, [memberMap]);
+
+  // Load member name map to humanize attendance and member logs
+  const loadMembers = useCallback(async () => {
+    try {
+      const { data } = await supabaseAdmin.from(KV).select('key, value').like('key', 'congregation:member:%');
+      if (Array.isArray(data)) {
+        const map = new Map<string, string>();
+        for (const row of data) {
+          const val = row.value || {};
+          const name = val.name || val.nama || '';
+          if (name) {
+            const rawId = String(val.id || row.key.replace('congregation:member:', '')).trim().toLowerCase();
+            map.set(rawId, name);
+            if (val.id) map.set(String(val.id), name);
+            map.set(row.key, name);
+          }
+        }
+        setMemberMap(map);
+      }
+    } catch (e) {
+      console.warn('Failed to load member map for log humanizing:', e);
+    }
+  }, []);
 
   // Load presence data
   const loadPresence = useCallback(async () => {
@@ -122,9 +157,9 @@ export default function ActivityLogManagement() {
   // Initial load
   const loadAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([loadPresence(), loadLogs()]);
+    await Promise.all([loadPresence(), loadLogs(), loadMembers()]);
     setLoading(false);
-  }, [loadPresence, loadLogs]);
+  }, [loadPresence, loadLogs, loadMembers]);
 
   useEffect(() => {
     loadAll();
@@ -135,6 +170,177 @@ export default function ActivityLogManagement() {
     loadPresence();
     if (activeSubTab === 'logs') loadLogs();
   }, 20_000);
+
+  // Friendly human-readable formatter for logs
+  const formatHumanReadable = useCallback((log: AuditLogItem) => {
+    const detail = log.detail || {};
+    const key = detail.key || '';
+    const rawSummary = typeof detail === 'string' ? detail : (detail.summary || detail.message || '');
+
+    // 1. Check if it's old presence heartbeat log that slipped in
+    if (key === 'admin_chat:presence' || key.startsWith('presence:')) {
+      return {
+        title: 'Status Aktif / Online Admin',
+        subtitle: 'Sistem mencatat aktivitas heartbeat admin di dashboard',
+        changes: [],
+      };
+    }
+
+    // 2. Attendance session save or update
+    if (key.startsWith('attendance_session:') || log.target === 'Absensi') {
+      const entityName = detail.entityName || 'Absensi Ibadah';
+      const changes = Array.isArray(detail.changes) ? detail.changes : [];
+      const presentChange = changes.find((c: any) => c.field === 'presentIds');
+
+      let summaryText = rawSummary || `Menyimpan data ${entityName}`;
+      let friendlyChanges: Array<{ label: string; oldVal: string; newVal: string; type?: 'attend' | 'unattend' | 'normal' }> = [];
+
+      if (presentChange) {
+        if (presentChange.addedCount > 0 && (!presentChange.removedCount || presentChange.removedCount === 0)) {
+          summaryText = `${entityName}: ${presentChange.addedCount} jemaat dicentang hadir`;
+        } else if (presentChange.removedCount > 0 && (!presentChange.addedCount || presentChange.addedCount === 0)) {
+          summaryText = `${entityName}: ${presentChange.removedCount} centang kehadiran dibatalkan`;
+        } else if (presentChange.newText) {
+          summaryText = `${entityName}: ${presentChange.newText}`;
+        }
+
+        // Translate addedIds to member names
+        if (Array.isArray(presentChange.addedIds) && presentChange.addedIds.length > 0) {
+          const names = presentChange.addedIds
+            .map((id: string) => resolveMemberName(id) || `ID #${id.slice(0, 6)}`)
+            .join(', ');
+          friendlyChanges.push({
+            label: 'Dicentang Hadir',
+            oldVal: 'Tidak Hadir',
+            newVal: names + (presentChange.addedCount > presentChange.addedIds.length ? ` (+${presentChange.addedCount - presentChange.addedIds.length} lainnya)` : ''),
+            type: 'attend'
+          });
+        }
+
+        // Translate removedIds to member names
+        if (Array.isArray(presentChange.removedIds) && presentChange.removedIds.length > 0) {
+          const names = presentChange.removedIds
+            .map((id: string) => resolveMemberName(id) || `ID #${id.slice(0, 6)}`)
+            .join(', ');
+          friendlyChanges.push({
+            label: 'Centang Dibatalkan',
+            oldVal: names,
+            newVal: 'Tidak Hadir',
+            type: 'unattend'
+          });
+        }
+      }
+
+      return {
+        title: summaryText,
+        subtitle: `Sesi: ${entityName}`,
+        changes: friendlyChanges,
+      };
+    }
+
+    // 3. Congregation member changes
+    if (key.startsWith('congregation:member:') || key.startsWith('member:') || log.target === 'Data Jemaat') {
+      const memberId = key.replace('congregation:member:', '').replace('member:', '');
+      const knownName = resolveMemberName(memberId) || detail.entityName;
+      const entityLabel = knownName && !knownName.includes('-') ? knownName : `Jemaat #${memberId.slice(0, 8)}`;
+
+      let actionDesc = rawSummary;
+      if (!actionDesc) {
+        if (log.action === 'CREATE') actionDesc = `Menambahkan jemaat baru "${entityLabel}"`;
+        else if (log.action === 'DELETE') actionDesc = `Menghapus data jemaat "${entityLabel}"`;
+        else actionDesc = `Memperbarui data jemaat "${entityLabel}"`;
+      } else {
+        // Replace UUID in rawSummary if present
+        if (memberId && knownName && actionDesc.includes(memberId)) {
+          actionDesc = actionDesc.replace(memberId, knownName);
+        }
+      }
+
+      const FIELD_DICTIONARY: Record<string, string> = {
+        name: 'Nama',
+        phone: 'Nomor HP',
+        phones: 'Nomor HP',
+        address: 'Alamat',
+        birthDate: 'Tanggal Lahir',
+        gender: 'Jenis Kelamin',
+        maritalStatus: 'Status Pernikahan',
+        spouseName: 'Pasangan',
+        parentName: 'Orang Tua',
+        note: 'Catatan',
+        notes: 'Catatan',
+        status: 'Status Jemaat',
+        pksId: 'Komsel / PKS',
+        komisi: 'Komisi',
+      };
+
+      const changes = (Array.isArray(detail.changes) ? detail.changes : []).map((c: any) => {
+        let label = FIELD_DICTIONARY[c.field] || c.fieldLabel || c.field;
+        let oldVal = c.oldText || 'kosong';
+        let newVal = c.newText || 'kosong';
+
+        // Check if values are UUIDs and resolve them to names
+        if (c.old && typeof c.old === 'string' && c.old.length >= 32) {
+          const res = resolveMemberName(c.old);
+          if (res) oldVal = res;
+        }
+        if (c.new && typeof c.new === 'string' && c.new.length >= 32) {
+          const res = resolveMemberName(c.new);
+          if (res) newVal = res;
+        }
+
+        return {
+          label,
+          oldVal,
+          newVal,
+          type: 'normal' as const,
+        };
+      });
+
+      return {
+        title: actionDesc,
+        subtitle: `Data Jemaat: ${entityLabel}`,
+        changes,
+      };
+    }
+
+    // 4. Default clean fallback for other modules (Komsel, Keuangan, dll.)
+    let cleanSummary = rawSummary || `${log.action} pada ${log.target || 'Sistem'}`;
+    // Replace raw UUIDs with human readable names if matched in memberMap
+    if (memberMap.size > 0 && typeof cleanSummary === 'string') {
+      for (const [id, name] of memberMap.entries()) {
+        if (id.length > 10 && cleanSummary.includes(id)) {
+          cleanSummary = cleanSummary.split(id).join(name);
+        }
+      }
+    }
+
+    const FIELD_DICTIONARY: Record<string, string> = {
+      name: 'Nama',
+      title: 'Judul',
+      amount: 'Nominal',
+      category: 'Kategori',
+      description: 'Keterangan',
+      phone: 'No. HP',
+      address: 'Alamat',
+      date: 'Tanggal',
+      status: 'Status',
+      notes: 'Catatan',
+      note: 'Catatan',
+    };
+
+    const changes = (Array.isArray(detail.changes) ? detail.changes : []).map((c: any) => ({
+      label: FIELD_DICTIONARY[c.field] || c.fieldLabel || c.field,
+      oldVal: c.oldText || 'kosong',
+      newVal: c.newText || 'kosong',
+      type: 'normal' as const,
+    }));
+
+    return {
+      title: cleanSummary,
+      subtitle: detail.entityName ? `Objek: ${detail.entityName}` : undefined,
+      changes,
+    };
+  }, [memberMap, resolveMemberName]);
 
   // Filtered logs by selected admin if set
   const displayedLogs = useMemo(() => {
@@ -601,39 +807,82 @@ export default function ActivityLogManagement() {
 
                           {/* Detail Description & Field Diffs */}
                           <td className="px-4 py-3 text-gray-700 max-w-lg">
-                            <p className="break-words font-medium text-gray-900 leading-snug">{detailText}</p>
-                            
-                            {/* Detailed changes list if available */}
-                            {Array.isArray(log.detail?.changes) && log.detail.changes.length > 0 && (
-                              <div className="mt-2 space-y-1.5 pt-1.5 border-t border-gray-100">
-                                {log.detail.changes.map((c: any, ci: number) => (
-                                  <div
-                                    key={ci}
-                                    className="text-[11px] bg-slate-50 border border-slate-200/70 rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap"
-                                  >
-                                    <span className="font-bold text-slate-700 capitalize bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">
-                                      {c.field}
-                                    </span>
-                                    <span className="text-rose-600 line-through bg-rose-50 px-1.5 py-0.5 rounded text-[10px] font-mono">
-                                      {c.oldText || 'kosong'}
-                                    </span>
-                                    <ArrowRight size={11} className="text-slate-400 flex-shrink-0" />
-                                    <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] font-mono">
-                                      {c.newText || 'kosong'}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {(() => {
+                              const readable = formatHumanReadable(log);
+                              return (
+                                <div className="space-y-1.5">
+                                  <p className="break-words font-semibold text-gray-900 leading-snug">
+                                    {readable.title}
+                                  </p>
 
-                            {/* Additional info badge if entityName is provided */}
-                            {log.detail?.entityName && !log.detail?.changes?.length && (
-                              <div className="mt-1">
-                                <span className="inline-block text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200/60 font-mono">
-                                  ID/Nama: {log.detail.entityName}
-                                </span>
-                              </div>
-                            )}
+                                  {/* Subtitle / Context info */}
+                                  {readable.subtitle && (
+                                    <p className="text-[11px] text-gray-500 font-normal">
+                                      {readable.subtitle}
+                                    </p>
+                                  )}
+
+                                  {/* Detailed changes list if available */}
+                                  {readable.changes && readable.changes.length > 0 && (
+                                    <div className="mt-2 space-y-1.5 pt-1.5 border-t border-gray-100">
+                                      {readable.changes.map((c, ci) => {
+                                        if (c.type === 'attend') {
+                                          return (
+                                            <div
+                                              key={ci}
+                                              className="text-[11px] bg-emerald-50/80 border border-emerald-200/80 rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap"
+                                            >
+                                              <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]">
+                                                <Check size={11} className="text-emerald-600" />
+                                                {c.label}
+                                              </span>
+                                              <span className="text-emerald-800 font-medium text-[11px]">
+                                                {c.newVal}
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+
+                                        if (c.type === 'unattend') {
+                                          return (
+                                            <div
+                                              key={ci}
+                                              className="text-[11px] bg-rose-50/80 border border-rose-200/80 rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap"
+                                            >
+                                              <span className="inline-flex items-center gap-1 font-bold text-rose-800 bg-white px-1.5 py-0.5 rounded border border-rose-200 text-[10px]">
+                                                <XIcon size={11} className="text-rose-600" />
+                                                {c.label}
+                                              </span>
+                                              <span className="text-rose-800 line-through text-[11px]">
+                                                {c.oldVal}
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+
+                                        return (
+                                          <div
+                                            key={ci}
+                                            className="text-[11px] bg-slate-50 border border-slate-200/70 rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap"
+                                          >
+                                            <span className="font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">
+                                              {c.label}
+                                            </span>
+                                            <span className="text-rose-600 line-through bg-rose-50 px-1.5 py-0.5 rounded text-[10px]">
+                                              {c.oldVal}
+                                            </span>
+                                            <ArrowRight size={11} className="text-slate-400 flex-shrink-0" />
+                                            <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">
+                                              {c.newVal}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );

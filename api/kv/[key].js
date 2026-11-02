@@ -4,6 +4,15 @@ import { sendJson, sendError, getBody } from '../_lib/http.js';
 import { logActivity } from '../_lib/audit.js';
 
 function getTargetFromKey(key) {
+  if (
+    key === 'admin_chat:presence' ||
+    key.startsWith('presence:') ||
+    key.startsWith('backup:') ||
+    key.startsWith('temp:') ||
+    key.startsWith('cache:')
+  ) {
+    return null;
+  }
   if (key.startsWith('attendance_session:')) return 'Absensi';
   if (key.startsWith('congregation:member:') || key.startsWith('member:')) return 'Data Jemaat';
   if (key.startsWith('komsel:') || key.startsWith('config:pks')) return 'Komsel';
@@ -16,23 +25,53 @@ function getTargetFromKey(key) {
   return `KV (${key.split(':')[0] || 'Umum'})`;
 }
 
-function formatValueForLog(v) {
+const FIELD_LABEL_MAP = {
+  name: 'Nama',
+  phone: 'Nomor Telepon',
+  phones: 'Nomor Telepon',
+  address: 'Alamat',
+  birthDate: 'Tanggal Lahir',
+  gender: 'Jenis Kelamin',
+  status: 'Status',
+  serviceType: 'Ibadah',
+  date: 'Tanggal',
+  notes: 'Catatan',
+  note: 'Catatan',
+  spouseName: 'Nama Pasangan',
+  parentName: 'Nama Orang Tua',
+  category: 'Kategori',
+  amount: 'Nominal',
+  presentIds: 'Daftar Hadir',
+};
+
+function formatFieldLabel(key) {
+  return FIELD_LABEL_MAP[key] || key;
+}
+
+function formatValueForLog(v, fieldKey = '') {
   if (v === null || v === undefined || v === '') return 'kosong';
   if (typeof v === 'boolean') return v ? 'Ya' : 'Tidak';
   if (Array.isArray(v)) {
-    if (v.length === 0) return 'kosong';
-    if (v.length <= 4 && typeof v[0] === 'string') return v.join(', ');
+    if (v.length === 0) return 'kosong (0)';
+    if (fieldKey === 'presentIds') {
+      return `${v.length} orang jemaat hadir`;
+    }
+    if (v.length <= 3 && typeof v[0] === 'string' && v[0].length < 30) {
+      return v.join(', ');
+    }
     return `${v.length} item`;
   }
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
+  if (typeof v === 'object') return 'data tersimpan';
+  const str = String(v);
+  if (str.length > 50) return str.slice(0, 47) + '...';
+  return str;
 }
 
 function computeDiff(oldVal, newVal) {
   const diffs = [];
   const allKeys = Array.from(new Set([...Object.keys(oldVal || {}), ...Object.keys(newVal || {})]));
   // Ignore internal metadata keys from diff
-  const ignoredKeys = new Set(['updatedAt', 'updated_at', 'createdAt', 'created_at', '_storeKey', 'id']);
+  const ignoredKeys = new Set(['updatedAt', 'updated_at', 'createdAt', 'created_at', '_storeKey', 'id', 'savedAt']);
 
   for (const k of allKeys) {
     if (ignoredKeys.has(k)) continue;
@@ -41,12 +80,38 @@ function computeDiff(oldVal, newVal) {
     const oJson = JSON.stringify(o);
     const nJson = JSON.stringify(n);
     if (oJson !== nJson) {
+      // Special friendly diff for attendance presentIds
+      if (k === 'presentIds' && Array.isArray(o) && Array.isArray(n)) {
+        const added = n.filter(id => !o.includes(id));
+        const removed = o.filter(id => !n.includes(id));
+        let diffDesc = '';
+        if (added.length > 0 && removed.length === 0) {
+          diffDesc = `+${added.length} jemaat dicentang hadir (total ${n.length})`;
+        } else if (removed.length > 0 && added.length === 0) {
+          diffDesc = `-${removed.length} centang jemaat dibatalkan (total ${n.length})`;
+        } else {
+          diffDesc = `${n.length} jemaat hadir (+${added.length}, -${removed.length})`;
+        }
+        diffs.push({
+          field: 'presentIds',
+          fieldLabel: 'Daftar Hadir',
+          oldText: `${o.length} hadir`,
+          newText: diffDesc,
+          addedCount: added.length,
+          removedCount: removed.length,
+          addedIds: added.slice(0, 5),
+          removedIds: removed.slice(0, 5),
+        });
+        continue;
+      }
+
       diffs.push({
         field: k,
+        fieldLabel: formatFieldLabel(k),
         old: o !== undefined ? o : null,
         new: n !== undefined ? n : null,
-        oldText: formatValueForLog(o),
-        newText: formatValueForLog(n),
+        oldText: formatValueForLog(o, k),
+        newText: formatValueForLog(n, k),
       });
     }
   }
@@ -79,30 +144,55 @@ export default async function handler(req, res) {
     `;
 
     const target = getTargetFromKey(key);
+    if (!target) {
+      return sendJson(res, 200, { success: true });
+    }
+
     const isNew = !existing;
     const action = isNew ? 'CREATE' : 'UPDATE';
 
     const newValObj = typeof value === 'object' && value !== null ? value : {};
     const oldValObj = typeof existing === 'object' && existing !== null ? existing : {};
 
-    const entityName =
+    let entityName =
       newValObj.name ||
       oldValObj.name ||
       newValObj.title ||
-      oldValObj.title ||
-      key.split(':').slice(1).join(':');
+      oldValObj.title;
+
+    if (!entityName) {
+      if (key.startsWith('attendance_session:')) {
+        const sessDate = newValObj.date || oldValObj.date || key.replace('attendance_session:', '');
+        const sessService = newValObj.serviceType || oldValObj.serviceType || 'Ibadah';
+        entityName = `Absensi ${sessService} (${sessDate})`;
+      } else {
+        entityName = key.split(':').slice(1).join(':') || 'Data';
+      }
+    }
 
     let summary = '';
     let changes = [];
 
     if (isNew) {
-      summary = `Menambahkan data baru "${entityName}" pada ${target}`;
+      if (key.startsWith('attendance_session:')) {
+        const total = Array.isArray(newValObj.presentIds) ? newValObj.presentIds.length : 0;
+        summary = `Membuat sesi absensi "${entityName}" (${total} jemaat hadir)`;
+      } else {
+        summary = `Menambahkan data baru "${entityName}" pada ${target}`;
+      }
     } else {
       changes = computeDiff(oldValObj, newValObj);
-      if (changes.length > 0) {
+      if (key.startsWith('attendance_session:')) {
+        const attDiff = changes.find(c => c.field === 'presentIds');
+        if (attDiff && attDiff.newText) {
+          summary = `Menyimpan ${entityName}: ${attDiff.newText}`;
+        } else {
+          summary = `Menyimpan data ${entityName}`;
+        }
+      } else if (changes.length > 0) {
         const changeHighlights = changes
           .slice(0, 3)
-          .map(c => `mengubah ${c.field}: "${c.oldText}" → "${c.newText}"`)
+          .map(c => `mengubah ${c.fieldLabel || c.field}: "${c.oldText}" → "${c.newText}"`)
           .join(', ');
         const extraCount = changes.length > 3 ? ` (+${changes.length - 3} perubahan lainnya)` : '';
         summary = `Mengubah data "${entityName}" (${changeHighlights}${extraCount})`;
