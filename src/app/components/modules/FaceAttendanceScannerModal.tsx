@@ -58,8 +58,8 @@ export default function FaceAttendanceScannerModal({
   const [totalPhotosCount, setTotalPhotosCount] = useState<number>(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Sensitivity threshold: lower distance = stricter, higher distance = more forgiving (Default 0.58 distance / ~60% match)
-  const [matchTolerance, setMatchTolerance] = useState<number>(0.58);
+  // Sensitivity threshold: lower distance = stricter, higher distance = more forgiving (Default 0.48 distance / ~60%+ match)
+  const [matchTolerance, setMatchTolerance] = useState<number>(0.48);
   const [showSettings, setShowSettings] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
@@ -356,20 +356,25 @@ export default function FaceAttendanceScannerModal({
           if (faceMatcherRef.current && detections.length > 0) {
             const resizedDetections = faceapi.resizeResults(detections, displaySize);
 
-            // Process and match each detected face
+            // Process and match each detected face with strict criteria
             const matchResults = resizedDetections.map(detection => {
               const bestMatch = faceMatcherRef.current!.findBestMatch(detection.descriptor);
               const isUnknown = bestMatch.label === 'unknown';
               const memberId = bestMatch.label;
               const matchedMember = members.find(m => m.id === memberId);
-              // Confidence is inverse of distance (e.g. distance 0.35 => ~65% confidence)
+              // Confidence is inverse of distance: distance 0.35 -> ~65%, distance 0.45 -> ~55%
               const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance) * 100)));
+
+              // Strict precision requirement:
+              // Distance must be <= 0.48 (at least ~58-60% similarity), anything higher is considered not similar enough
+              const isHighlyAccurate = !isUnknown && matchedMember && bestMatch.distance <= matchTolerance && confidence >= 58;
 
               return {
                 detection,
                 box: detection.detection.box,
                 bestMatch,
                 isUnknown,
+                isHighlyAccurate,
                 memberId,
                 matchedMember,
                 confidence,
@@ -377,35 +382,35 @@ export default function FaceAttendanceScannerModal({
               };
             });
 
-            // Sort to ensure highest confidence / closest distance matches take top priority
+            // Sort so the single highest confidence / closest distance face is processed first
             matchResults.sort((a, b) => a.distance - b.distance);
 
             for (const res of matchResults) {
-              const { box, isUnknown, memberId, matchedMember, confidence } = res;
+              const { box, isUnknown, isHighlyAccurate, memberId, matchedMember, confidence } = res;
 
-              if (isUnknown) {
+              if (!isHighlyAccurate) {
                 hasUnrecognized = true;
               }
 
-              const isAlreadyPresent = memberId ? presentIds.has(memberId) : false;
+              const isAlreadyPresent = (isHighlyAccurate && memberId) ? presentIds.has(memberId) : false;
 
               // Draw bounding box on video canvas
               if (ctx) {
                 ctx.lineWidth = 3;
-                // Green for recognized, blue for already checked in, red for unknown
-                ctx.strokeStyle = isUnknown ? '#ef4444' : isAlreadyPresent ? '#3b82f6' : '#10b981';
+                // Green for high-confidence match, Blue for already checked in, Red for unknown / not similar enough
+                ctx.strokeStyle = !isHighlyAccurate ? '#ef4444' : isAlreadyPresent ? '#3b82f6' : '#10b981';
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
 
                 // Label background
-                const labelText = isUnknown
-                  ? 'Wajah Belum Terdaftar'
+                const labelText = !isHighlyAccurate
+                  ? 'Wajah Kurang Mirip / Belum Terdaftar'
                   : isAlreadyPresent
                   ? `✓ ${matchedMember?.name || 'Jemaat'} (Sudah Hadir)`
                   : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
                 
                 ctx.font = 'bold 15px sans-serif';
                 const textWidth = ctx.measureText(labelText).width;
-                ctx.fillStyle = isUnknown
+                ctx.fillStyle = !isHighlyAccurate
                   ? 'rgba(239, 68, 68, 0.9)'
                   : isAlreadyPresent
                   ? 'rgba(37, 99, 235, 0.9)'
@@ -418,16 +423,15 @@ export default function FaceAttendanceScannerModal({
               }
 
               // Auto-checkin trigger:
-              // 1. Must be recognized (!isUnknown)
-              // 2. Must meet confidence threshold (>= 50%)
-              // 3. Must be highest matching candidate for this frame
-              if (!isUnknown && matchedMember && confidence >= 50) {
+              // 1. MUST be highly accurate and pass strict similarity threshold
+              // 2. ONLY mark the highest matching person
+              if (isHighlyAccurate && matchedMember) {
                 // If member is not yet checked in in the session:
                 if (!isAlreadyPresent) {
                   const now = Date.now();
                   const lastCheckin = lastCheckinTimesRef.current.get(memberId) || 0;
 
-                  // Debounce to prevent multiple trigger in rapid succession
+                  // Debounce to prevent multiple triggers in rapid succession
                   if (now - lastCheckin > 8000) {
                     lastCheckinTimesRef.current.set(memberId, now);
 
@@ -437,7 +441,6 @@ export default function FaceAttendanceScannerModal({
 
                     // Only push to recentScans feed ONCE when freshly checked in (NO spam!)
                     setRecentScans(prev => {
-                      // Prevent duplicate card if already present in recent list
                       if (prev.some(s => s.id === memberId)) return prev;
                       return [
                         {
@@ -453,8 +456,7 @@ export default function FaceAttendanceScannerModal({
                   }
                 } else {
                   // Jemaat SUDAH diabsen sebelumnya:
-                  // Tetap update status live box di kamera jadi biru ("Sudah Hadir"),
-                  // TAPI TIDAK mengirim notifikasi spam lagi ke feed kanan!
+                  // Status di kamera tetap biru ("Sudah Hadir"), tidak mengirim notifikasi spam lagi ke feed kanan!
                   const now = Date.now();
                   lastCheckinTimesRef.current.set(memberId, now);
                 }
