@@ -884,48 +884,57 @@ function MemberQuickInfoModal({
       {/* Pop up Preview Foto Besar */}
       {showPhotoPreview && member.photoUrl && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md animate-in fade-in duration-200"
           onClick={(e) => {
             e.stopPropagation();
             setShowPhotoPreview(false);
           }}
         >
           <div
-            className="relative max-w-sm sm:max-w-md w-full bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 flex flex-col items-center"
+            className="relative max-w-2xl sm:max-w-3xl w-full bg-slate-900/95 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 sm:p-6 flex flex-col items-center max-h-[94vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header / Tombol Close */}
-            <div className="w-full flex items-center justify-between pb-3 border-b border-white/10 text-white">
-              <span className="font-semibold text-sm truncate max-w-[240px] text-slate-200">
-                Foto {member.name}
-              </span>
+            <div className="w-full flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10 text-white shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="font-bold text-sm sm:text-base truncate text-white">
+                  Foto {member.name}
+                </span>
+                {member.nickname && (
+                  <span className="text-xs bg-white/15 px-2 py-0.5 rounded-full text-blue-200 shrink-0">
+                    ({member.nickname})
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setShowPhotoPreview(false)}
-                className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                className="p-1.5 sm:p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
                 title="Tutup Foto"
               >
-                <X size={20} />
+                <X size={22} />
               </button>
             </div>
 
-            {/* Container Foto */}
-            <div className="relative my-4 flex items-center justify-center max-h-[65vh] w-full overflow-hidden rounded-2xl bg-black/40">
+            {/* Container Foto Besar */}
+            <div className="relative my-3 sm:my-4 flex items-center justify-center w-full flex-1 min-h-[300px] max-h-[76vh] overflow-hidden rounded-2xl bg-black/50 p-2">
               <img
                 src={member.photoUrl}
                 alt={member.name}
-                className="max-h-[60vh] w-auto max-w-full object-contain rounded-2xl shadow-lg"
+                className="max-h-[74vh] w-auto max-w-full object-contain rounded-xl shadow-2xl transition-transform duration-200"
               />
             </div>
 
             {/* Tombol Tutup Bawah */}
-            <button
-              type="button"
-              onClick={() => setShowPhotoPreview(false)}
-              className="mt-1 w-full py-2.5 bg-white/10 hover:bg-white/20 active:scale-98 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer border border-white/15"
-            >
-              Tutup Foto
-            </button>
+            <div className="w-full flex items-center justify-end gap-3 pt-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowPhotoPreview(false)}
+                className="w-full sm:w-auto px-6 py-2.5 bg-white/15 hover:bg-white/25 active:scale-98 text-white rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border border-white/20"
+              >
+                Tutup Foto
+              </button>
+            </div>
           </div>
         </div>
       )}
