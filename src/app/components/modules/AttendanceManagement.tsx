@@ -2006,21 +2006,6 @@ function DailyInput({
               </button>
             </div>
           )}
-
-          {canEdit && isSessionLocked && (
-            <button
-              type="button"
-              onClick={() => {
-                if (onUnlockSession) onUnlockSession(sessionId);
-                setIsEditing(true);
-              }}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all active:scale-[0.98] border border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 shadow-xs cursor-pointer"
-              title="Buka kunci absensi tanggal ini agar bisa diedit langsung tanpa perlu bolak-balik ke tab Laporan"
-            >
-              <Unlock size={16} className="text-blue-600" />
-              <span>Buka Kunci / Edit Absensi</span>
-            </button>
-          )}
         </div>
       </div>
 
