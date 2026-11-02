@@ -58,8 +58,8 @@ export default function FaceAttendanceScannerModal({
   const [totalPhotosCount, setTotalPhotosCount] = useState<number>(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Strict Sensitivity threshold: lower distance = stricter (Default 0.42 distance / ~70%+ match)
-  const [matchTolerance, setMatchTolerance] = useState<number>(0.42);
+  // Strict Sensitivity threshold: lower distance = stricter (Default 0.38 distance / ~75%+ strict matching)
+  const [matchTolerance, setMatchTolerance] = useState<number>(0.38);
   const [showSettings, setShowSettings] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
@@ -113,10 +113,11 @@ export default function FaceAttendanceScannerModal({
         setLoadingStatus('Memuat model deteksi wajah AI (High Accuracy)...');
         const MODEL_URL = '/models';
 
-        // Load SSD MobileNetV1 (full precision) + Tiny Face Detector + Landmark + Recognition
+        // Load SSD MobileNetV1 (full precision) + Landmark 68 + Recognition
         await Promise.all([
           faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         ]);
@@ -197,14 +198,14 @@ export default function FaceAttendanceScannerModal({
               // 1. Primary: Use full SsdMobilenetv1 for extremely high accuracy photo extraction
               let detection = await faceapi
                 .detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
-                .withFaceLandmarks(true)
+                .withFaceLandmarks(false) // Use full 68-point landmark model
                 .withFaceDescriptor();
 
               // 2. Fallback: TinyFaceDetector with inputSize 320 for zoomed/low-contrast photos
               if (!detection) {
                 detection = await faceapi
                   .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.25 }))
-                  .withFaceLandmarks(true)
+                  .withFaceLandmarks(false)
                   .withFaceDescriptor();
               }
 
@@ -212,7 +213,7 @@ export default function FaceAttendanceScannerModal({
               if (!detection) {
                 detection = await faceapi
                   .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }))
-                  .withFaceLandmarks(true)
+                  .withFaceLandmarks(false)
                   .withFaceDescriptor();
               }
 
@@ -343,10 +344,10 @@ export default function FaceAttendanceScannerModal({
         const displaySize = { width: videoWidth, height: videoHeight };
 
         try {
-          // Use inputSize 224 with low threshold (0.4) for ultra fast & responsive video detection
+          // Use inputSize 320 for high landmark resolution and accurate descriptors
           const detections = await faceapi
-            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 }))
-            .withFaceLandmarks(true)
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.45 }))
+            .withFaceLandmarks(false) // use 68 full landmark model
             .withFaceDescriptors();
 
           const ctx = canvas.getContext('2d');
@@ -378,11 +379,12 @@ export default function FaceAttendanceScannerModal({
               const box = detection.detection.box;
 
               // Euclidean distance to percentage conversion:
-              // 0.0 -> 100%, 0.35 -> ~65%, 0.42 -> ~58%, 0.50 -> ~50%
-              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 1.0) * 100)));
+              // Distance <= 0.30 -> >80%, 0.38 -> ~72%, 0.45 -> ~60%
+              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 0.75) * 100)));
 
-              // Strict accuracy: Distance must be <= matchTolerance (default 0.42) and confidence >= 55%
-              const isHighlyAccurate = !isUnknown && matchedMember && bestMatch.distance <= matchTolerance && confidence >= 55;
+              // Strict accuracy: Distance must be <= matchTolerance (default 0.38) and confidence >= 65%
+              // An unknown match is NEVER accurate.
+              const isHighlyAccurate = !isUnknown && Boolean(matchedMember) && bestMatch.distance <= matchTolerance && confidence >= 65;
 
               // Distance from frame center (center-weighted priority)
               const faceCenterX = box.x + box.width / 2;
@@ -613,11 +615,11 @@ export default function FaceAttendanceScannerModal({
                 className="w-32 accent-emerald-500 cursor-pointer"
               />
               <span className="font-bold text-emerald-400">
-                {matchTolerance <= 0.38 ? 'Ultra Ketat (Hanya Sangat Mirip)' : matchTolerance <= 0.44 ? 'Sangat Ketat & Akurat (Rekomendasi)' : 'Sedang'}
+                {matchTolerance <= 0.35 ? 'Maksimal Ketat (Jarang Salah)' : matchTolerance <= 0.38 ? 'Ultra Ketat & Presisi (Rekomendasi)' : 'Toleransi Sedang'}
               </span>
             </div>
             <div className="text-slate-400 text-[11px]">
-              Toleransi default 0.42 mencegah orang lewat atau wajah mirip terabsen salah.
+              Toleransi default 0.38 memastikan nama jemaat tidak akan tertukar dengan orang lain.
             </div>
           </div>
         )}
