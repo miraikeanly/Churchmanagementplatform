@@ -29,6 +29,7 @@ function toMember(r: { key: string; value: unknown }): Member | null {
     id: m.id || r.key,
     name: m.name,
     nickname: m.nickname,
+    note: m.note,
     photoUrl: m.photoUrl || undefined,
     address: m.address,
     phone: m.phone || (Array.isArray(m.phones) && m.phones.length > 0 ? m.phones[0] : undefined),
@@ -61,6 +62,7 @@ interface Member {
   id: string;
   name: string;
   nickname?: string;
+  note?: string;
   photoUrl?: string;
   address?: string;
   phone?: string;
@@ -645,6 +647,11 @@ function MemberQuickInfoModal({
                   ({member.nickname})
                 </span>
               )}
+              {member.note && (
+                <span className="text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full italic">
+                  📝 {member.note}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${STATUS_STYLE[member.status || 'active'] || STATUS_STYLE.active}`}>
@@ -682,6 +689,12 @@ function MemberQuickInfoModal({
                   {member.nickname || <span className="text-gray-400 font-normal">–</span>}
                 </span>
               </div>
+              {member.note && (
+                <div className="sm:col-span-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block">Catatan / Keterangan Khusus</span>
+                  <p className="font-semibold text-amber-900 mt-0.5">{member.note}</p>
+                </div>
+              )}
               <div className="sm:col-span-2">
                 <span className="text-[11px] text-gray-500 block">Tempat &amp; Tanggal Lahir</span>
                 <span className="font-semibold text-gray-900 flex items-center gap-1 mt-0.5">

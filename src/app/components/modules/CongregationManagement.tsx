@@ -108,13 +108,14 @@ interface Member {
   parentName?: string;
   parentId?: string;
   joinDate: string;
+  note?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 const BLANK_FORM = {
   photoUrl: '', pksName: '',
-  name: '', nickname: '', email: '', phone: '', address: '', birthDate: '',
+  name: '', nickname: '', note: '', email: '', phone: '', address: '', birthDate: '',
   birthPlace: '',
   gender: 'male' as 'male' | 'female',
   maritalStatus: 'single' as 'single' | 'married' | 'divorced' | 'widowed',
@@ -256,6 +257,11 @@ function MemberCard({
             )}
           </p>
           {m.nickname && <p className="text-xs text-gray-400 break-words">({m.nickname})</p>}
+          {m.note && (
+            <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200/70 rounded-md px-1.5 py-0.5 mt-1 break-words inline-block">
+              📝 {m.note}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLE[m.status] || STATUS_STYLE.inactive}`}>{STATUS_LABEL[m.status] || m.status}</span>
             {age >= 0 && <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${AGE_GROUP_STYLES[ageGroup]}`}>{ageGroup} · {age} thn</span>}
@@ -750,6 +756,11 @@ function MemberDetailModal({
                       ({member.nickname})
                     </span>
                   )}
+                  {member.note && (
+                    <span className="text-xs font-semibold bg-amber-400/25 text-amber-200 border border-amber-400/30 px-2.5 py-0.5 rounded-full italic">
+                      📝 {member.note}
+                    </span>
+                  )}
                 </div>
 
                 {/* Subtitle Badges */}
@@ -878,6 +889,14 @@ function MemberDetailModal({
                       <div>
                         <span className="text-[10px] uppercase font-bold text-slate-400">Nama Panggilan</span>
                         <p className="font-semibold text-slate-800 mt-0.5">{member.nickname}</p>
+                      </div>
+                    )}
+                    {member.note && (
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/80">
+                        <span className="text-[10px] uppercase font-bold text-amber-700 flex items-center gap-1">
+                          Catatan / Keterangan Khusus
+                        </span>
+                        <p className="font-semibold text-amber-900 mt-0.5">{member.note}</p>
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-2">
@@ -1919,6 +1938,7 @@ export default function CongregationManagement() {
       setFormData({
         photoUrl: member.photoUrl || '', pksName: member.pksName || '',
         name: member.name, nickname: member.nickname || '',
+        note: member.note || '',
         email: member.email || '', phone: member.phone || (member.phones || [])[0] || '',
         address: member.address || '', birthDate: member.birthDate || '',
         birthPlace: member.birthPlace || '',
@@ -1963,6 +1983,7 @@ export default function CongregationManagement() {
         pksName: formData.pksName || undefined,
         name: formData.name.trim(),
         nickname: formData.nickname.trim() || undefined,
+        note: formData.note.trim() || undefined,
         email: formData.email.trim(),
         phone: formData.phone.trim(),
         address: formData.address.trim(),
@@ -2619,6 +2640,25 @@ export default function CongregationManagement() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama Panggilan</label>
                   <input type="text" placeholder="Misal: Budi, Sari..." value={formData.nickname} onChange={e => setFormData(p => ({ ...p, nickname: e.target.value }))}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                </div>
+                {/* Note / Catatan Khusus (Opsional) */}
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Catatan / Keterangan Khusus
+                    </label>
+                    <span className="text-xs text-gray-400 font-normal">Opsional</span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Anaknya Suhendra, Budi yang di komsel Sandy, dll..."
+                    value={formData.note}
+                    onChange={e => setFormData(p => ({ ...p, note: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 border border-amber-200 bg-amber-50/30 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-gray-400 text-gray-800"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    💡 Berguna sebagai pembeda jika ada jemaat dengan nama yang sama (misal relasi keluarga, ciri khas, dll).
+                  </p>
                 </div>
                 {/* Email */}
                 <div className="col-span-2 sm:col-span-1">
