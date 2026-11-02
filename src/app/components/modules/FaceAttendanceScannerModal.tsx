@@ -58,8 +58,8 @@ export default function FaceAttendanceScannerModal({
   const [totalPhotosCount, setTotalPhotosCount] = useState<number>(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Sensitivity threshold: lower distance = stricter, higher distance = more forgiving (Default 0.48 distance / ~60%+ match)
-  const [matchTolerance, setMatchTolerance] = useState<number>(0.48);
+  // Sensitivity threshold: lower distance = stricter, higher distance = more forgiving (Default 0.52 distance / ~55%+ match)
+  const [matchTolerance, setMatchTolerance] = useState<number>(0.52);
   const [showSettings, setShowSettings] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
@@ -102,18 +102,19 @@ export default function FaceAttendanceScannerModal({
     }
   }, [soundEnabled]);
 
-  // 1. Load Face-API models fast
+  // 1. Load Face-API models fast with high-accuracy detectors
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
     async function loadModels() {
       try {
-        setLoadingStatus('Memuat model deteksi wajah AI...');
+        setLoadingStatus('Memuat model deteksi wajah AI (High Accuracy)...');
         const MODEL_URL = '/models';
 
-        // Load Tiny Face Detector, Landmark Tiny, and Face Recognition models
+        // Load SSD MobileNetV1 (full precision) + Tiny Face Detector + Landmark + Recognition
         await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
@@ -192,24 +193,24 @@ export default function FaceAttendanceScannerModal({
             try {
               const img = await loadImageElement(m.photoUrl!);
 
-              // Try detection with standard sensitivity (score 0.4, size 224)
+              // 1. Primary: Use full SsdMobilenetv1 for extremely high accuracy photo extraction
               let detection = await faceapi
-                .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 }))
+                .detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
                 .withFaceLandmarks(true)
                 .withFaceDescriptor();
 
-              // Fallback with larger inputSize 320 and lower threshold 0.3 for smaller/distant avatar photos
+              // 2. Fallback: TinyFaceDetector with inputSize 320 for zoomed/low-contrast photos
               if (!detection) {
                 detection = await faceapi
-                  .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+                  .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.25 }))
                   .withFaceLandmarks(true)
                   .withFaceDescriptor();
               }
 
-              // Fallback with inputSize 160 for small icons
+              // 3. Fallback: TinyFaceDetector with inputSize 160 for small/compressed avatars
               if (!detection) {
                 detection = await faceapi
-                  .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.25 }))
+                  .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }))
                   .withFaceLandmarks(true)
                   .withFaceDescriptor();
               }
@@ -362,12 +363,13 @@ export default function FaceAttendanceScannerModal({
               const isUnknown = bestMatch.label === 'unknown';
               const memberId = bestMatch.label;
               const matchedMember = members.find(m => m.id === memberId);
-              // Confidence is inverse of distance: distance 0.35 -> ~65%, distance 0.45 -> ~55%
-              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance) * 100)));
 
-              // Strict precision requirement:
-              // Distance must be <= 0.48 (at least ~58-60% similarity), anything higher is considered not similar enough
-              const isHighlyAccurate = !isUnknown && matchedMember && bestMatch.distance <= matchTolerance && confidence >= 58;
+              // Standard Euclidean distance to percentage conversion:
+              // Distance 0.0 -> 100%, 0.40 -> ~70%, 0.50 -> ~60%, 0.60 -> ~50%
+              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 1.1) * 100)));
+
+              // Highly accurate if match distance is within tolerance (default <= 0.52 distance / ~52%+ confidence)
+              const isHighlyAccurate = !isUnknown && matchedMember && bestMatch.distance <= matchTolerance && confidence >= 50;
 
               return {
                 detection,
