@@ -891,11 +891,11 @@ function MemberQuickInfoModal({
           }}
         >
           <div
-            className="relative max-w-2xl sm:max-w-3xl w-full bg-slate-900/95 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 sm:p-6 flex flex-col items-center max-h-[94vh]"
+            className="relative max-w-md sm:max-w-lg w-full bg-slate-900/95 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 sm:p-5 flex flex-col items-center max-h-[94vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header / Tombol Close */}
-            <div className="w-full flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10 text-white shrink-0">
+            <div className="w-full flex items-center justify-between pb-3 sm:pb-3.5 border-b border-white/10 text-white shrink-0">
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="font-bold text-sm sm:text-base truncate text-white">
                   Foto {member.name}
@@ -917,11 +917,12 @@ function MemberQuickInfoModal({
             </div>
 
             {/* Container Foto Besar */}
-            <div className="relative my-3 sm:my-4 flex items-center justify-center w-full flex-1 min-h-[300px] max-h-[76vh] overflow-hidden rounded-2xl bg-black/50 p-2">
+            <div className="relative my-3 sm:my-4 flex items-center justify-center w-full overflow-hidden rounded-2xl bg-black/60 p-2">
               <img
                 src={member.photoUrl}
                 alt={member.name}
-                className="max-h-[74vh] w-auto max-w-full object-contain rounded-xl shadow-2xl transition-transform duration-200"
+                className="w-full h-auto max-h-[65vh] object-contain rounded-xl shadow-2xl border border-white/15"
+                style={{ minWidth: '280px', minHeight: '280px' }}
               />
             </div>
 
