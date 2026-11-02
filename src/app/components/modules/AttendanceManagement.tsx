@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, BarChart3, ClipboardList, AlertTriangle,
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
   Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock,
-  ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft
+  ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft, ZoomIn
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -589,6 +589,8 @@ function MemberQuickInfoModal({
     : member.phone ? [member.phone] : [];
   const primaryPhone = phoneList[0];
 
+  const [showPhotoPreview, setShowPhotoPreview] = useState(false);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150"
@@ -621,7 +623,20 @@ function MemberQuickInfoModal({
 
         {/* Member Profile Banner */}
         <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center gap-3.5 bg-gray-50/70 shrink-0">
-          <Avatar name={member.name} photoUrl={member.photoUrl} present={false} />
+          <div
+            onClick={() => {
+              if (member.photoUrl) setShowPhotoPreview(true);
+            }}
+            className={`relative group shrink-0 ${member.photoUrl ? 'cursor-pointer' : ''}`}
+            title={member.photoUrl ? 'Klik untuk memperbesar foto profil' : undefined}
+          >
+            <Avatar name={member.name} photoUrl={member.photoUrl} present={false} />
+            {member.photoUrl && (
+              <div className="absolute inset-0 bg-black/35 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity backdrop-blur-[1px]">
+                <ZoomIn size={16} />
+              </div>
+            )}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="font-bold text-gray-900 text-base truncate">{member.name}</h4>
@@ -865,6 +880,55 @@ function MemberQuickInfoModal({
           </button>
         </div>
       </div>
+
+      {/* Pop up Preview Foto Besar */}
+      {showPhotoPreview && member.photoUrl && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowPhotoPreview(false);
+          }}
+        >
+          <div
+            className="relative max-w-sm sm:max-w-md w-full bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-4 flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header / Tombol Close */}
+            <div className="w-full flex items-center justify-between pb-3 border-b border-white/10 text-white">
+              <span className="font-semibold text-sm truncate max-w-[240px] text-slate-200">
+                Foto {member.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPhotoPreview(false)}
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                title="Tutup Foto"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Container Foto */}
+            <div className="relative my-4 flex items-center justify-center max-h-[65vh] w-full overflow-hidden rounded-2xl bg-black/40">
+              <img
+                src={member.photoUrl}
+                alt={member.name}
+                className="max-h-[60vh] w-auto max-w-full object-contain rounded-2xl shadow-lg"
+              />
+            </div>
+
+            {/* Tombol Tutup Bawah */}
+            <button
+              type="button"
+              onClick={() => setShowPhotoPreview(false)}
+              className="mt-1 w-full py-2.5 bg-white/10 hover:bg-white/20 active:scale-98 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer border border-white/15"
+            >
+              Tutup Foto
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
