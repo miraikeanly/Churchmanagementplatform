@@ -399,9 +399,60 @@ export default function FaceAttendanceScannerModal({
             const centerX = videoWidth / 2;
             const centerY = videoHeight / 2;
 
-            // 2. Process and match each prominent face using distance margin comparison
+            // 2. Process and match each prominent face using distance margin comparison & pose estimation
             const matchResults = prominentDetections.map(detection => {
               const box = detection.detection.box;
+              const landmarks = detection.landmarks;
+
+              // Pose estimation from 68 facial landmarks:
+              // Nose tip: index 30, Left eye center: index 36, Right eye center: index 45
+              // Jaw left: index 0, Jaw right: index 16
+              let isLookingForward = true;
+              let poseStatusText = '';
+
+              if (landmarks && landmarks.positions && landmarks.positions.length >= 68) {
+                const pos = landmarks.positions;
+                const noseTip = pos[30];
+                const jawLeft = pos[0];
+                const jawRight = pos[16];
+                const leftEye = pos[36];
+                const rightEye = pos[45];
+                const mouthCenter = pos[66] || pos[57];
+
+                // Yaw (horizontal turn left/right):
+                // In a frontal face, distance from nose to left jaw vs right jaw should be balanced (~0.6 - 1.6 ratio)
+                const distNoseToLeftJaw = Math.hypot(noseTip.x - jawLeft.x, noseTip.y - jawLeft.y);
+                const distNoseToRightJaw = Math.hypot(noseTip.x - jawRight.x, noseTip.y - jawRight.y);
+                const yawRatio = distNoseToLeftJaw / (distNoseToRightJaw || 1);
+
+                // Pitch (vertical tilt up/down):
+                // Distance from eyes to nose vs nose to mouth
+                const eyeCenterY = (leftEye.y + rightEye.y) / 2;
+                const distEyeToNose = Math.abs(noseTip.y - eyeCenterY);
+                const distNoseToMouth = Math.abs((mouthCenter?.y || noseTip.y + 20) - noseTip.y);
+                const pitchRatio = distEyeToNose / (distNoseToMouth || 1);
+
+                // Head roll (tilt to shoulder):
+                const eyeDeltaX = rightEye.x - leftEye.x;
+                const eyeDeltaY = rightEye.y - leftEye.y;
+                const rollAngle = Math.abs(Math.atan2(eyeDeltaY, eyeDeltaX) * (180 / Math.PI));
+
+                // Reject if turned too far horizontally (yaw)
+                if (yawRatio < 0.45 || yawRatio > 2.2) {
+                  isLookingForward = false;
+                  poseStatusText = 'Hadapkan Wajah Lurus ke Kamera';
+                }
+                // Reject if tilted too far vertically (pitch)
+                else if (pitchRatio < 0.4 || pitchRatio > 2.6) {
+                  isLookingForward = false;
+                  poseStatusText = 'Tegakkan Posisi Kepala';
+                }
+                // Reject if head is severely tilted (> 28 degrees)
+                else if (rollAngle > 28) {
+                  isLookingForward = false;
+                  poseStatusText = 'Posisikan Kepala Tegak';
+                }
+              }
 
               // Calculate distance to ALL enrolled members
               const labeledDescriptors = faceMatcherRef.current!.labeledDescriptors;
@@ -425,11 +476,13 @@ export default function FaceAttendanceScannerModal({
               const confidence = Math.max(0, Math.min(100, Math.round((1 - bestDistance / 0.85) * 100)));
 
               // 100% Reliable Matching Rules:
-              // 1. Must be closer than matchTolerance
-              // 2. Either extremely close (distance <= 0.34, unmistakable)
-              //    OR sufficiently differentiated from any other person (margin >= 0.05)
-              // 3. Matched member must exist
-              const isHighlyAccurate = Boolean(matchedMember) &&
+              // 1. MUST BE LOOKING FORWARD (No side glances or tilted head to prevent false matches)
+              // 2. Must be closer than matchTolerance
+              // 3. Either extremely close (distance <= 0.34, unmistakable)
+              //    OR sufficiently differentiated from any other person (margin >= 0.04)
+              // 4. Matched member must exist
+              const isHighlyAccurate = isLookingForward &&
+                Boolean(matchedMember) &&
                 bestDistance <= matchTolerance &&
                 (bestDistance <= 0.34 || margin >= 0.04);
 
@@ -445,6 +498,8 @@ export default function FaceAttendanceScannerModal({
                 bestMatch,
                 isUnknown: !isHighlyAccurate,
                 isHighlyAccurate,
+                isLookingForward,
+                poseStatusText,
                 memberId,
                 matchedMember,
                 confidence,
@@ -483,30 +538,42 @@ export default function FaceAttendanceScannerModal({
               // Only highlight the primary person in front of the camera (i === 0) with rich details,
               // or known secondary members. Far/unrelated people get subtle outlines to prevent clutter.
               if (ctx) {
+                const isPoseProblem = !res.isLookingForward && res.poseStatusText;
+
                 ctx.lineWidth = i === 0 ? 3 : 2;
-                // Green for high-confidence match, Blue for already checked in, Amber for scanning, Red for mismatch
-                ctx.strokeStyle = !isHighlyAccurate 
-                  ? 'rgba(239, 68, 68, 0.6)' 
-                  : isAlreadyPresent 
-                  ? '#3b82f6' 
-                  : '#10b981';
+                // Green for high-confidence match, Blue for already checked in, Amber for pose guidance, Red for unknown
+                ctx.strokeStyle = isAlreadyPresent
+                  ? '#3b82f6'
+                  : isHighlyAccurate
+                  ? '#10b981'
+                  : isPoseProblem
+                  ? '#f59e0b'
+                  : 'rgba(239, 68, 68, 0.6)';
+
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
 
                 // Label background only for primary or recognized
                 if (i === 0 || isHighlyAccurate) {
-                  const labelText = !isHighlyAccurate
-                    ? 'Wajah Belum Terdaftar'
-                    : isAlreadyPresent
-                    ? `✓ ${matchedMember?.name || 'Jemaat'} (Sudah Hadir)`
-                    : `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
+                  let labelText = '';
+                  let badgeColor = '';
+
+                  if (isAlreadyPresent) {
+                    labelText = `✓ ${matchedMember?.name || 'Jemaat'} (Sudah Hadir)`;
+                    badgeColor = 'rgba(37, 99, 235, 0.9)';
+                  } else if (isHighlyAccurate) {
+                    labelText = `${matchedMember?.name || 'Jemaat'} (${confidence}%)`;
+                    badgeColor = 'rgba(16, 185, 129, 0.95)';
+                  } else if (isPoseProblem) {
+                    labelText = `⚠️ ${res.poseStatusText}`;
+                    badgeColor = 'rgba(217, 119, 6, 0.95)'; // Amber
+                  } else {
+                    labelText = 'Wajah Belum Terdaftar';
+                    badgeColor = 'rgba(239, 68, 68, 0.85)';
+                  }
                   
-                  ctx.font = 'bold 15px sans-serif';
+                  ctx.font = 'bold 14px sans-serif';
                   const textWidth = ctx.measureText(labelText).width;
-                  ctx.fillStyle = !isHighlyAccurate
-                    ? 'rgba(239, 68, 68, 0.85)'
-                    : isAlreadyPresent
-                    ? 'rgba(37, 99, 235, 0.9)'
-                    : 'rgba(16, 185, 129, 0.95)';
+                  ctx.fillStyle = badgeColor;
                   ctx.fillRect(box.x, Math.max(0, box.y - 28), textWidth + 16, 26);
 
                   // Label text
