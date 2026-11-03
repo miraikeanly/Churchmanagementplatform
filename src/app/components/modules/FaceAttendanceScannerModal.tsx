@@ -63,6 +63,20 @@ export default function FaceAttendanceScannerModal({
   const [showSettings, setShowSettings] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
+  // Mode: 'auto' (langsung centang) vs 'review' (tampilkan di tab antrean untuk dicentang manual 1-klik agar 100% aman)
+  const [autoCheckinMode, setAutoCheckinMode] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'candidates' | 'history'>('candidates');
+
+  // Queue of detected attendees for review
+  const [detectedCandidates, setDetectedCandidates] = useState<Array<{
+    id: string;
+    name: string;
+    time: string;
+    confidence: number;
+    distance: number;
+    photoUrl?: string;
+  }>>([]);
+
   // Unregistered face quick manual checkin popup
   const [unrecognizedDetected, setUnrecognizedDetected] = useState(false);
 
@@ -501,8 +515,8 @@ export default function FaceAttendanceScannerModal({
                 }
               }
 
-              // Auto-checkin trigger with Anti-Passby Multi-Frame Confirmation:
-              // ONLY process check-in for the primary target (i === 0) facing center of camera
+              // Auto-checkin OR Candidate Queue trigger with Anti-Passby Multi-Frame Confirmation:
+              // ONLY process for the primary target (i === 0) facing center of camera
               if (i === 0 && isHighlyAccurate && matchedMember && memberId) {
                 seenMemberIdsThisFrame.add(memberId);
 
@@ -521,24 +535,44 @@ export default function FaceAttendanceScannerModal({
                     if (now - lastCheckin > 10000) {
                       lastCheckinTimesRef.current.set(memberId, now);
 
-                      // Mark present in attendance system
-                      onMarkPresent(memberId);
-                      playChime(true);
+                      const scanTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-                      // Only push to recentScans feed ONCE when freshly checked in (NO spam!)
-                      setRecentScans(prev => {
-                        if (prev.some(s => s.id === memberId)) return prev;
-                        return [
-                          {
-                            id: memberId,
-                            name: matchedMember.name,
-                            time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                            confidence,
-                            alreadyPresent: false,
-                          },
-                          ...prev.slice(0, 19),
-                        ];
-                      });
+                      if (autoCheckinMode) {
+                        // AUTO MODE: Mark present directly
+                        onMarkPresent(memberId);
+                        playChime(true);
+
+                        setRecentScans(prev => {
+                          if (prev.some(s => s.id === memberId)) return prev;
+                          return [
+                            {
+                              id: memberId,
+                              name: matchedMember.name,
+                              time: scanTime,
+                              confidence,
+                              alreadyPresent: false,
+                            },
+                            ...prev.slice(0, 19),
+                          ];
+                        });
+                      } else {
+                        // REVIEW MODE (AMAN 100%): Tambahkan ke antrean deteksi jemaat datang agar dicek & dicentang manual 1-klik
+                        playChime(true);
+                        setDetectedCandidates(prev => {
+                          if (prev.some(c => c.id === memberId)) return prev;
+                          return [
+                            {
+                              id: memberId,
+                              name: matchedMember.name,
+                              time: scanTime,
+                              confidence,
+                              distance: res.distance,
+                              photoUrl: matchedMember.photoUrl,
+                            },
+                            ...prev.slice(0, 29),
+                          ];
+                        });
+                      }
                     }
                   }
                 } else {
@@ -584,7 +618,7 @@ export default function FaceAttendanceScannerModal({
       isDetectingRef.current = false;
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isOpen, cameraActive, members, presentIds, onMarkPresent, playChime]);
+  }, [isOpen, cameraActive, members, presentIds, onMarkPresent, playChime, autoCheckinMode]);
 
   // Filtered members list for quick manual click in scanner modal
   const filteredQuickList = useMemo(() => {
@@ -607,12 +641,16 @@ export default function FaceAttendanceScannerModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white">AI Face Recognition Absensi</h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-400 text-emerald-950 flex items-center gap-1 shadow-2xs">
-                  <Zap size={10} /> Fast Match
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-2xs ${
+                  autoCheckinMode ? 'bg-amber-400 text-amber-950' : 'bg-emerald-400 text-emerald-950'
+                }`}>
+                  <Zap size={10} /> {autoCheckinMode ? 'Mode Otomatis' : 'Mode Verifikasi (Aman)'}
                 </span>
               </div>
               <p className="text-xs text-blue-100 mt-0.5">
-                Arahkan kamera ke jemaat — sistem mengenali wajah dan otomatis mencentang kehadiran.
+                {autoCheckinMode
+                  ? 'Kamera otomatis mencentang kehadiran begitu wajah cocok.'
+                  : 'Kamera mendeteksi jemaat yang datang — Anda dapat mengonfirmasi & mencentang dengan 1-klik di panel samping.'}
               </p>
             </div>
           </div>
@@ -667,28 +705,57 @@ export default function FaceAttendanceScannerModal({
 
         {/* Optional Settings Drawer */}
         {showSettings && (
-          <div className="bg-slate-900 text-white px-5 py-3 border-b border-slate-800 text-xs flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
-            <div className="flex items-center gap-3">
-              <span className="font-semibold text-slate-300">Toleransi Wajah / Kacamata:</span>
-              <input
-                type="range"
-                min="0.32"
-                max="0.46"
-                step="0.02"
-                value={matchTolerance}
-                onChange={e => setMatchTolerance(parseFloat(e.target.value))}
-                className="w-32 accent-emerald-500 cursor-pointer"
-              />
-              <span className="font-bold text-emerald-400">
-                {matchTolerance <= 0.36 
-                  ? 'Ketat Ekstrem' 
-                  : matchTolerance <= 0.40 
-                  ? 'Optimal (Akurat & Kacamata Lolos)' 
-                  : 'Lebih Toleran'}
-              </span>
+          <div className="bg-slate-900 text-white px-5 py-3.5 border-b border-slate-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in slide-in-from-top-2">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-300">Mode Absensi:</span>
+                <div className="inline-flex rounded-lg bg-slate-800 p-0.5 border border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setAutoCheckinMode(false)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      !autoCheckinMode ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Verifikasi Manual (Aman 100%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAutoCheckinMode(true)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      autoCheckinMode ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Otomatis Langsung
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-300">Toleransi Wajah:</span>
+                <input
+                  type="range"
+                  min="0.32"
+                  max="0.46"
+                  step="0.02"
+                  value={matchTolerance}
+                  onChange={e => setMatchTolerance(parseFloat(e.target.value))}
+                  className="w-28 accent-emerald-500 cursor-pointer"
+                />
+                <span className="font-bold text-emerald-400">
+                  {matchTolerance <= 0.36 
+                    ? 'Ketat' 
+                    : matchTolerance <= 0.40 
+                    ? 'Optimal' 
+                    : 'Toleran'}
+                </span>
+              </div>
             </div>
+
             <div className="text-slate-400 text-[11px]">
-              Geser sedikit jika jemaat memakai kacamata atau pencahayaan ruangan agak redup.
+              {!autoCheckinMode
+                ? 'Mode Verifikasi: Jemaat yang terdeteksi masuk ke tab antrean untuk dikonfirmasi ushers.'
+                : 'Mode Otomatis: Centang kehadiran langsung tercatat begitu wajah cocok.'}
             </div>
           </div>
         )}
@@ -766,59 +833,198 @@ export default function FaceAttendanceScannerModal({
             </div>
           </div>
 
-          {/* Column 3: Live Feed & Quick Search */}
+          {/* Column 3: Tabbed Candidate Review & Live Feed & Quick Search */}
           <div className="bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-4 flex flex-col max-h-[420px] lg:max-h-full overflow-hidden">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2">
-                <UserCheck size={16} className="text-indigo-600" />
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Riwayat Deteksi Langsung
-                </h4>
-              </div>
-              <span className="text-[11px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
-                {recentScans.length} hadir
-              </span>
-            </div>
-
-            {/* Feed List */}
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 space-y-1">
-              {recentScans.length === 0 ? (
-                <div className="py-10 text-center text-slate-400 px-4">
-                  <Eye size={28} className="mx-auto mb-2 opacity-40 text-slate-400" />
-                  <p className="text-xs font-semibold text-slate-600">Arahkan wajah ke kamera</p>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Jemaat yang menghadap kamera langsung otomatis dicentang hadir di sini.
-                  </p>
-                </div>
-              ) : (
-                recentScans.map((scan, idx) => (
-                  <div
-                    key={`${scan.id}-${idx}`}
-                    className="p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs hover:border-emerald-300 transition-all flex items-center justify-between"
-                  >
-                    <div className="min-w-0 pr-2">
-                      <p className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
-                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                        <span>{scan.name}</span>
-                      </p>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                        <span>Pukul {scan.time}</span>
-                        <span>·</span>
-                        <span className="text-emerald-700 font-semibold">{scan.confidence}% Cocok</span>
-                      </div>
-                    </div>
-
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
-                      scan.alreadyPresent
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    }`}>
-                      {scan.alreadyPresent ? 'Sudah Hadir' : 'Dicentang ✓'}
+            {/* Tab Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('candidates')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'candidates'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Users size={13} />
+                  <span>Wajah Terdeteksi</span>
+                  {detectedCandidates.filter(c => !presentIds.has(c.id)).length > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-bold">
+                      {detectedCandidates.filter(c => !presentIds.has(c.id)).length}
                     </span>
-                  </div>
-                ))
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('history')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'history'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Sudah Hadir ({recentScans.length})</span>
+                </button>
+              </div>
+
+              {activeTab === 'candidates' && detectedCandidates.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Check in all pending candidates at once!
+                    const pending = detectedCandidates.filter(c => !presentIds.has(c.id));
+                    pending.forEach(c => {
+                      onMarkPresent(c.id);
+                    });
+                    if (pending.length > 0) {
+                      playChime(true);
+                      setRecentScans(prev => [
+                        ...pending.map(c => ({
+                          id: c.id,
+                          name: c.name,
+                          time: c.time,
+                          confidence: c.confidence,
+                          alreadyPresent: false,
+                        })),
+                        ...prev,
+                      ]);
+                    }
+                  }}
+                  className="text-[11px] font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors cursor-pointer"
+                  title="Centang semua jemaat yang terdeteksi di antrean"
+                >
+                  Centang Semua
+                </button>
               )}
             </div>
+
+            {/* Tab 1: Candidates detected by AI for confirmation */}
+            {activeTab === 'candidates' && (
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 space-y-1.5">
+                {detectedCandidates.filter(c => !presentIds.has(c.id)).length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 px-4">
+                    <Eye size={28} className="mx-auto mb-2 opacity-40 text-slate-400" />
+                    <p className="text-xs font-semibold text-slate-600">Menunggu jemaat datang...</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Kamera akan mendeteksi wajah jemaat dan menampilkannya di daftar ini agar bisa Anda centang manual dengan aman tanpa salah data.
+                    </p>
+                  </div>
+                ) : (
+                  detectedCandidates
+                    .filter(c => !presentIds.has(c.id))
+                    .map(candidate => (
+                      <div
+                        key={candidate.id}
+                        className="p-2.5 rounded-xl bg-white border border-indigo-100 shadow-xs hover:border-indigo-300 transition-all flex items-center justify-between gap-2"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {candidate.photoUrl ? (
+                            <img
+                              src={candidate.photoUrl}
+                              alt=""
+                              className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                              {candidate.name.charAt(0)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">
+                              {candidate.name}
+                            </p>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                              <span>{candidate.time}</span>
+                              <span>·</span>
+                              <span className="text-emerald-700 font-bold">{candidate.confidence}% Cocok</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onMarkPresent(candidate.id);
+                              playChime(true);
+                              setRecentScans(prev => [
+                                {
+                                  id: candidate.id,
+                                  name: candidate.name,
+                                  time: candidate.time,
+                                  confidence: candidate.confidence,
+                                  alreadyPresent: false,
+                                },
+                                ...prev,
+                              ]);
+                              setDetectedCandidates(prev => prev.filter(c => c.id !== candidate.id));
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                          >
+                            <Check size={13} />
+                            <span>Centang Hadir</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Dismiss false candidate
+                              setDetectedCandidates(prev => prev.filter(c => c.id !== candidate.id));
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Bukan orang ini (Hapus dari antrean)"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            )}
+
+            {/* Tab 2: History of checked in attendees */}
+            {activeTab === 'history' && (
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 space-y-1">
+                {recentScans.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 px-4">
+                    <CheckCircle2 size={28} className="mx-auto mb-2 opacity-40 text-slate-400" />
+                    <p className="text-xs font-semibold text-slate-600">Belum ada jemaat dicentang</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Jemaat yang dicentang hadir akan muncul di riwayat ini.
+                    </p>
+                  </div>
+                ) : (
+                  recentScans.map((scan, idx) => (
+                    <div
+                      key={`${scan.id}-${idx}`}
+                      className="p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs hover:border-emerald-300 transition-all flex items-center justify-between"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
+                          <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                          <span>{scan.name}</span>
+                        </p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                          <span>Pukul {scan.time}</span>
+                          <span>·</span>
+                          <span className="text-emerald-700 font-semibold">{scan.confidence}% Cocok</span>
+                        </div>
+                      </div>
+
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
+                        scan.alreadyPresent
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      }`}>
+                        {scan.alreadyPresent ? 'Sudah Hadir' : 'Dicentang ✓'}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
 
             {/* Quick manual checkin fallback search right inside scanner modal */}
             <div className="pt-3 border-t border-slate-200 space-y-2">
