@@ -631,7 +631,7 @@ export default function FaceAttendanceScannerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in">
-      <div className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[95vh]">
+      <div className="relative w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[95vh]">
         {/* Modal Header */}
         <div className="px-5 py-3.5 bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -761,9 +761,9 @@ export default function FaceAttendanceScannerModal({
         )}
 
         {/* Modal Body */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
-          {/* Column 1 & 2: Video Viewfinder */}
-          <div className="lg:col-span-2 bg-slate-950 p-3 sm:p-4 flex flex-col items-center justify-center relative overflow-hidden min-h-[380px] sm:min-h-[480px]">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+          {/* Left: Video Viewfinder (7 of 12 cols on desktop) */}
+          <div className="lg:col-span-7 bg-slate-950 p-3 sm:p-4 flex flex-col items-center justify-center relative overflow-hidden min-h-[380px] sm:min-h-[480px]">
             {/* Video Viewport Container */}
             <div className="relative w-full h-full max-w-2xl max-h-[500px] flex items-center justify-center rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl">
               <video
@@ -833,82 +833,93 @@ export default function FaceAttendanceScannerModal({
             </div>
           </div>
 
-          {/* Column 3: Tabbed Candidate Review & Live Feed & Quick Search */}
-          <div className="bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-4 flex flex-col max-h-[420px] lg:max-h-full overflow-hidden">
-            {/* Tab Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-              <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('candidates')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'candidates'
-                      ? 'bg-white text-indigo-700 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Users size={13} />
-                  <span>Wajah Terdeteksi</span>
-                  {detectedCandidates.filter(c => !presentIds.has(c.id)).length > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-bold">
-                      {detectedCandidates.filter(c => !presentIds.has(c.id)).length}
+          {/* Right: Tabbed Candidate Review & Live Feed (5 of 12 cols on desktop) */}
+          <div className="lg:col-span-5 bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-3 sm:p-4 flex flex-col max-h-[520px] lg:max-h-full overflow-hidden">
+            {/* Header Tabs */}
+            <div className="space-y-2 pb-3 border-b border-slate-200">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 grid grid-cols-2 p-1 bg-slate-200/90 rounded-2xl gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('candidates')}
+                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      activeTab === 'candidates'
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Users size={14} className="shrink-0" />
+                    <span className="truncate">Wajah Terdeteksi</span>
+                    {detectedCandidates.filter(c => !presentIds.has(c.id)).length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px] font-extrabold min-w-[18px] text-center">
+                        {detectedCandidates.filter(c => !presentIds.has(c.id)).length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('history')}
+                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      activeTab === 'history'
+                        ? 'bg-white text-emerald-700 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <CheckCircle2 size={14} className="shrink-0" />
+                    <span className="truncate">Sudah Hadir</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold">
+                      {recentScans.length}
                     </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('history')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'history'
-                      ? 'bg-white text-emerald-700 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <CheckCircle2 size={13} />
-                  <span>Sudah Hadir ({recentScans.length})</span>
-                </button>
+                  </button>
+                </div>
               </div>
 
-              {activeTab === 'candidates' && detectedCandidates.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Check in all pending candidates at once!
-                    const pending = detectedCandidates.filter(c => !presentIds.has(c.id));
-                    pending.forEach(c => {
-                      onMarkPresent(c.id);
-                    });
-                    if (pending.length > 0) {
-                      playChime(true);
-                      setRecentScans(prev => [
-                        ...pending.map(c => ({
-                          id: c.id,
-                          name: c.name,
-                          time: c.time,
-                          confidence: c.confidence,
-                          alreadyPresent: false,
-                        })),
-                        ...prev,
-                      ]);
-                    }
-                  }}
-                  className="text-[11px] font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors cursor-pointer"
-                  title="Centang semua jemaat yang terdeteksi di antrean"
-                >
-                  Centang Semua
-                </button>
+              {activeTab === 'candidates' && detectedCandidates.filter(c => !presentIds.has(c.id)).length > 1 && (
+                <div className="flex items-center justify-between text-xs px-1">
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {detectedCandidates.filter(c => !presentIds.has(c.id)).length} jemaat siap dicentang
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pending = detectedCandidates.filter(c => !presentIds.has(c.id));
+                      pending.forEach(c => onMarkPresent(c.id));
+                      if (pending.length > 0) {
+                        playChime(true);
+                        setRecentScans(prev => [
+                          ...pending.map(c => ({
+                            id: c.id,
+                            name: c.name,
+                            time: c.time,
+                            confidence: c.confidence,
+                            alreadyPresent: false,
+                          })),
+                          ...prev,
+                        ]);
+                        setDetectedCandidates([]);
+                      }
+                    }}
+                    className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-100/70 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Check size={12} />
+                    <span>Centang Semua Sekaligus</span>
+                  </button>
+                </div>
               )}
             </div>
 
             {/* Tab 1: Candidates detected by AI for confirmation */}
             {activeTab === 'candidates' && (
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 space-y-1.5">
+              <div className="flex-1 overflow-y-auto py-2.5 space-y-2 pr-0.5">
                 {detectedCandidates.filter(c => !presentIds.has(c.id)).length === 0 ? (
-                  <div className="py-10 text-center text-slate-400 px-4">
-                    <Eye size={28} className="mx-auto mb-2 opacity-40 text-slate-400" />
-                    <p className="text-xs font-semibold text-slate-600">Menunggu jemaat datang...</p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Kamera akan mendeteksi wajah jemaat dan menampilkannya di daftar ini agar bisa Anda centang manual dengan aman tanpa salah data.
+                  <div className="py-12 text-center text-slate-400 px-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 mx-auto mb-3 flex items-center justify-center">
+                      <Eye size={24} />
+                    </div>
+                    <p className="text-xs font-bold text-slate-700">Menunggu Wajah Jemaat...</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
+                      Arahkan kamera ke jemaat. Nama yang terdeteksi akan masuk ke daftar ini untuk Anda centang dengan 1-klik tanpa resiko salah nama.
                     </p>
                   </div>
                 ) : (
@@ -917,32 +928,36 @@ export default function FaceAttendanceScannerModal({
                     .map(candidate => (
                       <div
                         key={candidate.id}
-                        className="p-2.5 rounded-xl bg-white border border-indigo-100 shadow-xs hover:border-indigo-300 transition-all flex items-center justify-between gap-2"
+                        className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-indigo-300 hover:shadow-md transition-all flex items-center justify-between gap-3"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        {/* Member Avatar & Details */}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           {candidate.photoUrl ? (
                             <img
                               src={candidate.photoUrl}
                               alt=""
-                              className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
+                              className="w-11 h-11 rounded-full object-cover border-2 border-indigo-100 shrink-0 shadow-2xs"
                             />
                           ) : (
-                            <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                            <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs">
                               {candidate.name.charAt(0)}
                             </div>
                           )}
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-900 truncate">
+                          <div className="min-w-0 flex-1">
+                            <h5 className="text-xs font-bold text-slate-900 truncate" title={candidate.name}>
                               {candidate.name}
-                            </p>
-                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
-                              <span>{candidate.time}</span>
+                            </h5>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                              <span>Pukul {candidate.time}</span>
                               <span>·</span>
-                              <span className="text-emerald-700 font-bold">{candidate.confidence}% Cocok</span>
+                              <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                {candidate.confidence}% Cocok
+                              </span>
                             </div>
                           </div>
                         </div>
 
+                        {/* Action Buttons */}
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
@@ -961,21 +976,20 @@ export default function FaceAttendanceScannerModal({
                               ]);
                               setDetectedCandidates(prev => prev.filter(c => c.id !== candidate.id));
                             }}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                           >
-                            <Check size={13} />
+                            <Check size={14} />
                             <span>Centang Hadir</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => {
-                              // Dismiss false candidate
                               setDetectedCandidates(prev => prev.filter(c => c.id !== candidate.id));
                             }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Bukan orang ini (Hapus dari antrean)"
+                            className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Bukan orang ini (Hapus)"
                           >
-                            <X size={14} />
+                            <X size={15} />
                           </button>
                         </div>
                       </div>
@@ -986,13 +1000,15 @@ export default function FaceAttendanceScannerModal({
 
             {/* Tab 2: History of checked in attendees */}
             {activeTab === 'history' && (
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 space-y-1">
+              <div className="flex-1 overflow-y-auto py-2.5 space-y-1.5 pr-0.5">
                 {recentScans.length === 0 ? (
-                  <div className="py-10 text-center text-slate-400 px-4">
-                    <CheckCircle2 size={28} className="mx-auto mb-2 opacity-40 text-slate-400" />
-                    <p className="text-xs font-semibold text-slate-600">Belum ada jemaat dicentang</p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Jemaat yang dicentang hadir akan muncul di riwayat ini.
+                  <div className="py-12 text-center text-slate-400 px-4">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-500 mx-auto mb-3 flex items-center justify-center">
+                      <CheckCircle2 size={24} />
+                    </div>
+                    <p className="text-xs font-bold text-slate-700">Belum Ada yang Dicentang</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto">
+                      Jemaat yang sudah dicentang kehadirannya akan tercatat di daftar ini.
                     </p>
                   </div>
                 ) : (
