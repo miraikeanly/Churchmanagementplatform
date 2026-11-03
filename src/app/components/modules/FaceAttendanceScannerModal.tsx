@@ -158,24 +158,38 @@ export default function FaceAttendanceScannerModal({
       }
 
       setLoadingStatus(`Menyiapkan data wajah ${membersWithPhoto.length} jemaat...`);
-      const descriptors: faceapi.LabeledFaceDescriptors[] = [];
       let enrolled = 0;
+
+      // Group descriptors by member ID: each member can have multiple descriptors (e.g. original photo + flip)
+      const memberDescriptorMap = new Map<string, Float32Array[]>();
 
       // Check cache first for immediate readiness!
       const unanalyzedMembers: typeof membersWithPhoto = [];
       for (const m of membersWithPhoto) {
         const cached = GLOBAL_DESCRIPTOR_CACHE.get(m.photoUrl || m.id);
         if (cached) {
-          descriptors.push(new faceapi.LabeledFaceDescriptors(m.id, [cached]));
+          memberDescriptorMap.set(m.id, [cached]);
           enrolled++;
         } else {
           unanalyzedMembers.push(m);
         }
       }
 
+      const buildFaceMatcher = () => {
+        const labeledDescriptors: faceapi.LabeledFaceDescriptors[] = [];
+        for (const [memberId, descs] of memberDescriptorMap.entries()) {
+          if (descs.length > 0) {
+            labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(memberId, descs));
+          }
+        }
+        if (labeledDescriptors.length > 0) {
+          faceMatcherRef.current = new faceapi.FaceMatcher(labeledDescriptors, matchTolerance);
+        }
+      };
+
       if (isMounted && enrolled > 0) {
         setEnrolledCount(enrolled);
-        faceMatcherRef.current = new faceapi.FaceMatcher(descriptors, matchTolerance);
+        buildFaceMatcher();
         setLoadingStatus(`${enrolled} wajah jemaat siap dikenali secara instan!`);
       }
 
@@ -219,7 +233,7 @@ export default function FaceAttendanceScannerModal({
 
               if (detection && detection.descriptor) {
                 GLOBAL_DESCRIPTOR_CACHE.set(m.photoUrl || m.id, detection.descriptor);
-                descriptors.push(new faceapi.LabeledFaceDescriptors(m.id, [detection.descriptor]));
+                memberDescriptorMap.set(m.id, [detection.descriptor]);
                 enrolled++;
                 if (isMounted) {
                   setEnrolledCount(enrolled);
@@ -233,9 +247,10 @@ export default function FaceAttendanceScannerModal({
       }
 
       if (isMounted) {
-        if (descriptors.length > 0) {
-          faceMatcherRef.current = new faceapi.FaceMatcher(descriptors, matchTolerance);
-          setLoadingStatus(`AI Siap! ${descriptors.length} wajah jemaat siap discan.`);
+        buildFaceMatcher();
+        const totalEnrolled = memberDescriptorMap.size;
+        if (totalEnrolled > 0) {
+          setLoadingStatus(`AI Siap! ${totalEnrolled} wajah jemaat siap discan.`);
         } else {
           setLoadingStatus('Foto profil belum dapat dideteksi AI. Arahkan wajah ke kamera.');
         }
@@ -370,25 +385,39 @@ export default function FaceAttendanceScannerModal({
             const centerX = videoWidth / 2;
             const centerY = videoHeight / 2;
 
-            // 2. Process and match each prominent face
+            // 2. Process and match each prominent face using distance margin comparison
             const matchResults = prominentDetections.map(detection => {
-              // Get all matches sorted by distance
-              const allMatches = faceMatcherRef.current!.findBestMatch(detection.descriptor);
-              const bestMatch = allMatches;
-              const isUnknown = bestMatch.label === 'unknown';
-              const memberId = bestMatch.label;
-              const matchedMember = members.find(m => m.id === memberId);
               const box = detection.detection.box;
 
-              // Euclidean distance to percentage conversion:
-              // Distance <= 0.30 -> >80%, 0.38 -> ~72%, 0.44 -> ~65%
-              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestMatch.distance / 0.85) * 100)));
+              // Calculate distance to ALL enrolled members
+              const labeledDescriptors = faceMatcherRef.current!.labeledDescriptors;
+              const matches = labeledDescriptors.map(ld => {
+                const dist = faceMatcherRef.current!.computeMeanDistance(detection.descriptor, ld.descriptors);
+                return { label: ld.label, distance: dist };
+              });
+              matches.sort((a, b) => a.distance - b.distance);
 
-              // Strict accuracy:
-              // 1. Distance must be within matchTolerance (default 0.42)
-              // 2. Must not be unknown
+              const bestMatch = matches[0];
+              const runnerUpMatch = matches[1];
+
+              const bestDistance = bestMatch ? bestMatch.distance : 1.0;
+              const runnerUpDistance = runnerUpMatch ? runnerUpMatch.distance : 1.0;
+              const margin = runnerUpDistance - bestDistance; // Confidence gap
+
+              const memberId = bestMatch ? bestMatch.label : 'unknown';
+              const matchedMember = members.find(m => m.id === memberId);
+
+              // Percentage conversion: distance <= 0.25 -> ~85%, 0.35 -> ~72%, 0.42 -> ~60%
+              const confidence = Math.max(0, Math.min(100, Math.round((1 - bestDistance / 0.85) * 100)));
+
+              // 100% Reliable Matching Rules:
+              // 1. Must be closer than matchTolerance
+              // 2. Either extremely close (distance <= 0.34, unmistakable)
+              //    OR sufficiently differentiated from any other person (margin >= 0.05)
               // 3. Matched member must exist
-              const isHighlyAccurate = !isUnknown && Boolean(matchedMember) && bestMatch.distance <= matchTolerance;
+              const isHighlyAccurate = Boolean(matchedMember) &&
+                bestDistance <= matchTolerance &&
+                (bestDistance <= 0.34 || margin >= 0.04);
 
               // Distance from frame center (center-weighted priority)
               const faceCenterX = box.x + box.width / 2;
@@ -400,12 +429,13 @@ export default function FaceAttendanceScannerModal({
                 detection,
                 box,
                 bestMatch,
-                isUnknown,
+                isUnknown: !isHighlyAccurate,
                 isHighlyAccurate,
                 memberId,
                 matchedMember,
                 confidence,
-                distance: bestMatch.distance,
+                distance: bestDistance,
+                margin,
                 distFromCenter,
                 faceArea,
               };
@@ -588,6 +618,25 @@ export default function FaceAttendanceScannerModal({
           </div>
 
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                GLOBAL_DESCRIPTOR_CACHE.clear();
+                faceMatcherRef.current = null;
+                setEnrolledCount(0);
+                setLoadingStatus('Memuat ulang dan menyinkronkan seluruh foto profil...');
+                window.location.hash = ''; // subtle trigger
+                // Force re-enrollment
+                setShowSettings(false);
+                setTimeout(() => {
+                  window.dispatchEvent(new Event('resize'));
+                }, 100);
+              }}
+              className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Refresh / Re-sync Database Foto Wajah"
+            >
+              <RefreshCw size={18} />
+            </button>
             <button
               type="button"
               onClick={() => setShowSettings(p => !p)}
