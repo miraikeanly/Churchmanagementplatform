@@ -134,7 +134,8 @@ export function buildAttendanceFamilyGroups(
   allMembers: Member[],
   customLinks?: Array<{ id1: string; id2: string; role?: 'parent' | 'child' | 'grandchild' }>,
   customUnlinks?: Array<{ memberId: string; familyKey: string }>,
-  roleOverrides?: Record<string, 'parent' | 'child' | 'grandchild'>
+  roleOverrides?: Record<string, 'parent' | 'child' | 'grandchild'>,
+  customFamilyCardMembers?: string[]
 ): AttendanceFamilyGroup[] {
   const memberById = new Map<string, Member>();
   for (const m of allMembers) {
@@ -230,7 +231,9 @@ export function buildAttendanceFamilyGroups(
 
   // Helper to check if a member is already married (forms their own nuclear household)
   const isMemberMarried = (member: Member): boolean => {
-    return Boolean(member.spouseName && member.spouseName.trim()) || member.maritalStatus === 'married';
+    const status = (member.maritalStatus || '').toLowerCase().trim();
+    return Boolean(member.spouseName && member.spouseName.trim()) ||
+      status === 'married' || status === 'menikah';
   };
 
   // 3. Link parent and children:
@@ -267,7 +270,32 @@ export function buildAttendanceFamilyGroups(
     }
   }
 
-  // 5. Apply custom/manual family links (saved from the UI "+ Tambah Anggota" modal)
+  // 5. Smart Address Linking:
+  // Members living at the EXACT same home address (>= 15 chars, not email) who share same household
+  const addressToMembers = new Map<string, string[]>();
+  for (const m of allMembers) {
+    const rawAddr = (m.address || '').trim().toLowerCase();
+    // Exclude emails or very short vague addresses
+    if (rawAddr.length >= 15 && !rawAddr.includes('@')) {
+      const normAddr = cleanAlphaNumeric(rawAddr);
+      if (normAddr.length >= 12) {
+        if (!addressToMembers.has(normAddr)) {
+          addressToMembers.set(normAddr, []);
+        }
+        addressToMembers.get(normAddr)!.push(m.id);
+      }
+    }
+  }
+  for (const ids of addressToMembers.values()) {
+    // Only link if at most 5 people (prevents false matches on apartment / common boarding houses)
+    if (ids.length >= 2 && ids.length <= 5) {
+      for (let i = 1; i < ids.length; i++) {
+        union(ids[0], ids[i]);
+      }
+    }
+  }
+
+  // 6. Apply custom/manual family links (saved from the UI "+ Tambah Anggota" modal)
   if (Array.isArray(customLinks)) {
     for (const link of customLinks) {
       if (link.id1 && link.id2 && memberById.has(link.id1) && memberById.has(link.id2)) {
@@ -305,12 +333,20 @@ export function buildAttendanceFamilyGroups(
     }
   }
 
+  const customCardSet = new Set<string>(customFamilyCardMembers || []);
   const result: AttendanceFamilyGroup[] = [];
 
   for (const [rootId, groupMembers] of clusters.entries()) {
-    // Only include groups with 2 or more members.
-    // Individuals/youths with no linked family stay in "Per Jemaat" view only and won't clutter "Per Keluarga".
-    if (groupMembers.length < 2) {
+    // Include group if:
+    // 1. It has 2 or more linked members in congregation
+    // 2. OR any member explicitly created a custom family card
+    // 3. OR member is married / has children data recorded in their profile
+    const hasExplicitCard = groupMembers.some(m => customCardSet.has(m.id));
+    const hasRecordedFamily = groupMembers.some(m => 
+      (Array.isArray(m.children) && m.children.length > 0) || Boolean(m.spouseName && m.spouseName.trim())
+    );
+
+    if (groupMembers.length < 2 && !hasExplicitCard && !hasRecordedFamily) {
       continue;
     }
 
@@ -338,10 +374,10 @@ export function buildAttendanceFamilyGroups(
       }
 
       // Natural deduction:
-      const isParentByChildren = (Array.isArray(m.children) && m.children.some(c => groupMembers.some(gm => gm.id !== m.id && findMemberMatch(c?.name) === gm.id))) ||
+      const isParentByChildren = (Array.isArray(m.children) && m.children.length > 0) ||
         groupMembers.some(other => other.parentId === m.id || (other.parentName && findMemberMatch(other.parentName) === m.id));
 
-      const isParentByMarriage = Boolean(m.maritalStatus && m.maritalStatus !== 'single') || Boolean(m.spouseName);
+      const isParentByMarriage = isMemberMarried(m);
 
       const isChildByParent = (m.parentId && groupMembers.some(p => p.id === m.parentId)) ||
         groupMembers.some(p => (p.parentName && findMemberMatch(m.parentName) === p.id) || (Array.isArray(p.children) && p.children.some(c => findMemberMatch(c?.name) === m.id)));
@@ -353,6 +389,11 @@ export function buildAttendanceFamilyGroups(
       } else {
         others.push(m);
       }
+    }
+
+    // If parents is empty (e.g. single parent or custom card), fallback to first member
+    if (parents.length === 0 && groupMembers.length > 0) {
+      parents.push(groupMembers[0]);
     }
 
     // Determine family head / family name
@@ -1403,6 +1444,8 @@ function DailyInput({
   const [customFamilyUnlinks, setCustomFamilyUnlinks] = useState<Array<{ memberId: string; familyKey: string }>>([]);
   // Role overrides: map of memberId (or familyKey:memberId) -> 'parent' | 'child' | 'grandchild'
   const [familyRoleOverrides, setFamilyRoleOverrides] = useState<Record<string, 'parent' | 'child' | 'grandchild'>>({});
+  // Explicit custom family cards for members who were standalone: array of memberId
+  const [customFamilyCardMembers, setCustomFamilyCardMembers] = useState<string[]>([]);
 
   const [isLinkingMember, setIsLinkingMember] = useState(false);
   const [linkTargetFamily, setLinkTargetFamily] = useState<AttendanceFamilyGroup | null>(null);
@@ -1410,17 +1453,22 @@ function DailyInput({
   const [linkMemberSearch, setLinkMemberSearch] = useState('');
   const [savingLink, setSavingLink] = useState(false);
 
+  // Modal to create a new family card from any standalone member
+  const [isCreatingFamilyCard, setIsCreatingFamilyCard] = useState(false);
+  const [createFamilyCardSearch, setCreateFamilyCardSearch] = useState('');
+
   const [recentlyEditedFamilyKey, setRecentlyEditedFamilyKey] = useState<string | null>(null);
   const [keepModalOpenAfterAdd, setKeepModalOpenAfterAdd] = useState(false);
 
-  // Load persisted custom family links, unlinks, and role overrides on mount
+  // Load persisted custom family links, unlinks, role overrides, and explicit family cards on mount
   useEffect(() => {
     (async () => {
       try {
-        const [{ data: linksData }, { data: unlinksData }, { data: rolesData }] = await Promise.all([
+        const [{ data: linksData }, { data: unlinksData }, { data: rolesData }, { data: customCardsData }] = await Promise.all([
           supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_links').maybeSingle(),
           supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_unlinks').maybeSingle(),
           supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_roles').maybeSingle(),
+          supabaseAdmin.from(KV).select('value').eq('key', 'attendance:custom_family_cards').maybeSingle(),
         ]);
         if (linksData?.value && Array.isArray(linksData.value)) {
           setCustomFamilyLinks(linksData.value);
@@ -1430,6 +1478,9 @@ function DailyInput({
         }
         if (rolesData?.value && typeof rolesData.value === 'object') {
           setFamilyRoleOverrides(rolesData.value);
+        }
+        if (customCardsData?.value && Array.isArray(customCardsData.value)) {
+          setCustomFamilyCardMembers(customCardsData.value);
         }
       } catch (err) {
         console.warn('Failed to load custom family links/unlinks/roles:', err);
@@ -1536,6 +1587,53 @@ function DailyInput({
     }
   };
 
+  // Create a new family card from a standalone member (e.g. Andreos)
+  const handleCreateFamilyCard = async (targetMember: Member) => {
+    try {
+      setSavingLink(true);
+      const newCustomCards = Array.from(new Set([...customFamilyCardMembers, targetMember.id]));
+      
+      // Persist to KV
+      await supabaseAdmin.from(KV).upsert({
+        key: 'attendance:custom_family_cards',
+        value: newCustomCards,
+        updated_at: new Date().toISOString(),
+      });
+
+      setCustomFamilyCardMembers(newCustomCards);
+      setIsCreatingFamilyCard(false);
+      setCreateFamilyCardSearch('');
+
+      // Auto-switch to Family view and expand the new card
+      setViewMode('family');
+      setExpandedFamilies(prev => {
+        const next = new Set(prev);
+        next.add(targetMember.id);
+        return next;
+      });
+
+      setRecentlyEditedFamilyKey(targetMember.id);
+      setTimeout(() => setRecentlyEditedFamilyKey(null), 5000);
+
+      setSaveSuccessNotice(`Kartu Keluarga untuk ${targetMember.name} berhasil dibuat! Anda sekarang bisa klik "+ Tambah Anggota" untuk menambahkan istri/anak.`);
+      setTimeout(() => setSaveSuccessNotice(''), 4500);
+
+      // Scroll to newly created card
+      setTimeout(() => {
+        const el = document.getElementById(`family-card-${targetMember.id}`) ||
+                   document.querySelector(`[data-family-key="${targetMember.id}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 200);
+    } catch (err) {
+      console.error('Failed to create custom family card:', err);
+      alert('Gagal membuat kartu keluarga. Silakan coba lagi.');
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
   // Remove a member from a family card
   const handleRemoveMemberFromFamily = async (memberToRemove: Member, family: AttendanceFamilyGroup) => {
     const confirmRemove = window.confirm(`Keluarkan ${memberToRemove.name} dari ${family.familyName}?`);
@@ -1632,10 +1730,10 @@ function DailyInput({
     }
   };
 
-  // Build all family groups from the full members array + custom links - custom unlinks + role overrides
+  // Build all family groups from the full members array + custom links - custom unlinks + role overrides + custom family cards
   const allFamilyGroups = useMemo(
-    () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides),
-    [members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides]
+    () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers),
+    [members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers]
   );
 
   // Set of all member IDs that belong to any family in attendance
@@ -2058,37 +2156,54 @@ function DailyInput({
       {/* Search + Mode Switcher + Sort + Filter */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         {/* View Mode Toggle: Per Jemaat (Single) vs Per Keluarga */}
-        <div className="flex bg-gray-100 rounded-xl p-1 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setViewMode('individual')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              viewMode === 'individual'
-                ? 'bg-white text-blue-700 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <User size={14} />
-            <span>Per Jemaat (Single)</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-700 font-bold ml-0.5">
-              {members.filter(m => !familyMemberIds.has(m.id)).length}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('family')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              viewMode === 'family'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-gray-600 hover:text-purple-700'
-            }`}
-          >
-            <Home size={14} />
-            <span>Per Keluarga</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 font-bold ml-0.5">
-              {allFamilyGroups.length}
-            </span>
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex bg-gray-100 rounded-xl p-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('individual')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'individual'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <User size={14} />
+              <span>Per Jemaat (Single)</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-700 font-bold ml-0.5">
+                {members.filter(m => !familyMemberIds.has(m.id)).length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('family')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'family'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-purple-700'
+              }`}
+            >
+              <Home size={14} />
+              <span>Per Keluarga</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 font-bold ml-0.5">
+                {allFamilyGroups.length}
+              </span>
+            </button>
+          </div>
+
+          {canEdit && !isSessionLocked && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsCreatingFamilyCard(true);
+                setCreateFamilyCardSearch('');
+              }}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl font-bold cursor-pointer transition-all shadow-2xs active:scale-95"
+              title="Buat kartu keluarga baru dari jemaat yang masih sendiri agar bisa ditambahkan istri dan anak"
+            >
+              <UserPlus size={13} className="text-purple-600" />
+              <span>+ Buat Keluarga Baru</span>
+            </button>
+          )}
         </div>
 
         {/* Action buttons if not locked */}
@@ -2920,6 +3035,122 @@ function DailyInput({
                 className="px-4 py-2 text-xs font-bold text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
                 Selesai / Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Family Card Modal (Pilih Jemaat untuk Dijadikan Kepala / Kartu Keluarga) */}
+      {isCreatingFamilyCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-purple-50/60">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center">
+                  <Home size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">Buat Kartu Keluarga Baru</h3>
+                  <p className="text-xs text-gray-500">Pilih jemaat untuk dijadikan kartu keluarga (misal: Andreos)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreatingFamilyCard(false);
+                  setCreateFamilyCardSearch('');
+                }}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="p-4 border-b border-gray-100 bg-white">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={createFamilyCardSearch}
+                  onChange={(e) => setCreateFamilyCardSearch(e.target.value)}
+                  placeholder="Ketik nama jemaat (misal: 'Andreos', 'Andre', dll)..."
+                  className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50/50"
+                  autoFocus
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5 px-0.5">
+                Pilih jemaat yang ingin dibuatkan kartu keluarga agar Anda bisa menambahkan istri dan anak-anaknya.
+              </p>
+            </div>
+
+            {/* Candidates list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 divide-y divide-gray-50">
+              {(() => {
+                const q = createFamilyCardSearch.trim().toLowerCase();
+                const candidates = members.filter(m => {
+                  if (!q) return true;
+                  return m.name.toLowerCase().includes(q) || (m.nickname && m.nickname.toLowerCase().includes(q));
+                }).slice(0, 30);
+
+                if (candidates.length === 0) {
+                  return (
+                    <div className="py-8 text-center text-gray-400 text-xs">
+                      {q ? `Tidak ada jemaat dengan nama "${createFamilyCardSearch}"` : 'Ketik nama jemaat di atas'}
+                    </div>
+                  );
+                }
+
+                return candidates.map(candidate => {
+                  const isAlreadyInFamily = familyMemberIds.has(candidate.id);
+                  return (
+                    <div
+                      key={candidate.id}
+                      className="flex items-center justify-between gap-3 pt-2 first:pt-0"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Avatar name={candidate.name} photoUrl={candidate.photoUrl} present={present.has(candidate.id)} />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm truncate">{candidate.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                            {candidate.nickname && <span>Panggilan: {candidate.nickname}</span>}
+                            <span>·</span>
+                            <span>{STATUS_LABEL[candidate.status || 'active'] || 'Aktif'}</span>
+                            {isAlreadyInFamily && (
+                              <span className="text-[10px] bg-purple-50 text-purple-700 px-1.5 rounded font-bold">
+                                Sudah Ada Keluarga
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={savingLink}
+                        onClick={() => handleCreateFamilyCard(candidate)}
+                        className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                      >
+                        {savingLink ? <Loader2 size={13} className="animate-spin" /> : <Home size={13} />}
+                        <span>Jadikan Keluarga</span>
+                      </button>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            <div className="p-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreatingFamilyCard(false);
+                  setCreateFamilyCardSearch('');
+                }}
+                className="px-4 py-2 text-xs font-bold text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
+              >
+                Tutup
               </button>
             </div>
           </div>
