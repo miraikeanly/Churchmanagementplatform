@@ -699,7 +699,7 @@ export default function KomisiManagement() {
   const [attendanceSearch, setAttendanceSearch] = useState('');
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'present' | 'absent'>('all');
   const [sekolahMingguClassFilter, setSekolahMingguClassFilter] = useState<string>('all');
-  const [sekolahMingguSortOrder, setSekolahMingguSortOrder] = useState<'class' | 'name' | 'age'>('class');
+  const [sekolahMingguSortOrder, setSekolahMingguSortOrder] = useState<'class' | 'name'>('class');
   const [activeSession, setActiveSession] = useState<AbsenSession | null>(null);
   const [draftPresentIds, setDraftPresentIds] = useState<Set<string>>(new Set());
   const [savingAttendance, setSavingAttendance] = useState(false);
@@ -1113,16 +1113,6 @@ export default function KomisiManagement() {
         const classB = getSekolahMingguClass(bDateB);
 
         if (sekolahMingguSortOrder === 'name') {
-          return a.name.localeCompare(b.name, 'id');
-        }
-
-        if (sekolahMingguSortOrder === 'age') {
-          // Dari termuda ke tertua
-          if (ageA !== ageB) {
-            if (ageA < 0) return 1;
-            if (ageB < 0) return -1;
-            return ageA - ageB;
-          }
           return a.name.localeCompare(b.name, 'id');
         }
 
@@ -2141,7 +2131,6 @@ export default function KomisiManagement() {
                   className="bg-transparent font-semibold text-xs text-yellow-900 focus:outline-none cursor-pointer"
                 >
                   <option value="class">Jenjang Kelas (Baby-TK → SD 5-6)</option>
-                  <option value="age">Usia Termuda → Tertua</option>
                   <option value="name">Nama Alfabetis (A - Z)</option>
                 </select>
               </div>
