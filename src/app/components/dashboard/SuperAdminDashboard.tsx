@@ -206,8 +206,10 @@ export default function SuperAdminDashboard() {
   }, []);
 
   useEffect(() => {
-    loadStats();
-    loadMembers();
+    if (activeTab === 'dashboard') {
+      loadStats();
+      loadMembers();
+    }
     // Heartbeat ping immediately and every 30s
     sendHeartbeat();
     const interval = setInterval(() => {

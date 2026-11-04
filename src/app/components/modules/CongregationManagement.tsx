@@ -1871,7 +1871,7 @@ export default function CongregationManagement() {
     seedPksNames().then(() => loadPksNames());
   }, []);
 
-  useAutoRefresh(() => { loadMembers(); }, 30_000);
+  useAutoRefresh(() => { loadMembers(true); }, 30_000);
 
   // ── Bulk sync all members ibadah → komisi ────────────────────────────────
   const handleBulkSync = async () => {
@@ -2375,7 +2375,7 @@ export default function CongregationManagement() {
     setExportDropdown(false);
   };
 
-  if (loading) {
+  if (loading && members.length === 0) {
     return <div className="text-center py-16 text-gray-400">Memuat data jemaat...</div>;
   }
 
