@@ -237,13 +237,63 @@ export default function TentangPage() {
                       </div>
                     ) : (
                       <div className="space-y-6">
-                        {tier.members.map((m, i) => (
-                          <FadeIn key={m.id} delay={i * 0.08}>
-                            <div className={tier.cardSize === 'lg' ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}>
-                              <PersonCard member={m} size={tier.cardSize} />
-                            </div>
-                          </FadeIn>
-                        ))}
+                        {tier.members.map((m, i) => {
+                          const isFounder = tier.key === 'gembala_sidang' || 
+                            (m.name && m.name.toLowerCase().includes('poppy')) || 
+                            (m.spouseName && m.spouseName.toLowerCase().includes('poppy')) ||
+                            (m.name && m.name.toLowerCase().includes('gina')) ||
+                            (m.spouseName && m.spouseName.toLowerCase().includes('gina'));
+
+                          return (
+                            <FadeIn key={m.id} delay={i * 0.08}>
+                              <div className={tier.cardSize === 'lg' ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}>
+                                <PersonCard member={m} size={tier.cardSize} />
+
+                                {isFounder && (
+                                  <div className="mt-6 rounded-3xl bg-white/[0.04] border border-white/10 p-6 md:p-8 backdrop-blur-md text-white/90 shadow-2xl relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 -mr-12 -mt-12 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                                    
+                                    <div className="relative z-10">
+                                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-200 text-xs font-semibold mb-3">
+                                        <span>Pendiri & Perintis Pelayanan</span>
+                                      </div>
+
+                                      <h3 className="text-xl md:text-2xl font-bold text-white mb-4">
+                                        Pdt. Poppy Wairissal & Gina Jaya
+                                      </h3>
+
+                                      <div className="space-y-3.5 text-sm md:text-[15px] leading-relaxed text-slate-300 font-normal">
+                                        <p>
+                                          Dengan iman, kasih, dan kesetiaan, Pdt. Poppy Wairissal, bersama sang suami, Gina Jaya, merintis dan membangun GBI Jelambar Timur sebagai tempat bertumbuh dalam iman dan mengenal kasih Tuhan.
+                                        </p>
+                                        <p>
+                                          Melalui doa, pengorbanan, dan ketekunan mereka dalam melayani, gereja terus berkembang dan menjadi rumah rohani bagi semakin banyak jemaat.
+                                        </p>
+                                        <p>
+                                          Meski Pdt. Poppy Wairissal telah berpulang ke rumah Bapa, warisan iman dan pelayanan beliau tetap hidup dan kini diteruskan oleh generasi berikutnya.
+                                        </p>
+                                      </div>
+
+                                      <div className="mt-6 pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                        <div>
+                                          <p className="text-xs uppercase tracking-wider text-amber-300/80 font-semibold mb-1">
+                                            Pesan Terakhir Beliau:
+                                          </p>
+                                          <blockquote className="text-base md:text-lg font-serif italic text-amber-100 font-medium">
+                                            “Bersatu, bersama melayani Tuhan”
+                                          </blockquote>
+                                        </div>
+                                        <span className="text-xs text-white/50 self-end sm:self-auto font-medium">
+                                          — Pdt. Poppy Wairissal
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </FadeIn>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
