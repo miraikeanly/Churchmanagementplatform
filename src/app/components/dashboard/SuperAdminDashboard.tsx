@@ -200,10 +200,14 @@ export default function SuperAdminDashboard() {
     }
   }, [activeTab, navItems]);
 
+  // Run heartbeat on mount and tab change; refresh session silently on mount only
+  useEffect(() => {
+    refreshSession?.();
+  }, []);
+
   useEffect(() => {
     loadStats();
     loadMembers();
-    refreshSession?.();
     // Heartbeat ping immediately and every 30s
     sendHeartbeat();
     const interval = setInterval(() => {

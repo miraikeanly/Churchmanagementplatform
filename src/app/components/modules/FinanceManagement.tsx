@@ -276,8 +276,8 @@ export default function FinanceManagement() {
     }).format(amount);
   };
 
-  if (loading) {
-    return <div className="text-center py-8">Loading...</div>;
+  if (loading && transactions.length === 0 && categories.length === 0) {
+    return <div className="text-center py-8 text-gray-500">Memuat data keuangan...</div>;
   }
 
   const pendingSubmissionsCount = submissions.filter(s => s.status === 'pending').length;

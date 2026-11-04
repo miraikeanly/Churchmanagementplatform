@@ -404,7 +404,7 @@ export default function TeamManagement() {
   const byTier = (tier: string) => members.filter(m => m.tier === tier);
 
   // ── Loading state ──────────────────────────────────────────────────────────
-  if (loading) {
+  if (loading && members.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 size={28} className="animate-spin text-blue-500" />

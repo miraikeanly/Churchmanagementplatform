@@ -482,8 +482,8 @@ export default function ScheduleManagement() {
   }, []);
 
   // ── Load schedule for current month ────────────────────────────────────────
-  const loadSchedule = useCallback(async () => {
-    setLoading(true);
+  const loadSchedule = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       // Load all weeks in this month (+ buffer)
       const from = isoDate(sundays[0] || new Date(year, month, 1));
@@ -502,8 +502,11 @@ export default function ScheduleManagement() {
         if (!map[iso]) map[iso] = { date: iso, divisions: {} };
       });
       setScheduleData(map);
-    } catch (e: any) { setError(e.message); }
-    setLoading(false);
+    } catch (e: any) {
+      if (!silent) setError(e.message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [sundays, year, month]);
 
   // ── Load Google Sheets config from settings ─────────────────────────────────
@@ -521,7 +524,7 @@ export default function ScheduleManagement() {
   }, []);
 
   useEffect(() => { loadJemaat(); }, []);
-  useAutoRefresh(loadJemaat, 5_000);
+  useAutoRefresh(loadJemaat, 30_000);
   useEffect(() => { loadSchedule(); loadGsheetsUrl(); }, [month, year]);
 
   // ── Save one week ───────────────────────────────────────────────────────────
@@ -828,7 +831,7 @@ export default function ScheduleManagement() {
     return all;
   }, [sundays, conflictsForDate]);
 
-  if (loading) return <div className="text-center py-16 text-gray-400">Memuat jadwal...</div>;
+  if (loading && Object.keys(scheduleData).length === 0) return <div className="text-center py-16 text-gray-400">Memuat jadwal...</div>;
 
   return (
     <div className="overflow-y-auto flex-1">

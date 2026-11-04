@@ -123,7 +123,8 @@ export default function PelayanManagement() {
     }
   }, [searchParams]);
 
-  const loadMembers = async () => {
+  const loadMembers = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [{ data: d1 }, { data: d2 }] = await Promise.all([
         supabase.from(KV).select('key, value').like('key', 'congregation:member:%'),
@@ -166,11 +167,11 @@ export default function PelayanManagement() {
       list.sort((a, b) => a.name.localeCompare(b.name, 'id'));
       setMembers(list);
     } catch {}
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
   useEffect(() => { loadMembers(); }, []);
-  useAutoRefresh(loadMembers, 30_000);
+  useAutoRefresh(() => loadMembers(true), 30_000);
 
   // Auto hide toast
   useEffect(() => {
@@ -498,7 +499,7 @@ export default function PelayanManagement() {
         </div>
 
         {/* List of pelayan cards */}
-        {loading ? (
+        {loading && members.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3 bg-white rounded-2xl border border-slate-200/80">
             <div className="w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-slate-400">Memuat data pelayan...</p>

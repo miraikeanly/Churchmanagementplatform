@@ -69,7 +69,8 @@ export default function GalleryManagement() {
   const [lightbox, setLightbox] = useState<Photo | null>(null);
 
   // ── Load albums from kv_store ────────────────────────────────────────────
-  const loadAlbums = async () => {
+  const loadAlbums = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const { data, error: err } = await supabase
         .from(KV)
@@ -80,8 +81,11 @@ export default function GalleryManagement() {
       const list: Album[] = (data ?? []).map((r: any) => r.value as Album).filter(Boolean);
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setAlbums(list);
-    } catch (e: any) { setError(e.message); }
-    setLoading(false);
+    } catch (e: any) {
+      if (!silent) setError(e.message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
 
   const loadPhotos = async (album: Album) => {
@@ -101,7 +105,7 @@ export default function GalleryManagement() {
   };
 
   useEffect(() => { loadAlbums(); }, []);
-  useAutoRefresh(loadAlbums, 30_000);
+  useAutoRefresh(() => loadAlbums(true), 30_000);
 
   const openFolder = (album: Album) => { setOpenAlbum(album); loadPhotos(album); };
   const closeFolder = () => { setOpenAlbum(null); setPhotos([]); setUploadFile(null); setUploadPreview(null); setUploadCaption(''); loadAlbums(); };
@@ -214,7 +218,7 @@ export default function GalleryManagement() {
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
-  if (loading) return (
+  if (loading && albums.length === 0) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
     </div>

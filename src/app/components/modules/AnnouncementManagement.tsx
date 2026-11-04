@@ -57,9 +57,9 @@ export default function AnnouncementManagement() {
     Authorization: `Bearer ${accessToken || publicAnonKey}`,
   };
 
-  const fetchAll = async () => {
+  const fetchAll = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch(`${API_URL}/announcements`, {
         headers: { Authorization: `Bearer ${publicAnonKey}` },
       });
@@ -67,13 +67,13 @@ export default function AnnouncementManagement() {
       if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
       setItems(data.announcements || []);
     } catch (e: any) {
-      setError(e.message);
+      if (!silent) setError(e.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  useAutoRefresh(fetchAll, 30_000);
+  useAutoRefresh(() => fetchAll(true), 30_000);
   useEffect(() => { fetchAll(); }, []);
 
   const toBase64 = (file: File): Promise<string> =>
@@ -409,7 +409,7 @@ export default function AnnouncementManagement() {
       )}
 
       {/* List */}
-      {loading ? (
+      {loading && items.length === 0 ? (
         <div className="flex items-center justify-center py-16 text-gray-400">
           <Loader2 size={28} className="animate-spin mr-3" /> Memuat data...
         </div>
