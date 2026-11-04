@@ -200,6 +200,24 @@ export function buildAttendanceFamilyGroups(
         }
       }
     }
+    // Secondary fallback: check exact name or nickname match (case-insensitive)
+    const lowerTrim = targetStr.toLowerCase().trim();
+    const exact = allMembers.find(m => 
+      m.name.toLowerCase().trim() === lowerTrim ||
+      (m.nickname && m.nickname.toLowerCase().trim() === lowerTrim)
+    );
+    if (exact) return exact.id;
+
+    // Substring match if unique
+    if (lowerTrim.length >= 4) {
+      const candidates = allMembers.filter(m => 
+        m.name.toLowerCase().includes(lowerTrim) ||
+        lowerTrim.includes(m.name.toLowerCase()) ||
+        (m.nickname && lowerTrim.includes(m.nickname.toLowerCase()))
+      );
+      if (candidates.length === 1) return candidates[0].id;
+    }
+
     return null;
   };
 
@@ -272,8 +290,12 @@ export function buildAttendanceFamilyGroups(
 
   // 5. Smart Address Linking:
   // Members living at the EXACT same home address (>= 15 chars, not email) who share same household
+  // Note: custom family card members should NOT be forcefully grouped into someone else's address cluster
+  const customCardSet = new Set<string>(customFamilyCardMembers || []);
   const addressToMembers = new Map<string, string[]>();
   for (const m of allMembers) {
+    // Skip address linking for members who have an explicit custom family card to prevent cluster pollution
+    if (customCardSet.has(m.id)) continue;
     const rawAddr = (m.address || '').trim().toLowerCase();
     // Exclude emails or very short vague addresses
     if (rawAddr.length >= 15 && !rawAddr.includes('@')) {
@@ -295,25 +317,7 @@ export function buildAttendanceFamilyGroups(
     }
   }
 
-  // 6. Apply custom/manual family links (saved from the UI "+ Tambah Anggota" modal)
-  // Ensure link.id1 (the family anchor member) always stays as the master root!
-  if (Array.isArray(customLinks)) {
-    for (const link of customLinks) {
-      if (link.id1 && link.id2 && memberById.has(link.id1) && memberById.has(link.id2)) {
-        const rootAnchor = find(link.id1);
-        const rootTarget = find(link.id2);
-        if (rootAnchor !== rootTarget) {
-          // Force rootTarget to attach under rootAnchor
-          parentMap.set(rootTarget, rootAnchor);
-          const sizeAnchor = sizeMap.get(rootAnchor) || 1;
-          const sizeTarget = sizeMap.get(rootTarget) || 1;
-          sizeMap.set(rootAnchor, sizeAnchor + sizeTarget);
-        }
-      }
-    }
-  }
-
-  // Group members by root ID
+  // Group members by root ID from standard union-find
   const rawClusters = new Map<string, Member[]>();
   for (const m of allMembers) {
     const root = find(m.id);
@@ -333,6 +337,7 @@ export function buildAttendanceFamilyGroups(
     }
   }
 
+  // Filter out unlinked members from raw clusters
   const clusters = new Map<string, Member[]>();
   for (const [rootId, groupMembers] of rawClusters.entries()) {
     const kept = groupMembers.filter(m => !unlinkPairs.has(`${rootId}:${m.id}`));
@@ -341,22 +346,111 @@ export function buildAttendanceFamilyGroups(
     }
   }
 
-  // Ensure members who explicitly have a custom family card get their own dedicated cluster if they were unlinked or not present in a group
-  const customCardSet = new Set<string>(customFamilyCardMembers || []);
+  // Ensure members who explicitly have a custom family card have their own dedicated cluster root
   for (const cardMemberId of customCardSet) {
     const target = memberById.get(cardMemberId);
     if (!target) continue;
-    // Check if target is already inside any cluster
-    let foundInCluster = false;
-    for (const groupMembers of clusters.values()) {
-      if (groupMembers.some(m => m.id === cardMemberId)) {
-        foundInCluster = true;
-        break;
+
+    // If target is in another cluster where they are not the root or key, detach them so they have their own card
+    for (const [cKey, cMembers] of Array.from(clusters.entries())) {
+      if (cKey !== cardMemberId && cMembers.some(m => m.id === cardMemberId)) {
+        const remaining = cMembers.filter(m => m.id !== cardMemberId);
+        if (remaining.length > 0) {
+          clusters.set(cKey, remaining);
+        } else {
+          clusters.delete(cKey);
+        }
       }
     }
-    if (!foundInCluster) {
-      // Put them in their own dedicated cluster
+
+    if (!clusters.has(cardMemberId)) {
       clusters.set(cardMemberId, [target]);
+    } else {
+      const existing = clusters.get(cardMemberId)!;
+      if (!existing.some(m => m.id === cardMemberId)) {
+        existing.unshift(target);
+      }
+    }
+
+    // Auto-sync spouse if target has spouseName
+    if (target.spouseName && target.spouseName.trim()) {
+      const spouseId = findMemberMatch(target.spouseName);
+      if (spouseId && spouseId !== target.id) {
+        const spouseMember = memberById.get(spouseId);
+        if (spouseMember && !unlinkPairs.has(`${cardMemberId}:${spouseId}`)) {
+          // Remove spouse from any other cluster
+          for (const [cKey, cMembers] of Array.from(clusters.entries())) {
+            if (cKey !== cardMemberId && cMembers.some(m => m.id === spouseId)) {
+              const remaining = cMembers.filter(m => m.id !== spouseId);
+              if (remaining.length > 0) clusters.set(cKey, remaining);
+              else clusters.delete(cKey);
+            }
+          }
+          const currentGroup = clusters.get(cardMemberId)!;
+          if (!currentGroup.some(m => m.id === spouseId)) {
+            currentGroup.push(spouseMember);
+          }
+        }
+      }
+    }
+
+    // Auto-sync children if target has children
+    if (Array.isArray(target.children) && target.children.length > 0) {
+      for (const c of target.children) {
+        if (c?.name && c.name.trim()) {
+          const childId = findMemberMatch(c.name);
+          if (childId && childId !== target.id) {
+            const childMember = memberById.get(childId);
+            if (childMember && !isMemberMarried(childMember) && !unlinkPairs.has(`${cardMemberId}:${childId}`)) {
+              // Remove child from any other cluster
+              for (const [cKey, cMembers] of Array.from(clusters.entries())) {
+                if (cKey !== cardMemberId && cMembers.some(m => m.id === childId)) {
+                  const remaining = cMembers.filter(m => m.id !== childId);
+                  if (remaining.length > 0) clusters.set(cKey, remaining);
+                  else clusters.delete(cKey);
+                }
+              }
+              const currentGroup = clusters.get(cardMemberId)!;
+              if (!currentGroup.some(m => m.id === childId)) {
+                currentGroup.push(childMember);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 6. Apply custom/manual family links (from "+ Tambah Anggota" modal)
+  // Direct placement: find where link.id1 is located, and guarantee link.id2 is moved into that exact cluster!
+  if (Array.isArray(customLinks)) {
+    for (const link of customLinks) {
+      if (link.id1 && link.id2 && memberById.has(link.id1) && memberById.has(link.id2)) {
+        const targetMember = memberById.get(link.id2)!;
+        // Find cluster containing link.id1
+        let hostClusterKey: string | null = null;
+        for (const [cKey, cMembers] of clusters.entries()) {
+          if (cKey === link.id1 || cMembers.some(m => m.id === link.id1)) {
+            hostClusterKey = cKey;
+            break;
+          }
+        }
+
+        if (hostClusterKey) {
+          // Remove targetMember from any other cluster
+          for (const [cKey, cMembers] of Array.from(clusters.entries())) {
+            if (cKey !== hostClusterKey && cMembers.some(m => m.id === targetMember.id)) {
+              const remaining = cMembers.filter(m => m.id !== targetMember.id);
+              if (remaining.length > 0) clusters.set(cKey, remaining);
+              else clusters.delete(cKey);
+            }
+          }
+          const hostGroup = clusters.get(hostClusterKey)!;
+          if (!hostGroup.some(m => m.id === targetMember.id)) {
+            hostGroup.push(targetMember);
+          }
+        }
+      }
     }
   }
 
@@ -1548,8 +1642,9 @@ function DailyInput({
     keepModalOpen: boolean = keepModalOpenAfterAdd
   ) => {
     if (!linkTargetFamily || !selectedMember) return;
-    // Prefer the explicit card owner or first member as the anchor
-    const anchorMember = linkTargetFamily.allMembers.find(m => customFamilyCardMembers.includes(m.id)) ||
+    // Prefer the explicit card owner or key or first member as the anchor
+    const anchorMember = (linkTargetFamily.key && linkTargetFamily.allMembers.find(m => m.id === linkTargetFamily.key)) ||
+                         linkTargetFamily.allMembers.find(m => customFamilyCardMembers.includes(m.id)) ||
                          linkTargetFamily.parents[0] ||
                          linkTargetFamily.allMembers[0];
     if (!anchorMember || anchorMember.id === selectedMember.id) return;
@@ -1563,7 +1658,10 @@ function DailyInput({
       // 2. Remove any unlink entries for this member so they are not suppressed
       const newUnlinks = customFamilyUnlinks.filter(u => u.memberId !== selectedMember.id);
 
-      // 3. Store category role override under all possible lookup keys:
+      // 3. If selectedMember had their own custom standalone family card, remove it now that they are part of another family
+      const newCustomCards = customFamilyCardMembers.filter(id => id !== selectedMember.id);
+
+      // 4. Store category role override under all possible lookup keys:
       // - under anchorMember.id:selectedMember.id
       // - under linkTargetFamily.key:selectedMember.id
       // - directly under selectedMember.id
@@ -1589,12 +1687,18 @@ function DailyInput({
           key: 'attendance:custom_family_roles',
           value: newRoles,
           updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_cards',
+          value: newCustomCards,
+          updated_at: new Date().toISOString(),
         })
       ]);
 
       setCustomFamilyLinks(newLinks);
       setCustomFamilyUnlinks(newUnlinks);
       setFamilyRoleOverrides(newRoles);
+      setCustomFamilyCardMembers(newCustomCards);
 
       const targetKey = linkTargetFamily.key;
 
@@ -1659,12 +1763,82 @@ function DailyInput({
       
       // If targetMember was previously in another family cluster, remove any unlinks or links that conflict
       const previousGroup = allFamilyGroups.find(g => g.allMembers.some(m => m.id === targetMember.id));
-      let newUnlinks = [...customFamilyUnlinks];
+      let newUnlinks = customFamilyUnlinks.filter(u => u.memberId !== targetMember.id);
       if (previousGroup && previousGroup.key !== targetMember.id) {
-        newUnlinks = [
-          ...newUnlinks.filter(u => !(u.memberId === targetMember.id && u.familyKey === previousGroup.key)),
-          { memberId: targetMember.id, familyKey: previousGroup.key }
-        ];
+        newUnlinks.push({ memberId: targetMember.id, familyKey: previousGroup.key });
+      }
+
+      // Auto-sync spouse and children into links & roles if found in congregation data
+      let newLinks = [...customFamilyLinks];
+      let newRoles = { ...familyRoleOverrides, [targetMember.id]: 'parent' as const };
+
+      // Helper function to find matched member in members list
+      const findMatchInAll = (nameQuery?: string): Member | undefined => {
+        if (!nameQuery) return undefined;
+        const qTrim = nameQuery.toLowerCase().trim();
+        // Exact name or nickname match
+        let found = members.find(m => 
+          m.name.toLowerCase().trim() === qTrim ||
+          (m.nickname && m.nickname.toLowerCase().trim() === qTrim)
+        );
+        if (found) return found;
+
+        // Substring match
+        if (qTrim.length >= 3) {
+          const list = members.filter(m => 
+            m.name.toLowerCase().includes(qTrim) ||
+            qTrim.includes(m.name.toLowerCase()) ||
+            (m.nickname && qTrim.includes(m.nickname.toLowerCase()))
+          );
+          if (list.length === 1) return list[0];
+        }
+        return undefined;
+      };
+
+      // Auto-detect spouse
+      if (targetMember.spouseName && targetMember.spouseName.trim()) {
+        const spouse = findMatchInAll(targetMember.spouseName);
+        if (spouse && spouse.id !== targetMember.id) {
+          newUnlinks = newUnlinks.filter(u => u.memberId !== spouse.id);
+          newLinks = newLinks.filter(l => l.id1 !== spouse.id && l.id2 !== spouse.id);
+          newLinks.push({ id1: targetMember.id, id2: spouse.id });
+          newRoles[`${targetMember.id}:${spouse.id}`] = 'parent';
+          newRoles[spouse.id] = 'parent';
+        }
+      }
+
+      // Auto-detect children from targetMember.children array
+      if (Array.isArray(targetMember.children) && targetMember.children.length > 0) {
+        for (const c of targetMember.children) {
+          if (c?.name && c.name.trim()) {
+            const child = findMatchInAll(c.name);
+            if (child && child.id !== targetMember.id) {
+              newUnlinks = newUnlinks.filter(u => u.memberId !== child.id);
+              newLinks = newLinks.filter(l => l.id1 !== child.id && l.id2 !== child.id);
+              newLinks.push({ id1: targetMember.id, id2: child.id });
+              newRoles[`${targetMember.id}:${child.id}`] = 'child';
+              newRoles[child.id] = 'child';
+            }
+          }
+        }
+      }
+
+      // Reverse check: check if any other member has targetMember as parent or spouse
+      for (const other of members) {
+        if (other.id === targetMember.id) continue;
+        if (other.spouseName && findMatchInAll(other.spouseName)?.id === targetMember.id) {
+          newUnlinks = newUnlinks.filter(u => u.memberId !== other.id);
+          newLinks = newLinks.filter(l => l.id1 !== other.id && l.id2 !== other.id);
+          newLinks.push({ id1: targetMember.id, id2: other.id });
+          newRoles[`${targetMember.id}:${other.id}`] = 'parent';
+          newRoles[other.id] = 'parent';
+        } else if (other.parentId === targetMember.id || (other.parentName && findMatchInAll(other.parentName)?.id === targetMember.id)) {
+          newUnlinks = newUnlinks.filter(u => u.memberId !== other.id);
+          newLinks = newLinks.filter(l => l.id1 !== other.id && l.id2 !== other.id);
+          newLinks.push({ id1: targetMember.id, id2: other.id });
+          newRoles[`${targetMember.id}:${other.id}`] = 'child';
+          newRoles[other.id] = 'child';
+        }
       }
 
       // Persist to KV
@@ -1674,19 +1848,27 @@ function DailyInput({
           value: newCustomCards,
           updated_at: new Date().toISOString(),
         }),
-        ...(previousGroup && previousGroup.key !== targetMember.id ? [
-          supabaseAdmin.from(KV).upsert({
-            key: 'attendance:custom_family_unlinks',
-            value: newUnlinks,
-            updated_at: new Date().toISOString(),
-          })
-        ] : [])
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_links',
+          value: newLinks,
+          updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_unlinks',
+          value: newUnlinks,
+          updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_roles',
+          value: newRoles,
+          updated_at: new Date().toISOString(),
+        })
       ]);
 
       setCustomFamilyCardMembers(newCustomCards);
-      if (previousGroup && previousGroup.key !== targetMember.id) {
-        setCustomFamilyUnlinks(newUnlinks);
-      }
+      setCustomFamilyLinks(newLinks);
+      setCustomFamilyUnlinks(newUnlinks);
+      setFamilyRoleOverrides(newRoles);
       setIsCreatingFamilyCard(false);
       setCreateFamilyCardSearch('');
 
