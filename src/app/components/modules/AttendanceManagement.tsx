@@ -1679,23 +1679,33 @@ function DailyInput({
     }
   };
 
-  // Remove a member from a family card
+  // Remove a member from a family card or delete the family card
   const handleRemoveMemberFromFamily = async (memberToRemove: Member, family: AttendanceFamilyGroup) => {
-    const confirmRemove = window.confirm(`Keluarkan ${memberToRemove.name} dari ${family.familyName}?`);
+    const isSingleMemberFamily = family.allMembers.length <= 1;
+    const confirmMessage = isSingleMemberFamily
+      ? `Hapus Kartu Keluarga ${family.familyName} dan kembalikan ${memberToRemove.name} ke daftar jemaat single?`
+      : `Keluarkan ${memberToRemove.name} dari ${family.familyName}?`;
+
+    const confirmRemove = window.confirm(confirmMessage);
     if (!confirmRemove) return;
 
     try {
       // 1. Remove any custom link involving this member
       const newLinks = customFamilyLinks.filter(l => l.id1 !== memberToRemove.id && l.id2 !== memberToRemove.id);
+      
       // 2. Add an explicit unlink rule for this member and family
       const newUnlinks = [
         ...customFamilyUnlinks.filter(u => !(u.memberId === memberToRemove.id && u.familyKey === family.key)),
         { memberId: memberToRemove.id, familyKey: family.key }
       ];
+
       // 3. Remove role override
       const newRoles = { ...familyRoleOverrides };
       delete newRoles[`${family.key}:${memberToRemove.id}`];
       delete newRoles[memberToRemove.id];
+
+      // 4. If this family was created from customFamilyCardMembers, remove it from customFamilyCardMembers
+      const newCustomCards = customFamilyCardMembers.filter(id => id !== memberToRemove.id && (!isSingleMemberFamily || id !== family.key));
 
       await Promise.all([
         supabaseAdmin.from(KV).upsert({
@@ -1712,17 +1722,82 @@ function DailyInput({
           key: 'attendance:custom_family_roles',
           value: newRoles,
           updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_cards',
+          value: newCustomCards,
+          updated_at: new Date().toISOString(),
         })
       ]);
 
       setCustomFamilyLinks(newLinks);
       setCustomFamilyUnlinks(newUnlinks);
       setFamilyRoleOverrides(newRoles);
-      setSaveSuccessNotice(`${memberToRemove.name} berhasil dikeluarkan dari ${family.familyName}`);
+      setCustomFamilyCardMembers(newCustomCards);
+
+      setSaveSuccessNotice(isSingleMemberFamily 
+        ? `Kartu Keluarga ${family.familyName} berhasil dihapus!` 
+        : `${memberToRemove.name} berhasil dikeluarkan dari ${family.familyName}`
+      );
       setTimeout(() => setSaveSuccessNotice(''), 3500);
     } catch (err) {
       console.error('Failed to remove member from family:', err);
       alert('Gagal mengeluarkan anggota keluarga. Silakan coba lagi.');
+    }
+  };
+
+  // Delete an entire family card
+  const handleDeleteFamilyCard = async (family: AttendanceFamilyGroup) => {
+    const confirmDelete = window.confirm(`Hapus Kartu Keluarga "${family.familyName}" dan kembalikan seluruh anggotanya ke daftar jemaat individual?`);
+    if (!confirmDelete) return;
+
+    try {
+      const memberIds = new Set(family.allMembers.map(m => m.id));
+      const newLinks = customFamilyLinks.filter(l => !memberIds.has(l.id1) && !memberIds.has(l.id2));
+      const newUnlinks = [
+        ...customFamilyUnlinks.filter(u => !memberIds.has(u.memberId) && u.familyKey !== family.key),
+        ...family.allMembers.map(m => ({ memberId: m.id, familyKey: family.key }))
+      ];
+      const newRoles = { ...familyRoleOverrides };
+      for (const m of family.allMembers) {
+        delete newRoles[`${family.key}:${m.id}`];
+        delete newRoles[m.id];
+      }
+      const newCustomCards = customFamilyCardMembers.filter(id => !memberIds.has(id) && id !== family.key);
+
+      await Promise.all([
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_links',
+          value: newLinks,
+          updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_unlinks',
+          value: newUnlinks,
+          updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_roles',
+          value: newRoles,
+          updated_at: new Date().toISOString(),
+        }),
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_cards',
+          value: newCustomCards,
+          updated_at: new Date().toISOString(),
+        })
+      ]);
+
+      setCustomFamilyLinks(newLinks);
+      setCustomFamilyUnlinks(newUnlinks);
+      setFamilyRoleOverrides(newRoles);
+      setCustomFamilyCardMembers(newCustomCards);
+
+      setSaveSuccessNotice(`Kartu Keluarga "${family.familyName}" berhasil dihapus!`);
+      setTimeout(() => setSaveSuccessNotice(''), 3500);
+    } catch (err) {
+      console.error('Failed to delete family card:', err);
+      alert('Gagal menghapus kartu keluarga. Silakan coba lagi.');
     }
   };
 
@@ -2499,6 +2574,15 @@ function DailyInput({
                             <UserCheck size={14} />
                             <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan Sekeluarga'}</span>
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFamilyCard(group)}
+                            className="p-1.5 rounded-xl text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                            title={`Hapus Kartu Keluarga "${group.familyName}"`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       )}
 
@@ -2536,6 +2620,15 @@ function DailyInput({
                         >
                           <UserCheck size={13} />
                           <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFamilyCard(group)}
+                          className="py-1.5 px-2.5 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200 active:scale-95 transition-all shadow-2xs"
+                          title="Hapus Kartu Keluarga"
+                        >
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     )}
