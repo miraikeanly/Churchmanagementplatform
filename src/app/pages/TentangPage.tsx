@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { apiBase } from '../../lib/api';
 import { Link } from 'react-router-dom';
 import { motion, useInView } from 'motion/react';
-import { Heart, Star, BookOpen, Users, ArrowRight, UserCircle } from 'lucide-react';
+import { Heart, Star, BookOpen, Users, ArrowRight, UserCircle, ChevronDown } from 'lucide-react';
 import PublicNavbar from '../components/public/PublicNavbar';
 import { ALL_MINISTRIES } from '../../lib/ministries';
 import { useChurchStats, yearsServing } from '../../lib/stats';
