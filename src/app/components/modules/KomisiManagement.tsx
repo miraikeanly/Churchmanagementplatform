@@ -160,6 +160,102 @@ function currentWeekSunday(): string {
 /** Age bands of the age-based komisi; used to flag members who have outgrown theirs. */
 const KOMISI_AGE_RANGE: Record<string, [number, number]> = { 'sekolah-minggu': [0, 12], teens: [13, 17], vessel: [18, 30] };
 
+/** Pembagian kelas Sekolah Minggu berdasarkan usia & tahun ajaran (Baby-TK, Kelas 1-2, Kelas 3-4, Kelas 5-6) */
+export type SekolahMingguClassKey = 'baby-tk' | 'kls-1-2' | 'kls-3-4' | 'kls-5-6' | 'alumni' | 'unknown';
+
+export interface SekolahMingguClassInfo {
+  key: SekolahMingguClassKey;
+  label: string;
+  shortLabel: string;
+  ageRange: string;
+  description: string;
+  badgeColor: string;
+  borderBg: string;
+  dotColor: string;
+}
+
+export const SEKOLAH_MINGGU_CLASSES: Record<SekolahMingguClassKey, SekolahMingguClassInfo> = {
+  'baby-tk': {
+    key: 'baby-tk',
+    label: 'Baby - TK (Balita & TK)',
+    shortLabel: 'Baby - TK',
+    ageRange: 'Usia 0 - 5 Tahun',
+    description: 'Kelas Batita, Balita, dan Taman Kanak-Kanak',
+    badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
+    borderBg: 'border-amber-200 bg-amber-50/30',
+    dotColor: 'bg-amber-500',
+  },
+  'kls-1-2': {
+    key: 'kls-1-2',
+    label: 'Kelas 1 - 2 SD (Kecil)',
+    shortLabel: 'Kelas 1 - 2',
+    ageRange: 'Usia 6 - 7 Tahun',
+    description: 'Kelas Sekolah Minggu Kecil (SD Kelas 1 - 2)',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    borderBg: 'border-emerald-200 bg-emerald-50/30',
+    dotColor: 'bg-emerald-500',
+  },
+  'kls-3-4': {
+    key: 'kls-3-4',
+    label: 'Kelas 3 - 4 SD (Tengah)',
+    shortLabel: 'Kelas 3 - 4',
+    ageRange: 'Usia 8 - 9 Tahun',
+    description: 'Kelas Sekolah Minggu Tengah (SD Kelas 3 - 4)',
+    badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
+    borderBg: 'border-blue-200 bg-blue-50/30',
+    dotColor: 'bg-blue-500',
+  },
+  'kls-5-6': {
+    key: 'kls-5-6',
+    label: 'Kelas 5 - 6 SD (Besar)',
+    shortLabel: 'Kelas 5 - 6',
+    ageRange: 'Usia 10 - 12 Tahun',
+    description: 'Kelas Sekolah Minggu Besar (SD Kelas 5 - 6)',
+    badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
+    borderBg: 'border-purple-200 bg-purple-50/30',
+    dotColor: 'bg-purple-500',
+  },
+  'alumni': {
+    key: 'alumni',
+    label: 'Lulus / Teens (13+ Tahun)',
+    shortLabel: 'Lulus (13+)',
+    ageRange: 'Usia 13+ Tahun',
+    description: 'Sudah lulus Sekolah Minggu dan siap naik ke Komisi Teens',
+    badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+    borderBg: 'border-indigo-200 bg-indigo-50/30',
+    dotColor: 'bg-indigo-500',
+  },
+  'unknown': {
+    key: 'unknown',
+    label: 'Belum Ada Data Usia',
+    shortLabel: 'Tgl Lahir Belum Ada',
+    ageRange: 'Usia tidak diketahui',
+    description: 'Tanggal lahir belum tercatat di data jemaat',
+    badgeColor: 'bg-gray-100 text-gray-700 border-gray-300',
+    borderBg: 'border-gray-200 bg-gray-50/30',
+    dotColor: 'bg-gray-400',
+  },
+};
+
+/**
+ * Menghitung kelas Sekolah Minggu anak secara otomatis dan dinamis
+ * sesuai usia dan siklus tahun ajaran baru (berganti otomatis setiap Januari & hari ulang tahun).
+ * - Baby - TK : usia 0 - 5 tahun (saat ulang tahun ke-6 otomatis naik ke SD Kelas 1-2)
+ * - Kelas 1-2 : usia 6 - 7 tahun (saat ulang tahun ke-8 otomatis naik ke SD Kelas 3-4)
+ * - Kelas 3-4 : usia 8 - 9 tahun (saat ulang tahun ke-10 otomatis naik ke SD Kelas 5-6)
+ * - Kelas 5-6 : usia 10 - 12 tahun (saat ulang tahun ke-13 otomatis siap promosi ke Teens)
+ */
+export function getSekolahMingguClass(birthDate?: string): SekolahMingguClassInfo {
+  if (!birthDate) return SEKOLAH_MINGGU_CLASSES['unknown'];
+  const age = getAge(birthDate);
+  if (age < 0) return SEKOLAH_MINGGU_CLASSES['unknown'];
+  if (age <= 5) return SEKOLAH_MINGGU_CLASSES['baby-tk'];
+  if (age <= 7) return SEKOLAH_MINGGU_CLASSES['kls-1-2'];
+  if (age <= 9) return SEKOLAH_MINGGU_CLASSES['kls-3-4'];
+  if (age <= 12) return SEKOLAH_MINGGU_CLASSES['kls-5-6'];
+  return SEKOLAH_MINGGU_CLASSES['alumni'];
+}
+
 /** Komisi anak & remaja/pemuda (Sekolah Minggu, Teens, Vessel) yang tidak memerlukan input pernikahan/pasangan melainkan menautkan orang tua */
 export const isYouthKomisi = (komisiId: string) => {
   return komisiId === 'sekolah-minggu' || komisiId === 'teens' || komisiId === 'vessel';
@@ -602,6 +698,8 @@ export default function KomisiManagement() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [attendanceSearch, setAttendanceSearch] = useState('');
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'present' | 'absent'>('all');
+  const [sekolahMingguClassFilter, setSekolahMingguClassFilter] = useState<string>('all');
+  const [sekolahMingguSortOrder, setSekolahMingguSortOrder] = useState<'class' | 'name' | 'age'>('class');
   const [activeSession, setActiveSession] = useState<AbsenSession | null>(null);
   const [draftPresentIds, setDraftPresentIds] = useState<Set<string>>(new Set());
   const [savingAttendance, setSavingAttendance] = useState(false);
@@ -979,9 +1077,97 @@ export default function KomisiManagement() {
   // ── Member CRUD ───────────────────────────────────────────────────────────
   const [coupleView, setCoupleView] = useState(true);
 
-  const filteredMembers = useMemo(() =>
-    members.filter(m => m.name.toLowerCase().includes(search.toLowerCase())),
-    [members, search]);
+  // Filter dan sort anggota dengan dukungan cerdas untuk Komisi Sekolah Minggu (Baby-TK, Kelas 1-2, Kelas 3-4, Kelas 5-6)
+  const filteredMembers = useMemo(() => {
+    let list = members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+
+    // Filter khusus kelas Sekolah Minggu
+    if (activeKomisi === 'sekolah-minggu' && sekolahMingguClassFilter !== 'all') {
+      list = list.filter(m => {
+        const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+        const bDate = linked?.birthDate || m.birthDate || '';
+        const smClass = getSekolahMingguClass(bDate);
+        return smClass.key === sekolahMingguClassFilter;
+      });
+    }
+
+    // Sort order
+    if (activeKomisi === 'sekolah-minggu') {
+      const classOrder: Record<SekolahMingguClassKey, number> = {
+        'baby-tk': 1,
+        'kls-1-2': 2,
+        'kls-3-4': 3,
+        'kls-5-6': 4,
+        'alumni': 5,
+        'unknown': 6,
+      };
+
+      list = [...list].sort((a, b) => {
+        const linkedA = a.jemaatId ? jemaatMap[a.jemaatId] : null;
+        const linkedB = b.jemaatId ? jemaatMap[b.jemaatId] : null;
+        const bDateA = linkedA?.birthDate || a.birthDate || '';
+        const bDateB = linkedB?.birthDate || b.birthDate || '';
+        const ageA = bDateA ? getAge(bDateA) : -1;
+        const ageB = bDateB ? getAge(bDateB) : -1;
+        const classA = getSekolahMingguClass(bDateA);
+        const classB = getSekolahMingguClass(bDateB);
+
+        if (sekolahMingguSortOrder === 'name') {
+          return a.name.localeCompare(b.name, 'id');
+        }
+
+        if (sekolahMingguSortOrder === 'age') {
+          // Dari termuda ke tertua
+          if (ageA !== ageB) {
+            if (ageA < 0) return 1;
+            if (ageB < 0) return -1;
+            return ageA - ageB;
+          }
+          return a.name.localeCompare(b.name, 'id');
+        }
+
+        // Default 'class': urutkan berdasarkan jenjang kelas lalu usia lalu nama
+        const diffClass = classOrder[classA.key] - classOrder[classB.key];
+        if (diffClass !== 0) return diffClass;
+        if (ageA !== ageB) {
+          if (ageA < 0) return 1;
+          if (ageB < 0) return -1;
+          return ageA - ageB;
+        }
+        return a.name.localeCompare(b.name, 'id');
+      });
+    }
+
+    return list;
+  }, [members, search, activeKomisi, sekolahMingguClassFilter, sekolahMingguSortOrder, jemaatMap]);
+
+  // Statistik & Grouping Kelas Sekolah Minggu (Baby-TK, Kelas 1-2, Kelas 3-4, Kelas 5-6)
+  const sekolahMingguClassesGrouped = useMemo(() => {
+    if (activeKomisi !== 'sekolah-minggu') return [];
+
+    const keys: SekolahMingguClassKey[] = ['baby-tk', 'kls-1-2', 'kls-3-4', 'kls-5-6', 'alumni', 'unknown'];
+    return keys.map(k => {
+      const info = SEKOLAH_MINGGU_CLASSES[k];
+      const matchedMembers = filteredMembers.filter(m => {
+        const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+        const bDate = linked?.birthDate || m.birthDate || '';
+        return getSekolahMingguClass(bDate).key === k;
+      });
+
+      // Total count across all members (ignoring class filter for badge counts)
+      const totalAll = members.filter(m => {
+        const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+        const bDate = linked?.birthDate || m.birthDate || '';
+        return getSekolahMingguClass(bDate).key === k;
+      }).length;
+
+      return {
+        ...info,
+        members: matchedMembers,
+        totalAll,
+      };
+    });
+  }, [activeKomisi, filteredMembers, members, jemaatMap]);
 
   // Grouping couple untuk Komisi Kompas dengan kalkulasi skor pasangan berakurasi tinggi
   const coupleGroups = useMemo(() => {
@@ -1775,9 +1961,13 @@ export default function KomisiManagement() {
       const bDate = m.birthDate || linked?.birthDate || '';
       const mDate = m.marriageDate || linked?.marriageDate || '';
       const anniYears = mDate ? getAnniversaryYears(mDate) : -1;
+      const age = bDate ? getAge(bDate) : -1;
+      const smClass = activeKomisi === 'sekolah-minggu' ? getSekolahMingguClass(bDate) : null;
 
       return {
         'Nama': m.name,
+        ...(smClass ? { 'Kelas Sekolah Minggu': smClass.label, 'Rentang Usia': smClass.ageRange } : {}),
+        'Usia': age >= 0 ? `${age} tahun` : '-',
         'No. Telepon': m.phone || linked?.phone || '-',
         'Alamat Domisili': m.address || linked?.address || '-',
         'Tanggal Lahir': bDate ? formatDate(bDate) : '-',
@@ -1920,7 +2110,7 @@ export default function KomisiManagement() {
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <div className="relative flex-1 min-w-[180px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input type="text" placeholder="Cari anggota..." value={search} onChange={e => setSearch(e.target.value)}
+              <input type="text" placeholder={activeKomisi === 'sekolah-minggu' ? "Cari anak sekolah minggu..." : "Cari anggota..."} value={search} onChange={e => setSearch(e.target.value)}
                 className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
 
@@ -1941,6 +2131,22 @@ export default function KomisiManagement() {
               </button>
             )}
 
+            {/* Sort order khusus Sekolah Minggu */}
+            {activeKomisi === 'sekolah-minggu' && (
+              <div className="flex items-center gap-1.5 bg-yellow-50/80 border border-yellow-200/80 rounded-xl px-2.5 py-1.5 text-xs text-yellow-900 shadow-2xs">
+                <span className="font-bold text-[11px] text-yellow-800">Urutkan:</span>
+                <select
+                  value={sekolahMingguSortOrder}
+                  onChange={e => setSekolahMingguSortOrder(e.target.value as any)}
+                  className="bg-transparent font-semibold text-xs text-yellow-900 focus:outline-none cursor-pointer"
+                >
+                  <option value="class">Jenjang Kelas (Baby-TK → SD 5-6)</option>
+                  <option value="age">Usia Termuda → Tertua</option>
+                  <option value="name">Nama Alfabetis (A - Z)</option>
+                </select>
+              </div>
+            )}
+
             <button onClick={exportMembers}
               className="flex items-center gap-1.5 border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
               <Download size={14} />Export
@@ -1952,6 +2158,67 @@ export default function KomisiManagement() {
               </button>
             )}
           </div>
+
+          {/* ── FILTER & SUMMARY JENJANG KELAS SEKOLAH MINGGU ── */}
+          {activeKomisi === 'sekolah-minggu' && (
+            <div className="mb-5 bg-gradient-to-r from-amber-50/60 via-yellow-50/40 to-orange-50/40 border border-yellow-200/80 rounded-2xl p-3.5 sm:p-4 shadow-2xs">
+              <div className="flex items-center justify-between gap-2 mb-2.5 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-yellow-500 text-white flex items-center justify-center text-xs font-black shadow-2xs">
+                    ★
+                  </div>
+                  <span className="text-xs font-bold text-yellow-950">
+                    Filter Jenjang Kelas Sekolah Minggu (Auto Naik Kelas per Tahun Ajaran Baru & Usia)
+                  </span>
+                </div>
+                <span className="text-[11px] text-amber-700/90 font-medium">
+                  Total: <strong>{filteredMembers.length}</strong> anak
+                </span>
+              </div>
+
+              {/* Class pills filter buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setSekolahMingguClassFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 ${
+                    sekolahMingguClassFilter === 'all'
+                      ? 'bg-yellow-600 text-white shadow-xs'
+                      : 'bg-white border border-yellow-200 text-yellow-900 hover:bg-yellow-100/60'
+                  }`}
+                >
+                  <span>Semua Kelas</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    sekolahMingguClassFilter === 'all' ? 'bg-yellow-700 text-white' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {members.length}
+                  </span>
+                </button>
+
+                {sekolahMingguClassesGrouped.map(cg => (
+                  <button
+                    key={cg.key}
+                    type="button"
+                    onClick={() => setSekolahMingguClassFilter(cg.key)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 ${
+                      sekolahMingguClassFilter === cg.key
+                        ? 'bg-yellow-600 text-white shadow-xs'
+                        : `bg-white border ${cg.badgeColor.includes('amber') ? 'border-amber-300' : cg.badgeColor.includes('emerald') ? 'border-emerald-300' : cg.badgeColor.includes('blue') ? 'border-blue-300' : cg.badgeColor.includes('purple') ? 'border-purple-300' : 'border-gray-200'} text-gray-800 hover:bg-gray-50`
+                    }`}
+                    title={`${cg.label} (${cg.ageRange})`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${cg.dotColor}`} />
+                    <span>{cg.shortLabel}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                      sekolahMingguClassFilter === cg.key ? 'bg-yellow-700 text-white' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {cg.totalAll}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {loadingMembers ? (
             <div className="text-center py-16 text-gray-400">Memuat data...</div>
@@ -2203,11 +2470,18 @@ export default function KomisiManagement() {
                             )}
                           </div>
 
-                          {/* Detail Badges: Usia, Orang Tua (Sejajar), Rentang Komisi */}
+                          {/* Detail Badges: Kelas Sekolah Minggu, Usia, Orang Tua (Sejajar), Rentang Komisi */}
                           <div className="flex items-center gap-2 flex-wrap mt-2">
+                            {/* Khusus Sekolah Minggu: Tampilkan Badge Kelas (Baby-TK, Kelas 1-2, Kelas 3-4, Kelas 5-6) */}
+                            {activeKomisi === 'sekolah-minggu' && (
+                              <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 shadow-2xs ${getSekolahMingguClass(birthDate).badgeColor}`}>
+                                <span className={`w-2 h-2 rounded-full ${getSekolahMingguClass(birthDate).dotColor}`} />
+                                <span>{getSekolahMingguClass(birthDate).label}</span>
+                              </span>
+                            )}
                             {age >= 0 && (
-                              <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${AGE_GROUP_STYLES[getAgeGroup(birthDate)]}`}>
-                                {age} thn ({getAgeGroup(birthDate)})
+                              <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${activeKomisi === 'sekolah-minggu' ? 'bg-amber-50 text-amber-900 border border-amber-200' : AGE_GROUP_STYLES[getAgeGroup(birthDate)]}`}>
+                                {age} thn {activeKomisi !== 'sekolah-minggu' ? `(${getAgeGroup(birthDate)})` : ''}
                               </span>
                             )}
                             {parentDisplayName && (
@@ -2558,6 +2832,42 @@ export default function KomisiManagement() {
                     )}
                   </div>
                 </div>
+
+                {/* Filter Kelas Khusus Sekolah Minggu pada Tab Absensi */}
+                {activeKomisi === 'sekolah-minggu' && (
+                  <div className="flex items-center gap-1.5 pt-2.5 overflow-x-auto no-scrollbar flex-wrap">
+                    <span className="text-[11px] font-bold text-slate-500 mr-1">Kelas:</span>
+                    <button
+                      type="button"
+                      onClick={() => setSekolahMingguClassFilter('all')}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
+                        sekolahMingguClassFilter === 'all'
+                          ? 'bg-yellow-500 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Semua Kelas
+                    </button>
+                    {(['baby-tk', 'kls-1-2', 'kls-3-4', 'kls-5-6'] as SekolahMingguClassKey[]).map(ck => {
+                      const cInfo = SEKOLAH_MINGGU_CLASSES[ck];
+                      return (
+                        <button
+                          key={ck}
+                          type="button"
+                          onClick={() => setSekolahMingguClassFilter(ck)}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                            sekolahMingguClassFilter === ck
+                              ? 'bg-yellow-500 text-white shadow-2xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${cInfo.dotColor}`} />
+                          <span>{cInfo.shortLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Members Attendance List */}
@@ -2565,6 +2875,11 @@ export default function KomisiManagement() {
                 const filteredMembers = members.filter(m => {
                   if (attendanceFilter === 'present' && !draftPresentIds.has(m.id)) return false;
                   if (attendanceFilter === 'absent' && draftPresentIds.has(m.id)) return false;
+                  if (activeKomisi === 'sekolah-minggu' && sekolahMingguClassFilter !== 'all') {
+                    const linked = m.jemaatId ? jemaatMap[m.jemaatId] : null;
+                    const bDate = linked?.birthDate || m.birthDate || '';
+                    if (getSekolahMingguClass(bDate).key !== sekolahMingguClassFilter) return false;
+                  }
                   if (attendanceSearch.trim()) {
                     const q = attendanceSearch.toLowerCase();
                     const nameMatch = m.name.toLowerCase().includes(q);
@@ -2632,6 +2947,11 @@ export default function KomisiManagement() {
                               </div>
 
                               <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 flex-wrap">
+                                {activeKomisi === 'sekolah-minggu' && (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${getSekolahMingguClass(birthDate).badgeColor}`}>
+                                    {getSekolahMingguClass(birthDate).shortLabel}
+                                  </span>
+                                )}
                                 {m.phone && (
                                   <span className="flex items-center gap-1">
                                     <Phone size={11} className="text-slate-400" />
