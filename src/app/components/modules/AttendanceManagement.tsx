@@ -296,10 +296,19 @@ export function buildAttendanceFamilyGroups(
   }
 
   // 6. Apply custom/manual family links (saved from the UI "+ Tambah Anggota" modal)
+  // Ensure link.id1 (the family anchor member) always stays as the master root!
   if (Array.isArray(customLinks)) {
     for (const link of customLinks) {
       if (link.id1 && link.id2 && memberById.has(link.id1) && memberById.has(link.id2)) {
-        union(link.id1, link.id2);
+        const rootAnchor = find(link.id1);
+        const rootTarget = find(link.id2);
+        if (rootAnchor !== rootTarget) {
+          // Force rootTarget to attach under rootAnchor
+          parentMap.set(rootTarget, rootAnchor);
+          const sizeAnchor = sizeMap.get(rootAnchor) || 1;
+          const sizeTarget = sizeMap.get(rootTarget) || 1;
+          sizeMap.set(rootAnchor, sizeAnchor + sizeTarget);
+        }
       }
     }
   }
@@ -314,20 +323,19 @@ export function buildAttendanceFamilyGroups(
     rawClusters.get(root)!.push(m);
   }
 
-  // Build unlinks set: "familyRoot:memberId" or "memberId"
+  // Build unlinks set: "familyRoot:memberId"
   const unlinkPairs = new Set<string>();
   if (Array.isArray(customUnlinks)) {
     for (const u of customUnlinks) {
-      if (u.memberId) {
+      if (u.memberId && u.familyKey) {
         unlinkPairs.add(`${u.familyKey}:${u.memberId}`);
-        unlinkPairs.add(u.memberId);
       }
     }
   }
 
   const clusters = new Map<string, Member[]>();
   for (const [rootId, groupMembers] of rawClusters.entries()) {
-    const kept = groupMembers.filter(m => !unlinkPairs.has(`${rootId}:${m.id}`) && !unlinkPairs.has(m.id));
+    const kept = groupMembers.filter(m => !unlinkPairs.has(`${rootId}:${m.id}`));
     if (kept.length > 0) {
       clusters.set(rootId, kept);
     }
@@ -375,9 +383,26 @@ export function buildAttendanceFamilyGroups(
     const others: Member[] = [];
 
     for (const m of groupMembers) {
-      // Check explicit role override first (e.g. from "+ Tambah Anggota")
-      const overrideKey = `${rootId}:${m.id}`;
-      const explicitRole = roleOverrides?.[overrideKey] || roleOverrides?.[m.id];
+      // Check explicit role override first (e.g. from "+ Tambah Anggota" modal or drag-and-drop)
+      // Check multiple key patterns: rootId:memberId, any memberInGroup:memberId, or direct memberId
+      let explicitRole: 'parent' | 'child' | 'grandchild' | undefined = undefined;
+      if (roleOverrides) {
+        if (roleOverrides[`${rootId}:${m.id}`]) {
+          explicitRole = roleOverrides[`${rootId}:${m.id}`];
+        } else {
+          // Check if any other member in this group was used as the family key when assigning role
+          for (const other of groupMembers) {
+            if (roleOverrides[`${other.id}:${m.id}`]) {
+              explicitRole = roleOverrides[`${other.id}:${m.id}`];
+              break;
+            }
+          }
+          if (!explicitRole && roleOverrides[m.id]) {
+            explicitRole = roleOverrides[m.id];
+          }
+        }
+      }
+
       if (explicitRole === 'grandchild') {
         grandchildren.push(m);
         continue;
@@ -405,18 +430,28 @@ export function buildAttendanceFamilyGroups(
       } else if (isParentByChildren || isParentByMarriage) {
         parents.push(m);
       } else {
-        others.push(m);
+        // If there's an explicit custom card created for this family, default extra members to child rather than hiding in otherMembers
+        if (hasExplicitCard && groupMembers.length > 1) {
+          children.push(m);
+        } else {
+          others.push(m);
+        }
       }
     }
 
-    // If parents is empty (e.g. single parent or custom card), fallback to first member
+    // If parents is empty (e.g. single parent or custom card), fallback to head member
     if (parents.length === 0 && groupMembers.length > 0) {
-      parents.push(groupMembers[0]);
+      // Prefer someone with an explicit card or first member
+      const cardMember = groupMembers.find(m => customCardSet.has(m.id));
+      parents.push(cardMember || groupMembers[0]);
     }
 
     // Determine family head / family name
-    // Prefer male parent, then any parent, then oldest/first member
-    let head = parents.find(p => p.gender === 'male' || p.gender === 'L');
+    // If a member has an explicit custom family card, prioritize them as head!
+    let head = groupMembers.find(m => customCardSet.has(m.id));
+    if (!head) {
+      head = parents.find(p => p.gender === 'male' || p.gender === 'L');
+    }
     if (!head) head = parents[0] || groupMembers[0];
 
     const familyName = `Keluarga ${head.name}`;
@@ -1513,18 +1548,29 @@ function DailyInput({
     keepModalOpen: boolean = keepModalOpenAfterAdd
   ) => {
     if (!linkTargetFamily || !selectedMember) return;
-    const anchorMember = linkTargetFamily.allMembers[0];
+    // Prefer the explicit card owner or first member as the anchor
+    const anchorMember = linkTargetFamily.allMembers.find(m => customFamilyCardMembers.includes(m.id)) ||
+                         linkTargetFamily.parents[0] ||
+                         linkTargetFamily.allMembers[0];
     if (!anchorMember || anchorMember.id === selectedMember.id) return;
 
     setSavingLink(true);
     try {
-      const newLinks = [...customFamilyLinks, { id1: anchorMember.id, id2: selectedMember.id }];
-      // Also remove any existing unlink entry for this member if previously excluded
+      // 1. Clean up any previous links involving selectedMember so they aren't dragged to this family
+      const cleanedLinks = customFamilyLinks.filter(l => l.id1 !== selectedMember.id && l.id2 !== selectedMember.id);
+      const newLinks = [...cleanedLinks, { id1: anchorMember.id, id2: selectedMember.id }];
+
+      // 2. Remove any unlink entries for this member so they are not suppressed
       const newUnlinks = customFamilyUnlinks.filter(u => u.memberId !== selectedMember.id);
-      // Store category role override
+
+      // 3. Store category role override under all possible lookup keys:
+      // - under anchorMember.id:selectedMember.id
+      // - under linkTargetFamily.key:selectedMember.id
+      // - directly under selectedMember.id
       const newRoles = {
         ...familyRoleOverrides,
         [`${linkTargetFamily.key}:${selectedMember.id}`]: category,
+        [`${anchorMember.id}:${selectedMember.id}`]: category,
         [selectedMember.id]: category,
       };
 
