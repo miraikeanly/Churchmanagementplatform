@@ -540,6 +540,10 @@ export default function FaceAttendanceScannerModal({
               if (ctx) {
                 const isPoseProblem = !res.isLookingForward && res.poseStatusText;
 
+                // Calculate mirrored X coordinate because the video is mirrored (-scale-x-100)
+                // This ensures the box stays over the face while the text renders perfectly normal (unmirrored)
+                const mirroredX = videoWidth - (box.x + box.width);
+
                 ctx.lineWidth = i === 0 ? 3 : 2;
                 // Green for high-confidence match, Blue for already checked in, Amber for pose guidance, Red for unknown
                 ctx.strokeStyle = isAlreadyPresent
@@ -550,7 +554,7 @@ export default function FaceAttendanceScannerModal({
                   ? '#f59e0b'
                   : 'rgba(239, 68, 68, 0.6)';
 
-                ctx.strokeRect(box.x, box.y, box.width, box.height);
+                ctx.strokeRect(mirroredX, box.y, box.width, box.height);
 
                 // Label background only for primary or recognized
                 if (i === 0 || isHighlyAccurate) {
@@ -574,11 +578,11 @@ export default function FaceAttendanceScannerModal({
                   ctx.font = 'bold 14px sans-serif';
                   const textWidth = ctx.measureText(labelText).width;
                   ctx.fillStyle = badgeColor;
-                  ctx.fillRect(box.x, Math.max(0, box.y - 28), textWidth + 16, 26);
+                  ctx.fillRect(mirroredX, Math.max(0, box.y - 28), textWidth + 16, 26);
 
-                  // Label text
+                  // Label text (drawn standard left-to-right, completely legible!)
                   ctx.fillStyle = '#ffffff';
-                  ctx.fillText(labelText, box.x + 8, Math.max(18, box.y - 9));
+                  ctx.fillText(labelText, mirroredX + 8, Math.max(18, box.y - 9));
                 }
               }
 
@@ -662,9 +666,10 @@ export default function FaceAttendanceScannerModal({
             const resizedDetections = faceapi.resizeResults(detections, displaySize);
             for (const d of resizedDetections) {
               const box = d.detection.box;
+              const mirroredX = videoWidth - (box.x + box.width);
               ctx.lineWidth = 2;
               ctx.strokeStyle = '#38bdf8';
-              ctx.strokeRect(box.x, box.y, box.width, box.height);
+              ctx.strokeRect(mirroredX, box.y, box.width, box.height);
             }
           }
 
@@ -841,7 +846,7 @@ export default function FaceAttendanceScannerModal({
               />
               <canvas
                 ref={canvasRef}
-                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none"
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
               />
 
               {/* Status overlay if not ready */}
