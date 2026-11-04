@@ -20,6 +20,7 @@ interface TeamMember {
   photoUrl: string | null;
   spouseName?: string;
   spouseRole?: string;
+  bio?: string;
 }
 
 function FadeIn({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
@@ -50,54 +51,173 @@ const TIER_LABELS: Record<string, string> = {
   koordinator:     'Koordinator Pelayanan',
 };
 
-// ── Photo card with zoom-in-on-scroll effect (no useScroll/target) ───────────
+// ── Modern Profile Card (Photo on left, description/details on right) ────────
 function PersonCard({ member, size = 'md' }: { member: TeamMember; size?: 'lg' | 'md' | 'sm' }) {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: '-80px' });
-  const h = size === 'lg' ? 'h-[420px]' : size === 'md' ? 'h-[320px]' : 'h-[240px]';
+  const inView = useInView(ref, { once: true, margin: '-60px' });
+  const [expanded, setExpanded] = useState(false);
+
+  const isCouple = !!(member.spouseName?.trim());
+  const displayName = isCouple
+    ? `${member.name} & ${member.spouseName}`
+    : member.name;
+  const displayRole = isCouple && member.spouseRole
+    ? `${member.role} & ${member.spouseRole}`
+    : member.role;
+
+  // Check if member is founder/perintis
+  const isFounder = (member.tier === 'gembala_sidang') ||
+    (member.name && member.name.toLowerCase().includes('poppy')) ||
+    (member.spouseName && member.spouseName.toLowerCase().includes('poppy')) ||
+    (member.name && member.name.toLowerCase().includes('gina')) ||
+    (member.spouseName && member.spouseName.toLowerCase().includes('gina'));
+
+  // Default bio for founders if not provided
+  const founderBio = [
+    'Dengan iman, kasih, dan kesetiaan, Pdt. Poppy Wairissal, bersama sang suami, Gina Jaya, merintis dan membangun GBI Jelambar Timur sebagai tempat bertumbuh dalam iman dan mengenal kasih Tuhan.',
+    'Melalui doa, pengorbanan, dan ketekunan mereka dalam melayani, gereja terus berkembang dan menjadi rumah rohani bagi semakin banyak jemaat.',
+    'Meski Pdt. Poppy Wairissal telah berpulang ke rumah Bapa, warisan iman dan pelayanan beliau tetap hidup dan kini diteruskan oleh generasi berikutnya.'
+  ];
+
+  const bioParagraphs = member.bio?.trim()
+    ? member.bio.split('\n\n').filter(Boolean)
+    : (isFounder ? founderBio : []);
+
+  // For compact coordinator cards without bio, use a neat grid card
+  if (size === 'sm' && !member.bio) {
+    return (
+      <div ref={ref} className="relative rounded-2xl overflow-hidden shadow-lg bg-slate-900/60 border border-white/10 group">
+        <div className="h-48 overflow-hidden relative">
+          {member.photoUrl ? (
+            <img src={member.photoUrl} alt={member.name} className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-slate-800 to-indigo-950 flex items-center justify-center">
+              <UserCircle size={48} className="text-white/20" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+        </div>
+        <div className="p-3.5">
+          <p className="font-bold text-white text-sm leading-snug truncate">{displayName}</p>
+          <p className="text-white/60 text-xs mt-0.5 truncate">{displayRole}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div ref={ref} className={`relative ${h} rounded-3xl overflow-hidden shadow-xl group`}>
-      {/* Photo with zoom-in effect when entering viewport */}
-      <motion.div
-        className="absolute inset-0"
-        initial={{ scale: 1.12 }}
-        animate={inView ? { scale: 1 } : { scale: 1.12 }}
-        transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
-      >
-        {member.photoUrl ? (
-          <img src={member.photoUrl} alt={member.name} className="w-full h-full object-cover object-top" loading="lazy" />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-slate-700 to-blue-900 flex items-center justify-center">
-            <UserCircle size={size === 'lg' ? 80 : 56} className="text-white/20" />
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 30 }}
+      animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      className="relative rounded-3xl overflow-hidden border border-white/15 bg-gradient-to-br from-slate-900/90 via-indigo-950/80 to-slate-900/90 shadow-2xl backdrop-blur-xl"
+    >
+      {/* Background ambient lighting */}
+      <div className="absolute top-0 right-0 -mr-24 -mt-24 w-80 h-80 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-80 h-80 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="grid grid-cols-1 md:grid-cols-12 relative z-10 items-stretch">
+        {/* Left Column: Photo Container with customized church framing */}
+        <div className="md:col-span-5 relative flex flex-col justify-center p-5 md:p-7 md:pr-0">
+          <div className="relative w-full aspect-[4/3] md:aspect-[3/4] md:h-full min-h-[280px] md:min-h-[360px] rounded-2xl md:rounded-3xl overflow-hidden border border-white/15 shadow-xl bg-slate-950 group">
+            {member.photoUrl ? (
+              <img
+                src={member.photoUrl}
+                alt={displayName}
+                className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-105"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900 flex items-center justify-center">
+                <UserCircle size={88} className="text-white/20" />
+              </div>
+            )}
+
+            {/* Dark gradient vignette at bottom of photo */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none md:hidden" />
+
+            {/* On mobile: name overlay if no space */}
+            <div className="absolute bottom-3 left-3 right-3 md:hidden p-3 rounded-xl bg-black/60 backdrop-blur-md border border-white/10">
+              <p className="font-bold text-white text-base leading-tight">{displayName}</p>
+              <p className="text-blue-200 text-xs mt-0.5">{displayRole}</p>
+            </div>
           </div>
-        )}
-      </motion.div>
-
-      {/* Dark gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-      {/* Glass info card — slides up on enter */}
-      <motion.div
-        className="absolute bottom-0 left-0 right-0 p-5"
-        initial={{ opacity: 0, y: 16 }}
-        animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
-        transition={{ duration: 0.6, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl px-5 py-4 shadow-lg">
-          <p className={`font-bold text-white leading-tight ${size === 'lg' ? 'text-xl' : size === 'md' ? 'text-base' : 'text-sm'}`}>
-            {member.spouseName?.trim()
-              ? `${member.name} & ${member.spouseName}`
-              : member.name}
-          </p>
-          <p className={`text-white/70 mt-1 ${size === 'lg' ? 'text-sm' : 'text-xs'}`}>
-            {member.spouseName?.trim() && member.spouseRole
-              ? `${member.role} & ${member.spouseRole}`
-              : member.role}
-          </p>
         </div>
-      </motion.div>
-    </div>
+
+        {/* Right Column: Name, Sub-deskripsi & Detail Info */}
+        <div className="md:col-span-7 p-6 md:p-8 flex flex-col justify-center">
+          {/* Badge Kategori / Role */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest bg-blue-500/20 text-blue-200 border border-blue-400/30">
+              {TIER_LABELS[member.tier] || member.tier}
+            </span>
+            {isFounder && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest bg-amber-400/20 text-amber-200 border border-amber-300/30">
+                Pendiri & Perintis Pelayanan
+              </span>
+            )}
+          </div>
+
+          {/* Name Header */}
+          <h3 className="hidden md:block text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-snug">
+            {displayName}
+          </h3>
+
+          {/* Sub deskripsi: Jabatan & Tanggung Jawab */}
+          <p className="hidden md:block text-blue-200/90 font-medium text-sm mt-1 mb-4">
+            {displayRole}
+          </p>
+
+          {/* Detailed Bio / Deskripsi Content */}
+          {bioParagraphs.length > 0 ? (
+            <div className="space-y-3 text-slate-300 text-sm md:text-[14.5px] leading-relaxed">
+              {bioParagraphs.map((paragraph, idx) => {
+                // If there are many paragraphs and not expanded, show only first 2
+                if (!expanded && idx >= 2 && bioParagraphs.length > 2) return null;
+                return (
+                  <p key={idx} className="font-normal text-slate-200/90">
+                    {paragraph}
+                  </p>
+                );
+              })}
+
+              {bioParagraphs.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(e => !e)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer pt-1"
+                >
+                  <span>{expanded ? 'Tampilkan Lebih Sedikit' : 'Lihat Selengkapnya'}</span>
+                  <ChevronDown size={14} className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="text-slate-400 text-sm italic">
+              Melayani dengan setia dalam membimbing dan memperlengkapi jemaat GBI Jelambar Timur.
+            </p>
+          )}
+
+          {/* Special Memorial Quote for Founders */}
+          {isFounder && (
+            <div className="mt-6 pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white/[0.03] p-4 rounded-2xl border border-white/5">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-amber-300/90 font-bold mb-0.5">
+                  Pesan Terakhir Beliau:
+                </p>
+                <blockquote className="text-sm md:text-base font-serif italic text-amber-100 font-medium">
+                  “Bersatu, bersama melayani Tuhan”
+                </blockquote>
+              </div>
+              <span className="text-xs text-white/50 self-end sm:self-auto font-medium">
+                — Pdt. Poppy Wairissal
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -236,64 +356,14 @@ export default function TentangPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="space-y-6">
-                        {tier.members.map((m, i) => {
-                          const isFounder = tier.key === 'gembala_sidang' || 
-                            (m.name && m.name.toLowerCase().includes('poppy')) || 
-                            (m.spouseName && m.spouseName.toLowerCase().includes('poppy')) ||
-                            (m.name && m.name.toLowerCase().includes('gina')) ||
-                            (m.spouseName && m.spouseName.toLowerCase().includes('gina'));
-
-                          return (
-                            <FadeIn key={m.id} delay={i * 0.08}>
-                              <div className={tier.cardSize === 'lg' ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}>
-                                <PersonCard member={m} size={tier.cardSize} />
-
-                                {isFounder && (
-                                  <div className="mt-6 rounded-3xl bg-white/[0.04] border border-white/10 p-6 md:p-8 backdrop-blur-md text-white/90 shadow-2xl relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 -mr-12 -mt-12 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-                                    
-                                    <div className="relative z-10">
-                                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-200 text-xs font-semibold mb-3">
-                                        <span>Pendiri & Perintis Pelayanan</span>
-                                      </div>
-
-                                      <h3 className="text-xl md:text-2xl font-bold text-white mb-4">
-                                        Pdt. Poppy Wairissal & Gina Jaya
-                                      </h3>
-
-                                      <div className="space-y-3.5 text-sm md:text-[15px] leading-relaxed text-slate-300 font-normal">
-                                        <p>
-                                          Dengan iman, kasih, dan kesetiaan, Pdt. Poppy Wairissal, bersama sang suami, Gina Jaya, merintis dan membangun GBI Jelambar Timur sebagai tempat bertumbuh dalam iman dan mengenal kasih Tuhan.
-                                        </p>
-                                        <p>
-                                          Melalui doa, pengorbanan, dan ketekunan mereka dalam melayani, gereja terus berkembang dan menjadi rumah rohani bagi semakin banyak jemaat.
-                                        </p>
-                                        <p>
-                                          Meski Pdt. Poppy Wairissal telah berpulang ke rumah Bapa, warisan iman dan pelayanan beliau tetap hidup dan kini diteruskan oleh generasi berikutnya.
-                                        </p>
-                                      </div>
-
-                                      <div className="mt-6 pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                        <div>
-                                          <p className="text-xs uppercase tracking-wider text-amber-300/80 font-semibold mb-1">
-                                            Pesan Terakhir Beliau:
-                                          </p>
-                                          <blockquote className="text-base md:text-lg font-serif italic text-amber-100 font-medium">
-                                            “Bersatu, bersama melayani Tuhan”
-                                          </blockquote>
-                                        </div>
-                                        <span className="text-xs text-white/50 self-end sm:self-auto font-medium">
-                                          — Pdt. Poppy Wairissal
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </FadeIn>
-                          );
-                        })}
+                      <div className="space-y-8">
+                        {tier.members.map((m, i) => (
+                          <FadeIn key={m.id} delay={i * 0.08}>
+                            <div className="max-w-4xl mx-auto">
+                              <PersonCard member={m} size={tier.cardSize} />
+                            </div>
+                          </FadeIn>
+                        ))}
                       </div>
                     )}
                   </div>

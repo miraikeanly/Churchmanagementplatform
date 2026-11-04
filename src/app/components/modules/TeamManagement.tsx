@@ -37,6 +37,7 @@ interface TeamMember {
   photoUrl: string | null;
   spouseName?: string;
   spouseRole?: string;
+  bio?: string;
 }
 
 interface FormState {
@@ -47,6 +48,7 @@ interface FormState {
   isCouple: boolean;
   spouseName: string;
   spouseRole: string;
+  bio: string;
   photoFile: File | null;
   photoPreview: string | null;
 }
@@ -54,6 +56,7 @@ interface FormState {
 const emptyForm = (): FormState => ({
   name: '', role: '', tier: 'koordinator', order: 0,
   isCouple: false, spouseName: '', spouseRole: '',
+  bio: '',
   photoFile: null, photoPreview: null,
 });
 
@@ -176,6 +179,11 @@ function MemberCard({ m, onEdit, onDelete }: {
         </div>
         {displayRole && (
           <p className="text-xs text-slate-500 font-medium leading-relaxed break-words">{displayRole}</p>
+        )}
+        {m.bio && (
+          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 italic leading-relaxed">
+            "{m.bio}"
+          </p>
         )}
       </div>
 
@@ -336,6 +344,7 @@ export default function TeamManagement() {
       isCouple: !!(m.spouseName?.trim()),
       spouseName: m.spouseName || '',
       spouseRole: m.spouseRole || '',
+      bio: m.bio || '',
       photoFile: null,
       photoPreview: m.photoUrl || null,
     });
@@ -357,6 +366,7 @@ export default function TeamManagement() {
         order: Number(form.order),
         spouseName: form.isCouple ? form.spouseName.trim() : '',
         spouseRole: form.isCouple ? form.spouseRole.trim() : '',
+        bio: form.bio.trim(),
       };
 
       if (form.photoFile) {
@@ -635,6 +645,23 @@ export default function TeamManagement() {
                   />
                   <span className="text-xs text-slate-400">angka lebih kecil = tampil duluan di atas</span>
                 </div>
+              </div>
+
+              {/* Bio / Detail Deskripsi */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Deskripsi / Info Detail Terkait (Opsional)
+                </label>
+                <textarea
+                  rows={4}
+                  value={form.bio}
+                  onChange={e => setField('bio', e.target.value)}
+                  placeholder="Ceritakan latar belakang pelayanan, visi, atau biografi singkat yang akan ditampilkan di samping foto..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 placeholder-slate-400 bg-white shadow-2xs resize-none"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Akan tampil di samping foto pada halaman Tentang Kami dengan layout profil modern.
+                </p>
               </div>
 
               {error && (
