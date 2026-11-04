@@ -333,7 +333,25 @@ export function buildAttendanceFamilyGroups(
     }
   }
 
+  // Ensure members who explicitly have a custom family card get their own dedicated cluster if they were unlinked or not present in a group
   const customCardSet = new Set<string>(customFamilyCardMembers || []);
+  for (const cardMemberId of customCardSet) {
+    const target = memberById.get(cardMemberId);
+    if (!target) continue;
+    // Check if target is already inside any cluster
+    let foundInCluster = false;
+    for (const groupMembers of clusters.values()) {
+      if (groupMembers.some(m => m.id === cardMemberId)) {
+        foundInCluster = true;
+        break;
+      }
+    }
+    if (!foundInCluster) {
+      // Put them in their own dedicated cluster
+      clusters.set(cardMemberId, [target]);
+    }
+  }
+
   const result: AttendanceFamilyGroup[] = [];
 
   for (const [rootId, groupMembers] of clusters.entries()) {
@@ -1593,16 +1611,42 @@ function DailyInput({
       setSavingLink(true);
       const newCustomCards = Array.from(new Set([...customFamilyCardMembers, targetMember.id]));
       
+      // If targetMember was previously in another family cluster, remove any unlinks or links that conflict
+      const previousGroup = allFamilyGroups.find(g => g.allMembers.some(m => m.id === targetMember.id));
+      let newUnlinks = [...customFamilyUnlinks];
+      if (previousGroup && previousGroup.key !== targetMember.id) {
+        newUnlinks = [
+          ...newUnlinks.filter(u => !(u.memberId === targetMember.id && u.familyKey === previousGroup.key)),
+          { memberId: targetMember.id, familyKey: previousGroup.key }
+        ];
+      }
+
       // Persist to KV
-      await supabaseAdmin.from(KV).upsert({
-        key: 'attendance:custom_family_cards',
-        value: newCustomCards,
-        updated_at: new Date().toISOString(),
-      });
+      await Promise.all([
+        supabaseAdmin.from(KV).upsert({
+          key: 'attendance:custom_family_cards',
+          value: newCustomCards,
+          updated_at: new Date().toISOString(),
+        }),
+        ...(previousGroup && previousGroup.key !== targetMember.id ? [
+          supabaseAdmin.from(KV).upsert({
+            key: 'attendance:custom_family_unlinks',
+            value: newUnlinks,
+            updated_at: new Date().toISOString(),
+          })
+        ] : [])
+      ]);
 
       setCustomFamilyCardMembers(newCustomCards);
+      if (previousGroup && previousGroup.key !== targetMember.id) {
+        setCustomFamilyUnlinks(newUnlinks);
+      }
       setIsCreatingFamilyCard(false);
       setCreateFamilyCardSearch('');
+
+      // Reset filters so the new card is never hidden by search / attendance filter
+      setFilter('all');
+      setSearch('');
 
       // Auto-switch to Family view and expand the new card
       setViewMode('family');
@@ -1621,11 +1665,12 @@ function DailyInput({
       // Scroll to newly created card
       setTimeout(() => {
         const el = document.getElementById(`family-card-${targetMember.id}`) ||
-                   document.querySelector(`[data-family-key="${targetMember.id}"]`);
+                   document.querySelector(`[data-family-key="${targetMember.id}"]`) ||
+                   document.querySelector(`[data-member-ids*="${targetMember.id}"]`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-      }, 200);
+      }, 300);
     } catch (err) {
       console.error('Failed to create custom family card:', err);
       alert('Gagal membuat kartu keluarga. Silakan coba lagi.');
@@ -2381,6 +2426,7 @@ function DailyInput({
                 <div
                   id={`family-card-${group.key}`}
                   data-family-key={group.key}
+                  data-member-ids={group.allMembers.map(m => m.id).join(',')}
                   key={group.key}
                   className={`bg-white rounded-2xl border transition-all overflow-hidden ${
                     isRecentlyEdited
@@ -3126,15 +3172,59 @@ function DailyInput({
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        disabled={savingLink}
-                        onClick={() => handleCreateFamilyCard(candidate)}
-                        className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
-                      >
-                        {savingLink ? <Loader2 size={13} className="animate-spin" /> : <Home size={13} />}
-                        <span>Jadikan Keluarga</span>
-                      </button>
+                      {isAlreadyInFamily ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCreatingFamilyCard(false);
+                              setCreateFamilyCardSearch('');
+                              setViewMode('family');
+                              setFilter('all');
+                              setSearch('');
+                              setExpandedFamilies(prev => {
+                                const next = new Set(prev);
+                                next.add(candidate.id);
+                                return next;
+                              });
+                              setRecentlyEditedFamilyKey(candidate.id);
+                              setTimeout(() => setRecentlyEditedFamilyKey(null), 5000);
+                              setTimeout(() => {
+                                const el = document.getElementById(`family-card-${candidate.id}`) ||
+                                           document.querySelector(`[data-family-key="${candidate.id}"]`) ||
+                                           document.querySelector(`[data-member-ids*="${candidate.id}"]`);
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                              }, 300);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                            title="Buka kartu keluarga yang sudah ada"
+                          >
+                            Buka Keluarga
+                          </button>
+                          <button
+                            type="button"
+                            disabled={savingLink}
+                            onClick={() => handleCreateFamilyCard(candidate)}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
+                            title="Pisahkan jemaat ini agar memiliki Kartu Keluarga mandiri"
+                          >
+                            {savingLink ? <Loader2 size={13} className="animate-spin" /> : <Home size={13} />}
+                            <span>Jadikan Sendiri</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={savingLink}
+                          onClick={() => handleCreateFamilyCard(candidate)}
+                          className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                        >
+                          {savingLink ? <Loader2 size={13} className="animate-spin" /> : <Home size={13} />}
+                          <span>Jadikan Keluarga</span>
+                        </button>
+                      )}
                     </div>
                   );
                 });
