@@ -3,8 +3,21 @@ import * as faceapi from '@vladmandic/face-api';
 import {
   Camera, X, Loader2, CheckCircle2, AlertCircle, RefreshCw,
   Sparkles, Users, UserCheck, ShieldCheck, Volume2, VolumeX, Eye,
-  Search, Sliders, Check, Zap, HelpCircle
+  Search, Sliders, Check, Zap, HelpCircle, Image as ImageIcon,
+  Clock, CheckCheck, UserX, AlertTriangle, ArrowRight
 } from 'lucide-react';
+
+export interface FaceAuditRecord {
+  id: string; // unique audit record id
+  memberId: string;
+  memberName: string;
+  memberPhotoUrl?: string;
+  snapshotUrl: string; // captured live webcam image
+  timestamp: string;
+  confidence: number;
+  date: string;
+  matchedDistance: number;
+}
 
 interface FaceScannerProps {
   isOpen: boolean;
@@ -17,6 +30,7 @@ interface FaceScannerProps {
     address?: string;
   }>;
   presentIds: Set<string>;
+  attendanceDate?: string;
   onMarkPresent: (memberId: string) => void;
 }
 
@@ -45,8 +59,10 @@ export default function FaceAttendanceScannerModal({
   onClose,
   members,
   presentIds,
+  attendanceDate,
   onMarkPresent,
 }: FaceScannerProps) {
+  const effectiveDate = attendanceDate || new Date().toISOString().split('T')[0];
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -65,7 +81,8 @@ export default function FaceAttendanceScannerModal({
 
   // Mode: 'auto' (langsung centang) vs 'review' (tampilkan di tab antrean untuk dicentang manual 1-klik agar 100% aman)
   const [autoCheckinMode, setAutoCheckinMode] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'candidates' | 'history'>('candidates');
+  const [activeTab, setActiveTab] = useState<'candidates' | 'audit' | 'history'>('candidates');
+  const [auditFilter, setAuditFilter] = useState<'all' | 'unconfirmed' | 'confirmed'>('all');
 
   // Queue of detected attendees for review
   const [detectedCandidates, setDetectedCandidates] = useState<Array<{
@@ -75,10 +92,102 @@ export default function FaceAttendanceScannerModal({
     confidence: number;
     distance: number;
     photoUrl?: string;
+    snapshotUrl?: string;
   }>>([]);
 
   // Unregistered face quick manual checkin popup
   const [unrecognizedDetected, setUnrecognizedDetected] = useState(false);
+
+  // Persistent Audit Log per date with live snapshot thumbnails
+  const [auditRecords, setAuditRecords] = useState<FaceAuditRecord[]>(() => {
+    try {
+      const stored = localStorage.getItem(`face_attendance_audit_${effectiveDate}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Re-sync audit records if date changes
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`face_attendance_audit_${effectiveDate}`);
+      setAuditRecords(stored ? JSON.parse(stored) : []);
+    } catch {
+      setAuditRecords([]);
+    }
+  }, [effectiveDate]);
+
+  // Helper to persist new audit record
+  const saveAuditRecord = useCallback((record: Omit<FaceAuditRecord, 'id' | 'date'>) => {
+    setAuditRecords(prev => {
+      // If already recorded for this member on this date, update snapshot/confidence if newer
+      const existingIdx = prev.findIndex(r => r.memberId === record.memberId);
+      let updated: FaceAuditRecord[];
+      if (existingIdx >= 0) {
+        updated = [...prev];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          ...record,
+          date: effectiveDate,
+        };
+      } else {
+        const newRecord: FaceAuditRecord = {
+          ...record,
+          id: `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          date: effectiveDate,
+        };
+        updated = [newRecord, ...prev];
+      }
+      try {
+        localStorage.setItem(`face_attendance_audit_${effectiveDate}`, JSON.stringify(updated.slice(0, 100)));
+      } catch (err) {
+        console.warn('Failed to save face audit to localStorage:', err);
+      }
+      return updated;
+    });
+  }, [effectiveDate]);
+
+  // Helper to capture a lightweight face snapshot from the video feed
+  const captureFaceSnapshot = useCallback((box?: faceapi.Box): string => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return '';
+    try {
+      const cropCanvas = document.createElement('canvas');
+      const size = 130;
+      cropCanvas.width = size;
+      cropCanvas.height = size;
+      const ctx = cropCanvas.getContext('2d');
+      if (!ctx) return '';
+
+      if (box && box.width > 20 && box.height > 20) {
+        // Expand bounding box slightly (25% padding) for context
+        const padX = box.width * 0.25;
+        const padY = box.height * 0.25;
+        const srcX = Math.max(0, box.x - padX);
+        const srcY = Math.max(0, box.y - padY);
+        const srcW = Math.min(video.videoWidth - srcX, box.width + padX * 2);
+        const srcH = Math.min(video.videoHeight - srcY, box.height + padY * 2);
+
+        // Mirror horizontal so snapshot matches natural eye view
+        ctx.translate(size, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, size, size);
+      } else {
+        // Fallback: center crop
+        const minDim = Math.min(video.videoWidth, video.videoHeight);
+        const startX = (video.videoWidth - minDim) / 2;
+        const startY = (video.videoHeight - minDim) / 2;
+        ctx.translate(size, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, size, size);
+      }
+
+      return cropCanvas.toDataURL('image/jpeg', 0.65);
+    } catch {
+      return '';
+    }
+  }, []);
 
   const [recentScans, setRecentScans] = useState<Array<{
     id: string;
@@ -607,6 +716,18 @@ export default function FaceAttendanceScannerModal({
                       lastCheckinTimesRef.current.set(memberId, now);
 
                       const scanTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                      const snapshot = captureFaceSnapshot(box);
+
+                      // Persist live face snapshot to audit history for this date
+                      saveAuditRecord({
+                        memberId,
+                        memberName: matchedMember.name,
+                        memberPhotoUrl: matchedMember.photoUrl,
+                        snapshotUrl: snapshot,
+                        timestamp: scanTime,
+                        confidence,
+                        matchedDistance: res.distance,
+                      });
 
                       if (autoCheckinMode) {
                         // AUTO MODE: Mark present directly
@@ -639,6 +760,7 @@ export default function FaceAttendanceScannerModal({
                               confidence,
                               distance: res.distance,
                               photoUrl: matchedMember.photoUrl,
+                              snapshotUrl: snapshot,
                             },
                             ...prev.slice(0, 29),
                           ];
@@ -907,23 +1029,23 @@ export default function FaceAttendanceScannerModal({
 
           {/* Right: Tabbed Candidate Review & Live Feed (5 of 12 cols on desktop) */}
           <div className="lg:col-span-5 bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-3 sm:p-4 flex flex-col max-h-[520px] lg:max-h-full overflow-hidden">
-            {/* Header Tabs */}
+            {/* Header Tabs (3 tabs: Wajah Terdeteksi, Bukti Foto AI, Sudah Hadir) */}
             <div className="space-y-2 pb-3 border-b border-slate-200">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex-1 grid grid-cols-2 p-1 bg-slate-200/90 rounded-2xl gap-1">
+                <div className="flex-1 grid grid-cols-3 p-1 bg-slate-200/90 rounded-2xl gap-1">
                   <button
                     type="button"
                     onClick={() => setActiveTab('candidates')}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                       activeTab === 'candidates'
                         ? 'bg-white text-indigo-700 shadow-sm'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    <Users size={14} className="shrink-0" />
-                    <span className="truncate">Wajah Terdeteksi</span>
+                    <Users size={13} className="shrink-0" />
+                    <span className="truncate">Deteksi</span>
                     {detectedCandidates.filter(c => !presentIds.has(c.id)).length > 0 && (
-                      <span className="px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px] font-extrabold min-w-[18px] text-center">
+                      <span className="px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px] font-extrabold min-w-[16px] text-center">
                         {detectedCandidates.filter(c => !presentIds.has(c.id)).length}
                       </span>
                     )}
@@ -931,15 +1053,33 @@ export default function FaceAttendanceScannerModal({
 
                   <button
                     type="button"
+                    onClick={() => setActiveTab('audit')}
+                    className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      activeTab === 'audit'
+                        ? 'bg-white text-purple-700 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ImageIcon size={13} className="shrink-0" />
+                    <span className="truncate">Bukti Foto</span>
+                    {auditRecords.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-purple-600 text-white text-[10px] font-extrabold min-w-[16px] text-center">
+                        {auditRecords.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveTab('history')}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                       activeTab === 'history'
                         ? 'bg-white text-emerald-700 shadow-sm'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    <CheckCircle2 size={14} className="shrink-0" />
-                    <span className="truncate">Sudah Hadir</span>
+                    <CheckCircle2 size={13} className="shrink-0" />
+                    <span className="truncate">Hadir</span>
                     <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold">
                       {recentScans.length}
                     </span>
@@ -979,6 +1119,69 @@ export default function FaceAttendanceScannerModal({
                   </button>
                 </div>
               )}
+
+              {/* Sub-filters for Audit Tab */}
+              {activeTab === 'audit' && (
+                <div className="flex items-center justify-between gap-1 pt-0.5">
+                  <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg text-[10px] font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setAuditFilter('all')}
+                      className={`px-2 py-0.5 rounded-md cursor-pointer transition-all ${
+                        auditFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Semua ({auditRecords.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuditFilter('unconfirmed')}
+                      className={`px-2 py-0.5 rounded-md cursor-pointer transition-all flex items-center gap-1 ${
+                        auditFilter === 'unconfirmed' ? 'bg-amber-500 text-slate-950 shadow-2xs font-bold' : 'text-amber-800 hover:text-amber-950'
+                      }`}
+                    >
+                      <span>Kelewatan</span>
+                      <span className="font-bold">
+                        ({auditRecords.filter(r => !presentIds.has(r.memberId)).length})
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuditFilter('confirmed')}
+                      className={`px-2 py-0.5 rounded-md cursor-pointer transition-all ${
+                        auditFilter === 'confirmed' ? 'bg-emerald-600 text-white shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Sinkron ({auditRecords.filter(r => presentIds.has(r.memberId)).length})
+                    </button>
+                  </div>
+
+                  {auditRecords.some(r => !presentIds.has(r.memberId)) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const unconfirmed = auditRecords.filter(r => !presentIds.has(r.memberId));
+                        unconfirmed.forEach(r => onMarkPresent(r.memberId));
+                        playChime(true);
+                        setRecentScans(prev => [
+                          ...unconfirmed.map(r => ({
+                            id: r.memberId,
+                            name: r.memberName,
+                            time: r.timestamp,
+                            confidence: r.confidence,
+                            alreadyPresent: false,
+                          })),
+                          ...prev,
+                        ]);
+                      }}
+                      className="text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2 py-1 rounded-lg cursor-pointer transition-colors"
+                      title="Centang semua jemaat yang terfoto kamera tapi belum tercentang di absensi"
+                    >
+                      + Sinkronkan Semua
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Tab 1: Candidates detected by AI for confirmation */}
@@ -991,7 +1194,7 @@ export default function FaceAttendanceScannerModal({
                     </div>
                     <p className="text-xs font-bold text-slate-700">Menunggu Wajah Jemaat...</p>
                     <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
-                      Arahkan kamera ke jemaat. Nama yang terdeteksi akan masuk ke daftar ini untuk Anda centang dengan 1-klik tanpa resiko salah nama.
+                      Arahkan kamera ke jemaat. Nama & bukti foto live akan langsung tertangkap untuk Anda centang dengan aman tanpa resiko salah nama.
                     </p>
                   </div>
                 ) : (
@@ -1002,25 +1205,45 @@ export default function FaceAttendanceScannerModal({
                         key={candidate.id}
                         className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-indigo-300 hover:shadow-md transition-all flex items-center justify-between gap-3"
                       >
-                        {/* Member Avatar & Details */}
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {candidate.photoUrl ? (
-                            <img
-                              src={candidate.photoUrl}
-                              alt=""
-                              className="w-11 h-11 rounded-full object-cover border-2 border-indigo-100 shrink-0 shadow-2xs"
-                            />
-                          ) : (
-                            <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs">
-                              {candidate.name.charAt(0)}
-                            </div>
-                          )}
+                        {/* Member Snapshot & Details */}
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {/* Live Snapshot vs Profile Photo */}
+                          <div className="relative shrink-0 flex items-center">
+                            {candidate.snapshotUrl ? (
+                              <img
+                                src={candidate.snapshotUrl}
+                                alt="Live Snapshot"
+                                className="w-11 h-11 rounded-xl object-cover border-2 border-indigo-400 shadow-xs"
+                                title="Foto Kamera Live"
+                              />
+                            ) : candidate.photoUrl ? (
+                              <img
+                                src={candidate.photoUrl}
+                                alt=""
+                                className="w-11 h-11 rounded-xl object-cover border-2 border-indigo-100 shadow-xs"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                                {candidate.name.charAt(0)}
+                              </div>
+                            )}
+
+                            {candidate.photoUrl && candidate.snapshotUrl && (
+                              <img
+                                src={candidate.photoUrl}
+                                alt="Profil"
+                                className="w-5 h-5 rounded-full object-cover border border-white shadow-xs absolute -bottom-1 -right-1"
+                                title="Foto Database Profil"
+                              />
+                            )}
+                          </div>
+
                           <div className="min-w-0 flex-1">
                             <h5 className="text-xs font-bold text-slate-900 truncate" title={candidate.name}>
                               {candidate.name}
                             </h5>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
-                              <span>Pukul {candidate.time}</span>
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+                              <span>{candidate.time}</span>
                               <span>·</span>
                               <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                                 {candidate.confidence}% Cocok
@@ -1070,7 +1293,151 @@ export default function FaceAttendanceScannerModal({
               </div>
             )}
 
-            {/* Tab 2: History of checked in attendees */}
+            {/* Tab 2: Bukti Foto AI (Audit History with Live Camera Screenshot vs Profile comparison) */}
+            {activeTab === 'audit' && (
+              <div className="flex-1 overflow-y-auto py-2.5 space-y-2 pr-0.5">
+                {auditRecords.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 px-4">
+                    <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-500 mx-auto mb-3 flex items-center justify-center">
+                      <ImageIcon size={24} />
+                    </div>
+                    <p className="text-xs font-bold text-slate-700">Belum Ada Bukti Foto Hari Ini</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
+                      Setiap kali wajah jemaat terdeteksi di kamera pada tanggal {effectiveDate}, AI otomatis mengambil screenshot live wajahnya untuk disimpan sebagai bukti verifikasi kehadiran.
+                    </p>
+                  </div>
+                ) : (
+                  auditRecords
+                    .filter(record => {
+                      const isPresent = presentIds.has(record.memberId);
+                      if (auditFilter === 'unconfirmed') return !isPresent;
+                      if (auditFilter === 'confirmed') return isPresent;
+                      return true;
+                    })
+                    .map(record => {
+                      const isPresent = presentIds.has(record.memberId);
+                      return (
+                        <div
+                          key={record.id}
+                          className={`p-3 rounded-2xl bg-white border transition-all shadow-2xs hover:shadow-md ${
+                            !isPresent
+                              ? 'border-amber-300 bg-amber-50/20'
+                              : 'border-slate-200/90'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            {/* Visual Comparison: Live Camera Snapshot vs Database Photo */}
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {/* Live Snapshot from Camera */}
+                                <div className="text-center">
+                                  <div className="relative">
+                                    {record.snapshotUrl ? (
+                                      <img
+                                        src={record.snapshotUrl}
+                                        alt="Live Face"
+                                        className="w-12 h-12 rounded-xl object-cover border-2 border-indigo-500 shadow-xs"
+                                      />
+                                    ) : (
+                                      <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center text-slate-400">
+                                        <Camera size={16} />
+                                      </div>
+                                    )}
+                                    <span className="absolute -top-1.5 -left-1.5 bg-indigo-600 text-white text-[8px] font-extrabold px-1 rounded shadow-2xs">
+                                      LIVE
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] text-slate-500 font-medium">Kamera</span>
+                                </div>
+
+                                <ArrowRight size={12} className="text-slate-300 shrink-0" />
+
+                                {/* Registered Database Photo */}
+                                <div className="text-center">
+                                  <div className="relative">
+                                    {record.memberPhotoUrl ? (
+                                      <img
+                                        src={record.memberPhotoUrl}
+                                        alt="Database Photo"
+                                        className="w-12 h-12 rounded-xl object-cover border-2 border-slate-200 shadow-xs"
+                                      />
+                                    ) : (
+                                      <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-bold text-xs">
+                                        {record.memberName.charAt(0)}
+                                      </div>
+                                    )}
+                                    <span className="absolute -top-1.5 -right-1.5 bg-slate-700 text-white text-[8px] font-extrabold px-1 rounded shadow-2xs">
+                                      DB
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] text-slate-500 font-medium">Profil</span>
+                                </div>
+                              </div>
+
+                              {/* Member info & Match stats */}
+                              <div className="min-w-0 flex-1">
+                                <h5 className="text-xs font-bold text-slate-900 truncate" title={record.memberName}>
+                                  {record.memberName}
+                                </h5>
+                                <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                                  <span className="flex items-center gap-1">
+                                    <Clock size={10} /> {record.timestamp}
+                                  </span>
+                                  <span>·</span>
+                                  <span className="text-emerald-700 font-bold bg-emerald-50 px-1 rounded border border-emerald-200">
+                                    {record.confidence}% Cocok
+                                  </span>
+                                </div>
+                                {!isPresent && (
+                                  <p className="text-[10px] text-amber-700 font-medium mt-1 flex items-center gap-1">
+                                    <AlertTriangle size={10} className="text-amber-500 shrink-0" />
+                                    <span>Terekam kamera tapi belum tercentang di absensi</span>
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Status & 1-Click Recheck Action */}
+                            <div className="shrink-0 flex items-center gap-2">
+                              {isPresent ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                                  <CheckCheck size={13} />
+                                  <span>Sinkron ✓</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onMarkPresent(record.memberId);
+                                    playChime(true);
+                                    setRecentScans(prev => [
+                                      {
+                                        id: record.memberId,
+                                        name: record.memberName,
+                                        time: record.timestamp,
+                                        confidence: record.confidence,
+                                        alreadyPresent: false,
+                                      },
+                                      ...prev,
+                                    ]);
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-xs hover:shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                                  title="Jadikan Hadir di Absensi"
+                                >
+                                  <Check size={13} />
+                                  <span>+ Centang</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            )}
+
+            {/* Tab 3: History of checked in attendees */}
             {activeTab === 'history' && (
               <div className="flex-1 overflow-y-auto py-2.5 space-y-1.5 pr-0.5">
                 {recentScans.length === 0 ? (

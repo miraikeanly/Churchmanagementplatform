@@ -2932,6 +2932,7 @@ function DailyInput({
         onClose={() => setShowFaceScanner(false)}
         members={members}
         presentIds={present}
+        attendanceDate={date}
         onMarkPresent={handleFaceScanPresent}
       />
     </div>
