@@ -280,11 +280,13 @@ export default function JemaatPage() {
             transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="mb-3 sm:mb-5 mt-1 sm:mt-2 text-center"
           >
-            <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.28em] text-white/90 drop-shadow-sm">
-              Gereja Bethel Indonesia
+            <p
+              className="font-cursive text-2xl sm:text-3xl md:text-4xl text-amber-200/95 font-medium mb-1 drop-shadow-sm"
+              style={{ fontFamily: 'Caveat, cursive' }}
+            >
+              Selamat Datang di
             </p>
             <h1 className="font-display text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.14]">
-              Selamat Datang di <br className="hidden sm:inline" />
               <span className="bg-gradient-to-r from-sky-200 via-blue-100 to-amber-200 bg-clip-text text-transparent drop-shadow-sm">
                 GBI Jelambar Timur
               </span>
