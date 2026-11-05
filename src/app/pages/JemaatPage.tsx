@@ -673,8 +673,11 @@ export default function JemaatPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
           <FadeInSection>
             <div className="text-center mb-10 sm:mb-14">
-              <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.28em] text-white/90 mb-2 drop-shadow-sm flex items-center justify-center gap-2">
-                <Music size={14} className="text-emerald-400" />
+              <p
+                className="text-2xl sm:text-3xl text-emerald-400 mb-1 flex items-center justify-center gap-2 drop-shadow-sm"
+                style={{ fontFamily: 'Caveat, cursive' }}
+              >
+                <Music size={18} className="text-emerald-400" />
                 <span>Lighthouse Music</span>
               </p>
               <h2 className="font-display text-2xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight">
