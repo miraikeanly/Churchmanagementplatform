@@ -434,7 +434,7 @@ export default function JemaatPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <FadeInSection>
               <div className="text-center mb-8 sm:mb-10">
-                <span className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-semibold mb-1 drop-shadow-sm" style={{ fontFamily: 'Caveat, cursive' }}>Pengumuman</span>
+                <span className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-normal mb-1 drop-shadow-sm px-2" style={{ fontFamily: 'Caveat, cursive' }}>Pengumuman</span>
                 <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 tracking-tight">Info & Event Terkini</h2>
               </div>
             </FadeInSection>
@@ -600,7 +600,7 @@ export default function JemaatPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <FadeInSection>
             <div className="text-center mb-12 sm:mb-14">
-              <span className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-semibold mb-1 drop-shadow-sm" style={{ fontFamily: 'Caveat, cursive' }}>Jadwal</span>
+              <span className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-normal mb-1 drop-shadow-sm px-2" style={{ fontFamily: 'Caveat, cursive' }}>Jadwal</span>
               <h2 className="font-display text-3xl sm:text-4xl font-bold text-gray-900 mb-4">Ibadah & Kegiatan</h2>
               <p className="text-gray-500 max-w-xl mx-auto text-xs sm:text-base">Bergabunglah bersama kami dalam berbagai kegiatan ibadah yang tersedia setiap minggu.</p>
             </div>
@@ -676,7 +676,7 @@ export default function JemaatPage() {
           <FadeInSection>
             <div className="text-center mb-10 sm:mb-14">
               <p
-                className="font-cursive text-3xl sm:text-4xl text-emerald-400 mb-1 drop-shadow-sm font-semibold"
+                className="font-cursive text-3xl sm:text-4xl text-emerald-400 mb-1 drop-shadow-sm font-normal px-2 inline-block"
                 style={{ fontFamily: 'Caveat, cursive' }}
               >
                 Lighthouse Music
@@ -761,7 +761,7 @@ export default function JemaatPage() {
         <div className="max-w-6xl mx-auto px-6 relative z-10">
           <FadeInSection>
             <div className="text-center mb-12">
-              <span className="font-cursive inline-block text-blue-300 text-3xl sm:text-4xl font-semibold mb-1 drop-shadow-sm" style={{ fontFamily: 'Caveat, cursive' }}>Komsel</span>
+              <span className="font-cursive inline-block text-blue-300 text-3xl sm:text-4xl font-normal mb-1 drop-shadow-sm px-2" style={{ fontFamily: 'Caveat, cursive' }}>Komsel</span>
               <h2 className="font-display text-3xl sm:text-4xl font-bold text-white mb-4">Kelompok Sel</h2>
               <p className="text-blue-200 max-w-xl mx-auto leading-relaxed">
                 Bergabunglah dengan kelompok kecil kami di mana Anda dapat belajar firman Tuhan, berdoa bersama, dan saling mendukung.
@@ -800,7 +800,7 @@ export default function JemaatPage() {
         <div className="max-w-6xl mx-auto px-6">
           <FadeInSection>
             <div className="text-center mb-12">
-              <span className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-semibold mb-1 drop-shadow-sm" style={{ fontFamily: 'Caveat, cursive' }}>
+              <span className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-normal mb-1 drop-shadow-sm px-2" style={{ fontFamily: 'Caveat, cursive' }}>
                 Temukan Lokasi
               </span>
               <h2 className="font-display text-3xl sm:text-4xl font-bold text-gray-900 mb-3">Kunjungi Kami di GBI Jelambar Timur</h2>

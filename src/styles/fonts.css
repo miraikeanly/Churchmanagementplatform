@@ -10,4 +10,5 @@
 
 .font-cursive {
   font-family: 'Caveat', cursive, system-ui, sans-serif !important;
+  font-weight: 400 !important;
 }

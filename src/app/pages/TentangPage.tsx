@@ -313,7 +313,7 @@ export default function TentangPage() {
           <FadeIn>
             <div className="text-center mb-16 sm:mb-20">
               <span
-                className="font-cursive inline-block text-blue-300 text-3xl sm:text-4xl font-semibold mb-2 drop-shadow-sm"
+                className="font-cursive inline-block text-blue-300 text-3xl sm:text-4xl font-normal mb-2 drop-shadow-sm px-2"
                 style={{ fontFamily: 'Caveat, cursive' }}
               >
                 Tim Kami
