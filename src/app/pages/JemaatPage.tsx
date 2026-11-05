@@ -281,7 +281,7 @@ export default function JemaatPage() {
             className="mb-3 sm:mb-5 mt-1 sm:mt-2 text-center"
           >
             <p
-              className="font-cursive text-2xl sm:text-3xl md:text-4xl text-amber-200/95 font-medium mb-1 drop-shadow-sm"
+              className="font-cursive text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-amber-200/95 font-semibold mb-1 sm:mb-2 drop-shadow-md"
               style={{ fontFamily: 'Caveat, cursive' }}
             >
               Selamat Datang di

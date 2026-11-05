@@ -306,8 +306,13 @@ export default function TentangPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
 
           <FadeIn>
-            <div className="text-center mb-20">
-              <span className="inline-block text-blue-300 text-xs font-bold uppercase tracking-[0.2em] mb-4">Tim Kami</span>
+            <div className="text-center mb-16 sm:mb-20">
+              <span
+                className="font-cursive inline-block text-blue-300 text-3xl sm:text-4xl font-semibold mb-2 drop-shadow-sm"
+                style={{ fontFamily: 'Caveat, cursive' }}
+              >
+                Tim Kami
+              </span>
               <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">Hamba-Hamba Tuhan</h2>
               <p className="text-white/40 text-sm max-w-md mx-auto">Mereka yang dipanggil untuk melayani dan memimpin jemaat GBI Jelambar Timur</p>
             </div>
@@ -324,50 +329,97 @@ export default function TentangPage() {
             </div>
           ) : (
             <div className="space-y-20">
-              {tiers.map((tier, ti) => {
-                const isGembalaSidang = tier.key === 'gembala_sidang';
-
-                return (
-                  <FadeIn key={tier.key} delay={ti * 0.05}>
-                    <div>
-                      {/* Tier title header without capsule/border (clean, bold white uppercase & script accent) */}
-                      <div className="flex items-center gap-4 sm:gap-6 mb-8 sm:mb-10">
-                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/10" />
-                        <div className="text-center flex flex-col items-center">
-                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.25em] text-blue-300/90 mb-1">
-                            {isGembalaSidang ? 'Pendiri & Perintis Pelayanan' : 'Struktur Pelayanan'}
-                          </span>
-                          <h3 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-wide">
-                            {TIER_LABELS[tier.key]}
-                          </h3>
-                        </div>
-                        <div className="flex-1 h-px bg-gradient-to-r from-white/10 via-white/20 to-transparent" />
+              {/* ── 1. Gembala Sidang / Senior Section (Gina Jaya & Poppy) ── */}
+              {tiers.filter(t => t.key === 'gembala_sidang').map((tier) => (
+                <FadeIn key={tier.key}>
+                  <div className="mb-20">
+                    <div className="flex items-center gap-4 sm:gap-6 mb-8 sm:mb-10">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/10" />
+                      <div className="text-center flex flex-col items-center">
+                        <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.25em] text-blue-300/90 mb-1">
+                          Pendiri & Perintis Pelayanan
+                        </span>
+                        <h3
+                          className="font-cursive text-3xl sm:text-4xl md:text-5xl font-bold text-amber-200/95 tracking-wide drop-shadow-sm"
+                          style={{ fontFamily: 'Caveat, cursive' }}
+                        >
+                          {TIER_LABELS[tier.key]}
+                        </h3>
                       </div>
-
-                      {/* Cards */}
-                      {tier.key === 'koordinator' ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                          {tier.members.map((m, i) => (
-                            <FadeIn key={m.id} delay={i * 0.04}>
-                              <PersonCard member={m} size="sm" />
-                            </FadeIn>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="space-y-8">
-                          {tier.members.map((m, i) => (
-                            <FadeIn key={m.id} delay={i * 0.08}>
-                              <div className="max-w-5xl mx-auto">
-                                <PersonCard member={m} size={tier.cardSize} />
-                              </div>
-                            </FadeIn>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex-1 h-px bg-gradient-to-r from-white/10 via-white/20 to-transparent" />
                     </div>
-                  </FadeIn>
-                );
-              })}
+
+                    <div className="space-y-8">
+                      {tier.members.map((m, i) => (
+                        <FadeIn key={m.id} delay={i * 0.08}>
+                          <div className="max-w-5xl mx-auto">
+                            <PersonCard member={m} size={tier.cardSize} />
+                          </div>
+                        </FadeIn>
+                      ))}
+                    </div>
+                  </div>
+                </FadeIn>
+              ))}
+
+              {/* ── 2. Struktur Pelayanan Section Header (Di bawah container Gina Jaya & Poppy) ── */}
+              {tiers.some(t => t.key !== 'gembala_sidang') && (
+                <FadeIn>
+                  <div className="pt-8 mb-12 sm:mb-16">
+                    <div className="flex items-center gap-4 sm:gap-6">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-blue-400/20" />
+                      <div className="text-center px-4">
+                        <span className="inline-block text-xs sm:text-sm font-extrabold uppercase tracking-[0.3em] text-blue-300">
+                          STRUKTUR PELAYANAN
+                        </span>
+                      </div>
+                      <div className="flex-1 h-px bg-gradient-to-r from-blue-400/20 via-blue-500/40 to-transparent" />
+                    </div>
+                  </div>
+                </FadeIn>
+              )}
+
+              {/* ── 3. Jajaran Tim Pelayanan (Penerus Gembala, Wakil Gembala, Pastoral, Koordinator) ── */}
+              {tiers.filter(t => t.key !== 'gembala_sidang').map((tier, ti) => (
+                <FadeIn key={tier.key} delay={ti * 0.05}>
+                  <div>
+                    {/* Tier title in cursive Caveat font */}
+                    <div className="flex items-center gap-4 sm:gap-6 mb-8 sm:mb-10">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/15 to-white/5" />
+                      <div className="text-center flex flex-col items-center">
+                        <h3
+                          className="font-cursive text-3xl sm:text-4xl md:text-5xl font-bold text-white tracking-wide drop-shadow-sm"
+                          style={{ fontFamily: 'Caveat, cursive' }}
+                        >
+                          {TIER_LABELS[tier.key]}
+                        </h3>
+                      </div>
+                      <div className="flex-1 h-px bg-gradient-to-r from-white/5 via-white/15 to-transparent" />
+                    </div>
+
+                    {/* Cards */}
+                    {tier.key === 'koordinator' ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                        {tier.members.map((m, i) => (
+                          <FadeIn key={m.id} delay={i * 0.04}>
+                            <PersonCard member={m} size="sm" />
+                          </FadeIn>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {tier.members.map((m, i) => (
+                          <FadeIn key={m.id} delay={i * 0.08}>
+                            <div className="max-w-5xl mx-auto">
+                              <PersonCard member={m} size={tier.cardSize} />
+                            </div>
+                          </FadeIn>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </FadeIn>
+              ))}
             </div>
           )}
         </div>
