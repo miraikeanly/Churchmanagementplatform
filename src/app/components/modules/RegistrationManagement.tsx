@@ -293,8 +293,13 @@ export default function RegistrationManagement() {
   };
 
   const getPublicFormUrl = (slug: string) => {
-    // If running in development on localhost, default fallback can point to actual deployed church domain or current origin
-    const origin = window.location.origin;
+    // If running in development on localhost, default fallback points to actual deployed church domain so mobile camera scan always works
+    const isLocalhost = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.protocol === 'file:'
+    );
+    const origin = isLocalhost ? 'https://www.gbijelambartimur.com' : window.location.origin;
     return `${origin}/form/${slug}`;
   };
 

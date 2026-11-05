@@ -3,7 +3,12 @@ import { requireUser } from '../_lib/guard.js';
 import { sendJson, sendError } from '../_lib/http.js';
 
 export default async function handler(req, res) {
-  if (!(await requireUser(req, res))) return;
+  const { prefix, pattern } = req.query;
+  const isPublicPattern =
+    (pattern && String(pattern).startsWith('custom_form:')) ||
+    (prefix && String(prefix).startsWith('custom_form:'));
+
+  if (!isPublicPattern && !(await requireUser(req, res))) return;
 
   if (req.method === 'GET') {
     // `pattern` is a full SQL LIKE pattern (wildcards allowed anywhere); `prefix` is the legacy form.

@@ -40,6 +40,7 @@ export default function CustomFormPage() {
       setLoading(true);
       setError('');
       try {
+        // Try direct key query first
         const { data, error: err } = await supabase
           .from('kv_store_561004a0')
           .select('key, value')
@@ -47,10 +48,24 @@ export default function CustomFormPage() {
           .maybeSingle();
 
         if (err) throw err;
-        if (!data || !data.value) {
-          setError('Formulir pendaftaran tidak ditemukan atau sudah ditutup.');
-        } else {
+        if (data && data.value) {
           setForm(data.value as CustomEventForm);
+        } else {
+          // Fallback: search all custom forms to match by slug or id (case-insensitive or partial match)
+          const { data: allForms } = await supabase
+            .from('kv_store_561004a0')
+            .select('key, value')
+            .like('key', 'custom_form:%');
+
+          const found = (allForms ?? [])
+            .map((r: any) => r.value as CustomEventForm)
+            .find(f => f && (f.slug === slug || f.id === slug || f.slug?.toLowerCase() === slug.toLowerCase()));
+
+          if (found) {
+            setForm(found);
+          } else {
+            setError('Formulir pendaftaran tidak ditemukan atau sudah ditutup.');
+          }
         }
       } catch (e: any) {
         setError(e.message || 'Gagal memuat formulir.');

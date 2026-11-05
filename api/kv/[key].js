@@ -119,11 +119,25 @@ function computeDiff(oldVal, newVal) {
 }
 
 export default async function handler(req, res) {
-  const user = await requireUser(req, res);
-  if (!user) return;
-
   const { key } = req.query;
   if (!key) return sendError(res, 400, 'Key required');
+
+  // Allow public access for custom event registration forms & submissions
+  const isPublicFormKey = typeof key === 'string' && (
+    key.startsWith('custom_form:') ||
+    key.startsWith('custom_form_sub:')
+  );
+
+  let user = null;
+  if (!isPublicFormKey) {
+    user = await requireUser(req, res);
+    if (!user) return;
+  } else {
+    // If user is logged in, attach their info for audit, but don't block public attendees
+    try {
+      user = await requireUser(req, res, { optional: true });
+    } catch (_) {}
+  }
 
   if (req.method === 'GET') {
     const records = await sql`SELECT value FROM app_kv WHERE key = ${key}`;
@@ -201,18 +215,20 @@ export default async function handler(req, res) {
       }
     }
 
-    await logActivity({
-      userId: user.id,
-      action,
-      target,
-      detail: {
-        key,
-        entityName,
-        summary,
-        changes,
-        isNew,
-      },
-    });
+    if (user?.id) {
+      await logActivity({
+        userId: user.id,
+        action,
+        target,
+        detail: {
+          key,
+          entityName,
+          summary,
+          changes,
+          isNew,
+        },
+      });
+    }
 
     return sendJson(res, 200, { success: true });
   }
