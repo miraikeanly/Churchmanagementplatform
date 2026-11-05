@@ -15,6 +15,10 @@ import {
   AlertCircle,
   Share2,
   Check,
+  Upload,
+  FileText,
+  Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 
 export default function CustomFormPage() {
@@ -76,6 +80,29 @@ export default function CustomFormPage() {
       : [...currentList, option];
 
     handleInputChange(questionId, nextList);
+  };
+
+  const handleFileUpload = (questionId: string, file: File | null) => {
+    if (!file) {
+      handleInputChange(questionId, null);
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran file maksimal 5MB. Silakan pilih foto atau file yang lebih kecil.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      handleInputChange(questionId, {
+        fileName: file.name,
+        fileSize: (file.size / 1024).toFixed(1) + ' KB',
+        fileType: file.type,
+        dataUrl: reader.result as string,
+      });
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -466,6 +493,66 @@ export default function CustomFormPage() {
                               </label>
                             );
                           })}
+                        </div>
+                      )}
+
+                      {q.type === 'file_upload' && (
+                        <div>
+                          {value && typeof value === 'object' && value.dataUrl ? (
+                            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                {value.fileType?.startsWith('image/') ? (
+                                  <img
+                                    src={value.dataUrl}
+                                    alt="Preview"
+                                    className="w-14 h-14 object-cover rounded-xl border border-emerald-200 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                    <FileText size={22} />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-slate-900 truncate">
+                                    {value.fileName || 'Bukti Berhasil Diupload'}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {value.fileSize || 'Ukuran valid'} &bull; <span className="text-emerald-700 font-bold">Terlampir</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleInputChange(q.id, null)}
+                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                title="Hapus file"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="block border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/50 hover:bg-blue-50/20 rounded-2xl p-6 text-center cursor-pointer transition-all group">
+                              <input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={e => {
+                                  const file = e.target.files?.[0] || null;
+                                  handleFileUpload(q.id, file);
+                                }}
+                                className="hidden"
+                              />
+                              <div className="w-12 h-12 rounded-2xl bg-slate-100 group-hover:bg-blue-100 text-slate-500 group-hover:text-blue-600 flex items-center justify-center mx-auto mb-2 transition-colors">
+                                <Upload size={22} />
+                              </div>
+                              <span className="text-xs font-bold text-slate-700 group-hover:text-blue-600 block">
+                                {q.isPaymentProof ? 'Klik untuk Upload Bukti Pembayaran / Transfer' : 'Klik untuk Pilih Foto / File'}
+                              </span>
+                              <span className="text-[11px] text-slate-400 mt-1 block">
+                                Format gambar (JPG, PNG) atau dokumen PDF (Maks. 5MB)
+                              </span>
+                            </label>
+                          )}
                         </div>
                       )}
                     </div>

@@ -30,6 +30,9 @@ import {
   Tent,
   Cross,
   Gift,
+  Upload,
+  CreditCard,
+  FileText,
 } from 'lucide-react';
 
 interface Props {
@@ -273,6 +276,7 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
       case 'dropdown':   return <ChevronDown size={16} className="text-amber-500" />;
       case 'date':       return <Calendar size={16} className="text-rose-500" />;
       case 'time':       return <Clock size={16} className="text-sky-500" />;
+      case 'file_upload': return <Upload size={16} className="text-emerald-600" />;
     }
   };
 
@@ -610,6 +614,20 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
                     </div>
                   )}
 
+                  {q.type === 'file_upload' && (
+                    <div className="border-2 border-dashed border-emerald-300 bg-emerald-50/50 rounded-2xl p-5 max-w-md text-center">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+                        <Upload size={18} />
+                      </div>
+                      <p className="text-xs font-bold text-slate-800">
+                        {q.isPaymentProof ? 'Upload Bukti Transfer / Pembayaran Acara' : 'Area Upload Foto / File Jemaat'}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Peserta dapat mengupload foto bukti transfer pembayaran (JPG, PNG, PDF maks 5MB) langsung dari HP atau Laptop.
+                      </p>
+                    </div>
+                  )}
+
                   {['radio', 'checkbox', 'dropdown'].includes(q.type) && (
                     <div className="space-y-2.5">
                       {(q.options || ['Opsi 1']).map((opt, optIdx) => (
@@ -703,6 +721,19 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
 
                     <div className="w-px h-5 bg-slate-200 mx-1" />
 
+                    {q.type === 'file_upload' && (
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                        <CreditCard size={13} />
+                        <span>Tandai Bukti Pembayaran Acara</span>
+                        <input
+                          type="checkbox"
+                          checked={q.isPaymentProof ?? true}
+                          onChange={e => updateQuestion(q.id, { isPaymentProof: e.target.checked })}
+                          className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                      </label>
+                    )}
+
                     <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600">
                       <span>Wajib diisi</span>
                       <input
@@ -721,7 +752,7 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
       </div>
 
       {/* Floating Add Question Bar */}
-      <div className="mt-6 flex items-center justify-center gap-2">
+      <div className="mt-6 flex items-center justify-center gap-2 flex-wrap">
         <button
           type="button"
           onClick={() => addQuestion('short_text')}
@@ -729,6 +760,26 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
         >
           <Plus size={18} />
           <span>Tambah Pertanyaan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            const newQ: FormQuestion = {
+              id: crypto.randomUUID(),
+              title: 'Upload Bukti Pembayaran / Transfer',
+              type: 'file_upload',
+              required: false,
+              isPaymentProof: true,
+              description: 'Format foto JPG, PNG, atau file PDF (Maksimal 5MB).',
+            };
+            setQuestions(prev => [...prev, newQ]);
+            setActiveQuestionId(newQ.id);
+          }}
+          className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-300 shadow-sm transition-all cursor-pointer hover:scale-105"
+        >
+          <CreditCard size={15} className="text-emerald-600" />
+          <span>+ Bukti Pembayaran (Opsional)</span>
         </button>
 
         <button

@@ -5,7 +5,8 @@ export type QuestionType =
   | 'checkbox'
   | 'dropdown'
   | 'date'
-  | 'time';
+  | 'time'
+  | 'file_upload';
 
 export interface FormQuestion {
   id: string;
@@ -15,6 +16,7 @@ export interface FormQuestion {
   options?: string[]; // for radio, checkbox, dropdown
   description?: string;
   placeholder?: string;
+  isPaymentProof?: boolean; // marks this question as payment proof
 }
 
 export type FormTheme = 'standard' | 'natal' | 'paskah' | 'retret' | 'youth' | 'custom';
@@ -44,11 +46,12 @@ export interface FormSubmission {
 }
 
 export const QUESTION_TYPES = [
-  { value: 'short_text', label: 'Jawaban singkat', icon: 'Minus' },
-  { value: 'paragraph',  label: 'Paragraf',        icon: 'AlignLeft' },
-  { value: 'radio',      label: 'Pilihan ganda',   icon: 'CheckCircle2' },
-  { value: 'checkbox',   label: 'Kotak centang',   icon: 'CheckSquare' },
-  { value: 'dropdown',   label: 'Drop-down',       icon: 'ChevronDown' },
-  { value: 'date',       label: 'Tanggal',         icon: 'Calendar' },
-  { value: 'time',       label: 'Waktu',           icon: 'Clock' },
+  { value: 'short_text',   label: 'Jawaban singkat', icon: 'Minus' },
+  { value: 'paragraph',    label: 'Paragraf',        icon: 'AlignLeft' },
+  { value: 'radio',        label: 'Pilihan ganda',   icon: 'CheckCircle2' },
+  { value: 'checkbox',     label: 'Kotak centang',   icon: 'CheckSquare' },
+  { value: 'dropdown',     label: 'Drop-down',       icon: 'ChevronDown' },
+  { value: 'date',         label: 'Tanggal',         icon: 'Calendar' },
+  { value: 'time',         label: 'Waktu',           icon: 'Clock' },
+  { value: 'file_upload',  label: 'Upload Bukti Pembayaran / Foto', icon: 'Upload' },
 ] as const;

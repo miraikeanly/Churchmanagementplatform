@@ -21,6 +21,9 @@ import {
   Share2,
   Eye,
   X,
+  CreditCard,
+  Image as ImageIcon,
+  FileText,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import * as XLSX from 'xlsx';
@@ -80,7 +83,7 @@ export default function RegistrationManagement() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState('');
+  const [viewingProof, setViewingProof] = useState<{ title: string; dataUrl: string; fileName: string; isImage: boolean } | null>(null);
 
   // ── Load All Data ──────────────────────────────────────────────────────────
   const loadAll = async () => {
@@ -212,12 +215,20 @@ export default function RegistrationManagement() {
         // Map answers by question title
         relevantForm.questions.forEach(q => {
           const ans = sub.answers[q.id];
-          row[q.title] = Array.isArray(ans) ? ans.join(', ') : (ans ?? '-');
+          if (ans && typeof ans === 'object' && ans.fileName) {
+            row[q.title] = `[File: ${ans.fileName} (${ans.fileSize || 'Lampiran'})]`;
+          } else {
+            row[q.title] = Array.isArray(ans) ? ans.join(', ') : (ans ?? '-');
+          }
         });
       } else {
         // Generic flat map
         Object.entries(sub.answers || {}).forEach(([qId, val]) => {
-          row[`Jawaban (${qId})`] = Array.isArray(val) ? val.join(', ') : (val ?? '-');
+          if (val && typeof val === 'object' && val.fileName) {
+            row[`Jawaban (${qId})`] = `[File: ${val.fileName}]`;
+          } else {
+            row[`Jawaban (${qId})`] = Array.isArray(val) ? val.join(', ') : (val ?? '-');
+          }
         });
       }
 
@@ -280,8 +291,14 @@ export default function RegistrationManagement() {
     } catch { return iso; }
   };
 
+  const getPublicFormUrl = (slug: string) => {
+    // If running in development on localhost, default fallback can point to actual deployed church domain or current origin
+    const origin = window.location.origin;
+    return `${origin}/form/${slug}`;
+  };
+
   const copyFormLink = (slug: string) => {
-    const fullUrl = `${window.location.origin}/form/${slug}`;
+    const fullUrl = getPublicFormUrl(slug);
     navigator.clipboard.writeText(fullUrl);
     setCopiedSlug(slug);
     setTimeout(() => setCopiedSlug(null), 2500);
@@ -655,6 +672,77 @@ export default function RegistrationManagement() {
                               {Object.entries(sub.answers || {}).map(([qId, val]) => {
                                 const questionObj = relevantForm?.questions.find(q => q.id === qId);
                                 const qTitle = questionObj?.title || qId;
+                                const isFile = val && typeof val === 'object' && val.dataUrl;
+
+                                if (isFile) {
+                                  const isImg = val.fileType?.startsWith('image/') || val.dataUrl?.startsWith('data:image/');
+                                  return (
+                                    <div key={qId} className="p-3.5 rounded-xl bg-white border border-emerald-200/90 shadow-2xs sm:col-span-2">
+                                      <div className="flex items-center justify-between gap-2 mb-2">
+                                        <div className="flex items-center gap-1.5">
+                                          <CreditCard size={14} className="text-emerald-600" />
+                                          <p className="text-xs font-bold text-gray-700">{qTitle}</p>
+                                        </div>
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                          Bukti Terlampir
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                        {isImg ? (
+                                          <img
+                                            src={val.dataUrl}
+                                            alt={val.fileName || 'Bukti'}
+                                            className="w-16 h-16 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                                            onClick={() => setViewingProof({
+                                              title: qTitle,
+                                              dataUrl: val.dataUrl,
+                                              fileName: val.fileName || 'Bukti Pembayaran',
+                                              isImage: true,
+                                            })}
+                                          />
+                                        ) : (
+                                          <div className="w-14 h-14 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                            <FileText size={24} />
+                                          </div>
+                                        )}
+
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-bold text-gray-900 truncate">
+                                            {val.fileName || 'Bukti Pembayaran'}
+                                          </p>
+                                          <p className="text-[11px] text-gray-400 mt-0.5">
+                                            {val.fileSize || 'Ukuran valid'}
+                                          </p>
+                                          <div className="mt-2 flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => setViewingProof({
+                                                title: qTitle,
+                                                dataUrl: val.dataUrl,
+                                                fileName: val.fileName || 'Bukti Pembayaran',
+                                                isImage: isImg,
+                                              })}
+                                              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                                            >
+                                              <Eye size={12} />
+                                              <span>Lihat Bukti Foto</span>
+                                            </button>
+                                            <a
+                                              href={val.dataUrl}
+                                              download={val.fileName || 'bukti-pembayaran'}
+                                              className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1 ml-2"
+                                            >
+                                              <Download size={12} />
+                                              <span>Download</span>
+                                            </a>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
                                 const displayVal = Array.isArray(val) ? val.join(', ') : String(val ?? '-');
 
                                 return (
@@ -876,24 +964,28 @@ export default function RegistrationManagement() {
             </p>
 
             {/* QR Box */}
-            <div className="p-4 bg-white rounded-2xl border-2 border-indigo-100 inline-block shadow-inner mb-4">
+            <div className="p-4 bg-white rounded-2xl border-2 border-indigo-100 inline-block shadow-inner mb-3">
               <QRCodeSVG
-                value={`${window.location.origin}/form/${qrModalForm.slug}`}
-                size={200}
-                level="H"
+                value={getPublicFormUrl(qrModalForm.slug)}
+                size={220}
+                level="M"
                 includeMargin
               />
             </div>
 
-            <p className="text-[11px] text-gray-400 mb-5">
-              Scan barcode di atas menggunakan kamera HP jemaat untuk langsung membuka formulir pendaftaran di website.
+            <div className="mb-4 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 break-all font-mono select-all">
+              {getPublicFormUrl(qrModalForm.slug)}
+            </div>
+
+            <p className="text-[11px] text-gray-500 mb-5 leading-relaxed">
+              Scan QR Code ini menggunakan kamera HP jemaat untuk langsung diarahkan ke halaman formulir pendaftaran acara.
             </p>
 
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => copyFormLink(qrModalForm.slug)}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md"
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
               >
                 {copiedSlug === qrModalForm.slug ? <Check size={14} /> : <Copy size={14} />}
                 <span>{copiedSlug === qrModalForm.slug ? 'Tautan Disalin!' : 'Salin Tautan'}</span>
@@ -903,10 +995,69 @@ export default function RegistrationManagement() {
                 href={`/form/${qrModalForm.slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold text-xs transition-colors"
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold text-xs transition-colors flex items-center gap-1"
               >
-                Buka Form
+                <span>Buka Form</span>
+                <ExternalLink size={13} />
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bukti Pembayaran / Foto Modal ── */}
+      {viewingProof && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl relative animate-scale-up">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CreditCard size={16} className="text-emerald-400" />
+                <span className="font-bold text-sm truncate">{viewingProof.title}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingProof(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-100 flex items-center justify-center max-h-[70vh] overflow-auto">
+              {viewingProof.isImage ? (
+                <img
+                  src={viewingProof.dataUrl}
+                  alt={viewingProof.fileName}
+                  className="max-h-[65vh] max-w-full object-contain rounded-xl shadow-md"
+                />
+              ) : (
+                <div className="p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200">
+                  <FileText size={48} className="text-emerald-600 mx-auto mb-2" />
+                  <p className="font-bold text-sm text-slate-800">{viewingProof.fileName}</p>
+                  <p className="text-xs text-slate-500 mt-1">Dokumen Lampiran Pendaftaran</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-500 truncate max-w-xs">{viewingProof.fileName}</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={viewingProof.dataUrl}
+                  download={viewingProof.fileName}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <Download size={14} />
+                  <span>Download File</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setViewingProof(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs transition-colors"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
         </div>

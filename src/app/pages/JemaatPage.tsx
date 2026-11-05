@@ -442,66 +442,147 @@ export default function JemaatPage() {
 
       {/* ── Event Pendaftaran Khusus (Natal, Paskah, Retret, dsb.) ── */}
       {eventForms.length > 0 && (
-        <section className="py-12 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white relative overflow-hidden">
-          <div className="max-w-5xl mx-auto px-6 relative z-10">
+        <section className="py-16 sm:py-20 relative overflow-hidden bg-radial from-[#132347] via-[#091224] to-[#040812] text-white">
+          {/* Subtle Ambient Aurora Light */}
+          <div className="absolute inset-0 pointer-events-none opacity-40">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-gradient-to-tr from-blue-600/30 via-indigo-500/20 to-purple-600/20 blur-[120px] rounded-full" />
+          </div>
+
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
             <FadeInSection>
-              <div className="text-center mb-8">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest bg-amber-400/20 text-amber-300 border border-amber-300/30 mb-3">
-                  <Sparkles size={13} />
+              <div className="text-center mb-10 sm:mb-14">
+                <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-widest bg-amber-400/15 text-amber-300 border border-amber-300/30 mb-3.5 shadow-xs backdrop-blur-md">
+                  <Sparkles size={13} className="text-amber-400" />
                   <span>Pendaftaran Dibuka</span>
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Event & Kegiatan Khusus</h2>
-                <p className="text-blue-200 text-xs sm:text-sm mt-1 max-w-lg mx-auto">
-                  Segera daftarkan diri dan keluarga Anda untuk mengikuti rangkaian acara gereja berikut.
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">
+                  Event & Kegiatan Khusus
+                </h2>
+                <p className="text-slate-300 text-sm sm:text-base mt-2.5 max-w-xl mx-auto font-normal leading-relaxed">
+                  Segera daftarkan diri dan keluarga Anda untuk mengikuti rangkaian ibadah, perayaan, dan kegiatan rohani gereja.
                 </p>
               </div>
             </FadeInSection>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`grid gap-6 ${eventForms.length === 1 ? 'max-w-2xl mx-auto' : 'grid-cols-1 md:grid-cols-2'}`}>
               {eventForms.map((f, i) => {
                 const themeMeta = {
-                  natal: { icon: '🎄', label: 'Natal', badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-400/30', btnBg: 'bg-rose-600 hover:bg-rose-500' },
-                  paskah: { icon: '✝️', label: 'Paskah', badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-400/30', btnBg: 'bg-amber-600 hover:bg-amber-500' },
-                  retret: { icon: '⛺', label: 'Retret & Camp', badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30', btnBg: 'bg-emerald-600 hover:bg-emerald-500' },
-                  youth: { icon: '🔥', label: 'Youth', badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-400/30', btnBg: 'bg-purple-600 hover:bg-purple-500' },
-                  custom: { icon: '✨', label: 'Event Khusus', badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/30', btnBg: 'bg-indigo-600 hover:bg-indigo-500' },
-                  standard: { icon: '⛪', label: 'Pendaftaran', badgeBg: 'bg-blue-500/20 text-blue-300 border-blue-400/30', btnBg: 'bg-blue-600 hover:bg-blue-500' },
+                  natal: {
+                    icon: '🎄',
+                    label: 'Natal / Christmas',
+                    accentBorder: 'border-rose-500/30 hover:border-rose-500/60',
+                    gradientGlow: 'from-rose-500/20 via-rose-900/10 to-transparent',
+                    badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-400/40',
+                    btnBg: 'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 shadow-rose-900/40',
+                    topBannerAccent: 'bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500',
+                  },
+                  paskah: {
+                    icon: '✝️',
+                    label: 'Paskah / Easter',
+                    accentBorder: 'border-amber-500/30 hover:border-amber-500/60',
+                    gradientGlow: 'from-amber-500/20 via-amber-900/10 to-transparent',
+                    badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-400/40',
+                    btnBg: 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 shadow-amber-900/40',
+                    topBannerAccent: 'bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-600',
+                  },
+                  retret: {
+                    icon: '⛺',
+                    label: 'Retret & Camp',
+                    accentBorder: 'border-emerald-500/30 hover:border-emerald-500/60',
+                    gradientGlow: 'from-emerald-500/20 via-emerald-900/10 to-transparent',
+                    badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40',
+                    btnBg: 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 shadow-emerald-900/40',
+                    topBannerAccent: 'bg-gradient-to-r from-emerald-500 via-teal-400 to-blue-500',
+                  },
+                  youth: {
+                    icon: '🔥',
+                    label: 'Youth & Teens',
+                    accentBorder: 'border-purple-500/30 hover:border-purple-500/60',
+                    gradientGlow: 'from-purple-500/20 via-purple-900/10 to-transparent',
+                    badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-400/40',
+                    btnBg: 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-900/40',
+                    topBannerAccent: 'bg-gradient-to-r from-purple-500 via-fuchsia-400 to-indigo-500',
+                  },
+                  custom: {
+                    icon: '✨',
+                    label: 'Event Khusus',
+                    accentBorder: 'border-indigo-500/30 hover:border-indigo-500/60',
+                    gradientGlow: 'from-indigo-500/20 via-indigo-900/10 to-transparent',
+                    badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40',
+                    btnBg: 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 shadow-indigo-900/40',
+                    topBannerAccent: 'bg-gradient-to-r from-blue-500 via-indigo-400 to-purple-500',
+                  },
+                  standard: {
+                    icon: '⛪',
+                    label: 'Pendaftaran Jemaat',
+                    accentBorder: 'border-blue-500/30 hover:border-blue-500/60',
+                    gradientGlow: 'from-blue-500/20 via-blue-900/10 to-transparent',
+                    badgeBg: 'bg-blue-500/20 text-blue-300 border-blue-400/40',
+                    btnBg: 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 shadow-blue-900/40',
+                    topBannerAccent: 'bg-gradient-to-r from-blue-500 via-sky-400 to-indigo-600',
+                  },
                 }[f.theme || 'standard'];
 
                 return (
                   <FadeInSection key={f.id} delay={i * 0.1}>
-                    <div className="rounded-3xl bg-white/10 border border-white/15 p-6 backdrop-blur-md hover:bg-white/15 transition-all flex flex-col justify-between shadow-xl">
-                      <div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${themeMeta.badgeBg}`}>
-                            <span>{themeMeta.icon}</span>
-                            <span>{themeMeta.label}</span>
-                          </span>
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                            Pendaftaran Terbuka
-                          </span>
-                        </div>
-                        <h3 className="text-xl font-bold text-white mb-2 leading-snug">
-                          {f.title}
-                        </h3>
-                        {f.description && (
-                          <p className="text-xs sm:text-sm text-blue-100/80 line-clamp-2 leading-relaxed mb-4">
-                            {f.description}
-                          </p>
-                        )}
-                      </div>
+                    <div className={`group relative rounded-3xl bg-slate-900/80 border ${themeMeta.accentBorder} backdrop-blur-xl shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-3xl overflow-hidden flex flex-col justify-between`}>
+                      {/* Top Accent Ribbon Bar */}
+                      <div className={`h-1.5 w-full ${themeMeta.topBannerAccent}`} />
 
-                      <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-                        <span className="text-xs text-blue-200">
-                          {f.questions?.length || 0} Pertanyaan
-                        </span>
-                        <Link
-                          to={`/form/${f.slug}`}
-                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full ${themeMeta.btnBg} text-white font-bold text-xs shadow-lg transition-all hover:scale-105 active:scale-95`}
-                        >
-                          <span>Daftar Sekarang</span>
-                          <ArrowRight size={14} />
-                        </Link>
+                      {/* Header Poster Banner if available */}
+                      {f.headerBannerUrl && (
+                        <div className="w-full h-44 overflow-hidden relative">
+                          <img
+                            src={f.headerBannerUrl}
+                            alt={f.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
+                        </div>
+                      )}
+
+                      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-between">
+                        <div>
+                          {/* Badges row */}
+                          <div className="flex items-center gap-2 mb-4 flex-wrap">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border shadow-xs ${themeMeta.badgeBg}`}>
+                              <span>{themeMeta.icon}</span>
+                              <span>{themeMeta.label}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              <span>Pendaftaran Dibuka</span>
+                            </span>
+                          </div>
+
+                          {/* Event Title */}
+                          <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug group-hover:text-blue-200 transition-colors mb-3">
+                            {f.title}
+                          </h3>
+
+                          {/* Description */}
+                          {f.description && (
+                            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed line-clamp-3 mb-6">
+                              {f.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Bottom Row */}
+                        <div className="pt-5 border-t border-white/10 flex items-center justify-between gap-4 mt-auto">
+                          <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-blue-400" />
+                            <span>{f.questions?.length || 0} Pertanyaan Isian</span>
+                          </span>
+
+                          <Link
+                            to={`/form/${f.slug}`}
+                            className={`inline-flex items-center gap-2 px-6 py-3 rounded-2xl ${themeMeta.btnBg} text-white font-extrabold text-xs sm:text-sm shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer`}
+                          >
+                            <span>Daftar Sekarang</span>
+                            <ArrowRight size={15} />
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </FadeInSection>
