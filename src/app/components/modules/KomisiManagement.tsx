@@ -13,7 +13,8 @@ import {
   Users, Plus, Trash2, Edit2, X, Check, ChevronDown, AlertTriangle,
   ClipboardList, Download, Calendar, Calendar as CalendarIcon, UserCheck, UserX, Link, Unlink,
   Search, RefreshCw, ShieldAlert, Info, Activity, Circle, Save, Phone, MapPin,
-  ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles, HeartHandshake, Heart, UserPlus
+  ChevronLeft, ChevronRight, CheckCircle2, Clock, Sparkles, HeartHandshake, Heart, UserPlus,
+  Lock, Unlock
 } from 'lucide-react';
 
 const KV = 'kv_store_561004a0';
@@ -701,9 +702,21 @@ export default function KomisiManagement() {
   const [sekolahMingguClassFilter, setSekolahMingguClassFilter] = useState<string>('all');
   const [sekolahMingguSortOrder, setSekolahMingguSortOrder] = useState<'class' | 'name'>('class');
   const [activeSession, setActiveSession] = useState<AbsenSession | null>(null);
+  const [unlockedSessionId, setUnlockedSessionId] = useState<string | null>(null);
   const [draftPresentIds, setDraftPresentIds] = useState<Set<string>>(new Set());
   const [savingAttendance, setSavingAttendance] = useState(false);
   const [attendanceSaved, setAttendanceSaved] = useState(true);
+
+  // Check if session for selected date is saved on server
+  const existingSession = useMemo(() => {
+    return sessions.find(s => s.date === selectedDate);
+  }, [sessions, selectedDate]);
+
+  // Session is locked if it exists in saved sessions and has not been explicitly unlocked
+  const isSessionLocked = useMemo(() => {
+    if (!existingSession) return false;
+    return unlockedSessionId !== existingSession.id;
+  }, [existingSession, unlockedSessionId]);
 
   // Member form
   const [showMemberForm, setShowMemberForm] = useState(false);
@@ -845,6 +858,7 @@ export default function KomisiManagement() {
   // When selectedDate changes, reset dirty flag so the selected session loads cleanly
   useEffect(() => {
     isAttendanceDirtyRef.current = false;
+    setUnlockedSessionId(null);
   }, [selectedDate, activeKomisi]);
 
   // Sync activeSession whenever selectedDate, sessions, or activeKomisi change
@@ -1824,7 +1838,7 @@ export default function KomisiManagement() {
   };
 
   const toggleAttendance = (id: string) => {
-    if (!canEdit) return;
+    if (!canEdit || isSessionLocked) return;
     isAttendanceDirtyRef.current = true;
     setDraftPresentIds(old => {
       const next = new Set(old);
@@ -1835,14 +1849,14 @@ export default function KomisiManagement() {
   };
 
   const markAll = (present: boolean) => {
-    if (!canEdit) return;
+    if (!canEdit || isSessionLocked) return;
     isAttendanceDirtyRef.current = true;
     setDraftPresentIds(new Set(present ? members.map(m => m.id) : []));
     setAttendanceSaved(false);
   };
 
   const saveAttendance = async () => {
-    if (!activeSession || !canEdit) return;
+    if (!activeSession || !canEdit || isSessionLocked) return;
     setSavingAttendance(true);
     setError('');
     try {
@@ -1865,6 +1879,7 @@ export default function KomisiManagement() {
       if (result && result.error) throw result.error;
 
       isAttendanceDirtyRef.current = false;
+      setUnlockedSessionId(null);
       setActiveSession(updated);
       setSessions(old => {
         const idx = old.findIndex(x => x.id === updated.id || x.date === updated.date);
@@ -2698,21 +2713,73 @@ export default function KomisiManagement() {
                     </div>
                   </div>
 
-                  {/* Right: Quick actions (Hadir Semua, Reset, Export, Hapus Sesi) */}
-                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full lg:w-auto">
-                    {canEdit && (
+                  {/* Right: Quick actions (Lock/Unlock, Hadir Semua, Reset, Export, Hapus Sesi) */}
+                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                    {/* Status badge when saved / locked / unlocked */}
+                    {existingSession && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {isSessionLocked ? (
+                          <>
+                            <span className="text-xs bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 min-h-[40px] rounded-xl font-medium inline-flex items-center gap-1.5 shadow-2xs">
+                              <Lock size={14} className="text-slate-600 shrink-0" />
+                              <span>Terkunci ({existingSession.presentIds?.length || 0} hadir)</span>
+                            </span>
+
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUnlockedSessionId(existingSession.id);
+                                }}
+                                className="text-xs px-3 py-2 min-h-[40px] text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-blue-200 font-bold inline-flex items-center gap-1.5 shadow-2xs"
+                                title="Buka kunci absensi tanggal ini agar bisa diedit langsung"
+                              >
+                                <Unlock size={14} className="text-blue-600 shrink-0" />
+                                <span>Buka Kunci / Edit</span>
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-xs bg-amber-50 text-amber-800 border border-amber-300 px-3 py-2 min-h-[40px] rounded-xl font-bold inline-flex items-center gap-1.5 shadow-2xs">
+                              <Unlock size={14} className="text-amber-600 shrink-0" />
+                              <span>Mode Edit Terbuka ({existingSession.presentIds?.length || 0} hadir)</span>
+                            </span>
+
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDraftPresentIds(new Set(existingSession.presentIds || []));
+                                  setAttendanceSaved(true);
+                                  isAttendanceDirtyRef.current = false;
+                                  setUnlockedSessionId(null);
+                                }}
+                                className="text-xs px-3 py-2 min-h-[40px] text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-100 active:scale-[0.98] rounded-xl transition-all cursor-pointer border border-gray-200 font-semibold inline-flex items-center gap-1 shadow-2xs"
+                                title="Batalkan perubahan dan kunci kembali sesi ini"
+                              >
+                                <Lock size={12} className="shrink-0" />
+                                <span>Kunci Kembali</span>
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {canEdit && !isSessionLocked && (
                       <>
                         <button
                           type="button"
                           onClick={() => markAll(true)}
-                          className="text-xs font-bold px-3 py-2.5 min-h-[44px] justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
+                          className="text-xs font-bold px-3 py-2.5 min-h-[40px] justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
                         >
                           <Check size={14} className="shrink-0" /> <span className="truncate">Hadir Semua</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => markAll(false)}
-                          className="text-xs font-bold px-3 py-2.5 min-h-[44px] justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center"
+                          className="text-xs font-bold px-3 py-2.5 min-h-[40px] justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center"
                         >
                           <span>Reset</span>
                         </button>
@@ -2721,15 +2788,15 @@ export default function KomisiManagement() {
                     <button
                       type="button"
                       onClick={() => exportAttendance(activeSession)}
-                      className="flex items-center justify-center gap-1.5 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-2.5 min-h-[44px] rounded-xl active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
+                      className="flex items-center justify-center gap-1.5 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-2.5 min-h-[40px] rounded-xl active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
                     >
                       <Download size={14} className="shrink-0" /> <span className="truncate">Export Excel</span>
                     </button>
-                    {canEdit && (draftPresentIds.size > 0 || sessions.some(s => s.date === selectedDate)) && (
+                    {canEdit && !isSessionLocked && (draftPresentIds.size > 0 || sessions.some(s => s.date === selectedDate)) && (
                       <button
                         type="button"
                         onClick={() => handleDeleteSession(activeSession)}
-                        className="flex items-center justify-center gap-1.5 text-xs font-bold border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2.5 min-h-[44px] rounded-xl active:scale-[0.98] transition-all cursor-pointer"
+                        className="flex items-center justify-center gap-1.5 text-xs font-bold border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2.5 min-h-[40px] rounded-xl active:scale-[0.98] transition-all cursor-pointer"
                         title="Hapus semua rekaman absensi untuk tanggal ini"
                       >
                         <Trash2 size={14} className="shrink-0 text-rose-600" /> <span className="truncate">Hapus Sesi</span>
@@ -2904,9 +2971,11 @@ export default function KomisiManagement() {
                         <div
                           key={m.id}
                           onClick={() => {
-                            if (canEdit) toggleAttendance(m.id);
+                            if (canEdit && !isSessionLocked) toggleAttendance(m.id);
                           }}
-                          className={`rounded-2xl p-3.5 flex items-center justify-between gap-3 border transition-all cursor-pointer ${
+                          className={`rounded-2xl p-3.5 flex items-center justify-between gap-3 border transition-all ${
+                            isSessionLocked ? 'cursor-default opacity-95' : 'cursor-pointer'
+                          } ${
                             isPresent
                               ? 'bg-gradient-to-r from-emerald-50/80 to-teal-50/40 border-emerald-300/80 shadow-xs ring-1 ring-emerald-200'
                               : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
@@ -2958,7 +3027,7 @@ export default function KomisiManagement() {
                           </div>
 
                           {/* Attendance Checkbox Button */}
-                          {canEdit ? (
+                          {canEdit && !isSessionLocked ? (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2987,7 +3056,7 @@ export default function KomisiManagement() {
                             </button>
                           ) : (
                             <span
-                              className={`text-xs font-bold px-3 py-2 min-h-[38px] flex items-center justify-center rounded-xl ${
+                              className={`text-xs font-bold px-3 py-2 min-h-[38px] flex items-center justify-center rounded-xl select-none ${
                                 isPresent ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-400'
                               }`}
                             >
@@ -3002,7 +3071,7 @@ export default function KomisiManagement() {
               })()}
 
               {/* Sticky bottom save bar */}
-              {canEdit && (
+              {canEdit && !isSessionLocked && (
                 <div className="sticky bottom-3 z-20 mt-6 flex justify-center px-2 sm:px-4 safe-bottom-floating">
                   <div className="w-full sm:w-auto bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-2 sm:p-1.5 shadow-2xl border border-white/10 flex flex-col sm:flex-row items-center gap-2 animate-in slide-in-from-bottom-2">
                     <button
