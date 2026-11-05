@@ -332,7 +332,7 @@ export default function TentangPage() {
               {/* ── 1. Gembala Sidang / Senior Section (Gina Jaya & Poppy) ── */}
               {tiers.filter(t => t.key === 'gembala_sidang').map((tier) => (
                 <FadeIn key={tier.key}>
-                  <div className="mb-20">
+                  <div>
                     <div className="text-center mb-8 sm:mb-10">
                       <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.25em] text-blue-300/90 mb-1.5 block">
                         Pendiri & Perintis Pelayanan
@@ -358,22 +358,11 @@ export default function TentangPage() {
                 </FadeIn>
               ))}
 
-              {/* ── 2. Struktur Pelayanan Section Header (Di bawah container Gina Jaya & Poppy tanpa garis) ── */}
-              {tiers.some(t => t.key !== 'gembala_sidang') && (
-                <FadeIn>
-                  <div className="pt-10 pb-4 text-center">
-                    <span className="inline-block px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/25 text-blue-300 text-xs sm:text-sm font-bold uppercase tracking-[0.25em]">
-                      Struktur Pelayanan
-                    </span>
-                  </div>
-                </FadeIn>
-              )}
-
-              {/* ── 3. Jajaran Tim Pelayanan (Penerus Gembala, Wakil Gembala, Pastoral, Koordinator) ── */}
+              {/* ── 2. Jajaran Tim Pelayanan (Penerus Gembala, Wakil Gembala, Pastoral, Koordinator) ── */}
               {tiers.filter(t => t.key !== 'gembala_sidang').map((tier, ti) => (
                 <FadeIn key={tier.key} delay={ti * 0.05}>
                   <div>
-                    {/* Tier title in regular cursive Caveat font without lines and with extra side padding */}
+                    {/* Tier title in regular cursive Caveat font */}
                     <div className="text-center mb-8 sm:mb-10">
                       <h3
                         className="font-cursive text-3xl sm:text-4xl md:text-5xl font-normal text-white tracking-normal drop-shadow-sm px-4 inline-block"
