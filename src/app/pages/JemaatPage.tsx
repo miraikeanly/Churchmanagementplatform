@@ -673,12 +673,9 @@ export default function JemaatPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
           <FadeInSection>
             <div className="text-center mb-10 sm:mb-14">
-              <p
-                className="text-2xl sm:text-3xl text-emerald-400 mb-1 flex items-center justify-center gap-2 drop-shadow-sm"
-                style={{ fontFamily: 'Caveat, cursive' }}
-              >
-                <Music size={18} className="text-emerald-400" />
-                <span>Lighthouse Music</span>
+              <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-emerald-400 mb-2 flex items-center justify-center gap-2">
+                <Music size={14} className="text-emerald-400" />
+                <span>LIGHTHOUSE MUSIC</span>
               </p>
               <h2 className="font-display text-2xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight">
                 Album Pujian & Penyembahan
@@ -799,7 +796,7 @@ export default function JemaatPage() {
         <div className="max-w-6xl mx-auto px-6">
           <FadeInSection>
             <div className="text-center mb-12">
-              <span className="inline-block text-blue-600 text-sm font-semibold uppercase tracking-widest mb-3 px-3.5 py-1 rounded-full bg-blue-50 border border-blue-100">
+              <span className="inline-block text-blue-600 text-xs sm:text-sm font-bold uppercase tracking-widest mb-3">
                 Temukan Lokasi
               </span>
               <h2 className="font-display text-3xl sm:text-4xl font-bold text-gray-900 mb-3">Kunjungi Kami di GBI Jelambar Timur</h2>
