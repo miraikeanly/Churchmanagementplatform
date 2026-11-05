@@ -29,11 +29,13 @@ export default defineConfig({
       include: ['buffer', 'stream', 'process'],
       globals: {
         Buffer: true,
-        global: true,
         process: true,
       },
     }),
   ],
+  define: {
+    global: 'globalThis',
+  },
   resolve: {
     alias: {
       // Alias @ to the src directory
