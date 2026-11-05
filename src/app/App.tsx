@@ -16,6 +16,7 @@ import LokasiPage from "./pages/LokasiPage";
 import ServicePage from "./pages/ServicePage";
 import AkunPage from "./pages/AkunPage";
 import GivePage from "./pages/GivePage";
+import CustomFormPage from "./pages/CustomFormPage";
 import NativeBackHandler from "./components/common/NativeBackHandler";
 import AdminPinGate from "./components/auth/AdminPinGate";
 import ScrollNavigation from "./components/common/ScrollNavigation";
@@ -106,6 +107,8 @@ export default function App() {
             <Route path="/give" element={<GivePage />} />
             <Route path="/persembahan" element={<GivePage />} />
             <Route path="/akun" element={<AkunPage />} />
+            <Route path="/form/:slug" element={<CustomFormPage />} />
+            <Route path="/daftar/:slug" element={<CustomFormPage />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

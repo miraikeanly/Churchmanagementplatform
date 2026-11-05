@@ -12,6 +12,8 @@ import { getMinistry, formatSchedules, ALL_MINISTRIES } from '../../lib/ministri
 import { useChurchStats, yearsServing } from '../../lib/stats';
 import PublicFooter from '../components/public/PublicFooter';
 import { CHURCH } from '../../lib/church';
+import { supabase } from '../../lib/supabaseClient';
+import { CustomEventForm } from '../../lib/customFormTypes';
 
 const API_URL = `${apiBase()}/api/content`;
 
@@ -138,6 +140,7 @@ const HOME_SCHEDULES = [
 
 export default function JemaatPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [eventForms, setEventForms] = useState<CustomEventForm[]>([]);
   const stats = useChurchStats();
   const musicVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -145,6 +148,20 @@ export default function JemaatPage() {
     fetch(`${API_URL}/announcements`)
       .then(r => r.json())
       .then(d => { if (d.announcements) setAnnouncements(d.announcements.filter((a: Announcement) => a.active)); })
+      .catch(() => {});
+
+    // Fetch active custom forms set to show on homepage
+    supabase
+      .from('kv_store_561004a0')
+      .select('key, value')
+      .like('key', 'custom_form:%')
+      .then(({ data }) => {
+        const forms = (data ?? [])
+          .map((r: any) => r.value as CustomEventForm)
+          .filter(Boolean)
+          .filter(f => f.active && f.showOnHomepage);
+        setEventForms(forms);
+      })
       .catch(() => {});
   }, []);
 
@@ -419,6 +436,61 @@ export default function JemaatPage() {
               </div>
             </FadeInSection>
             <FadeInSection delay={0.1}><FlyerCarousel items={announcements} /></FadeInSection>
+          </div>
+        </section>
+      )}
+
+      {/* ── Event Pendaftaran Khusus (Natal, Paskah, Retret, dsb.) ── */}
+      {eventForms.length > 0 && (
+        <section className="py-12 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white relative overflow-hidden">
+          <div className="max-w-5xl mx-auto px-6 relative z-10">
+            <FadeInSection>
+              <div className="text-center mb-8">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest bg-amber-400/20 text-amber-300 border border-amber-300/30 mb-3">
+                  <Sparkles size={13} />
+                  <span>Pendaftaran Dibuka</span>
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Event & Kegiatan Khusus</h2>
+                <p className="text-blue-200 text-xs sm:text-sm mt-1 max-w-lg mx-auto">
+                  Segera daftarkan diri dan keluarga Anda untuk mengikuti rangkaian acara gereja berikut.
+                </p>
+              </div>
+            </FadeInSection>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {eventForms.map((f, i) => (
+                <FadeInSection key={f.id} delay={i * 0.1}>
+                  <div className="rounded-3xl bg-white/10 border border-white/15 p-6 backdrop-blur-md hover:bg-white/15 transition-all flex flex-col justify-between shadow-xl">
+                    <div>
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 mb-3">
+                        Pendaftaran Terbuka
+                      </span>
+                      <h3 className="text-xl font-bold text-white mb-2 leading-snug">
+                        {f.title}
+                      </h3>
+                      {f.description && (
+                        <p className="text-xs sm:text-sm text-blue-100/80 line-clamp-2 leading-relaxed mb-4">
+                          {f.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                      <span className="text-xs text-blue-200">
+                        {f.questions?.length || 0} Pertanyaan
+                      </span>
+                      <Link
+                        to={`/form/${f.slug}`}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs shadow-lg transition-all hover:scale-105 active:scale-95"
+                      >
+                        <span>Daftar Sekarang</span>
+                        <ArrowRight size={14} />
+                      </Link>
+                    </div>
+                  </div>
+                </FadeInSection>
+              ))}
+            </div>
           </div>
         </section>
       )}
