@@ -278,11 +278,11 @@ export default function JemaatPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-4 sm:mb-6 mt-1 sm:mt-2"
+            className="mb-3 sm:mb-5 mt-1 sm:mt-2 text-center"
           >
-            <span className="inline-block text-xs sm:text-sm font-bold tracking-widest uppercase text-sky-300/90 mb-2 sm:mb-3 px-3.5 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-md">
+            <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.28em] text-white/90 drop-shadow-sm">
               Gereja Bethel Indonesia
-            </span>
+            </p>
             <h1 className="font-display text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.14]">
               Selamat Datang di <br className="hidden sm:inline" />
               <span className="bg-gradient-to-r from-sky-200 via-blue-100 to-amber-200 bg-clip-text text-transparent drop-shadow-sm">
@@ -673,10 +673,10 @@ export default function JemaatPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
           <FadeInSection>
             <div className="text-center mb-10 sm:mb-14">
-              <span className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-400/20 px-3.5 py-1.5 rounded-full mb-3 backdrop-blur-md">
+              <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.28em] text-white/90 mb-2 drop-shadow-sm flex items-center justify-center gap-2">
                 <Music size={14} className="text-emerald-400" />
                 <span>Lighthouse Music</span>
-              </span>
+              </p>
               <h2 className="font-display text-2xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight">
                 Album Pujian & Penyembahan
               </h2>

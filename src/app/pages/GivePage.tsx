@@ -35,18 +35,17 @@ export default function GivePage() {
         
         {/* Hero Section */}
         <div className="text-center max-w-2xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-xs font-semibold uppercase tracking-wider mb-4">
-            <Heart size={13} className="text-rose-400 fill-rose-400/30" />
-            <span>Persembahan Jemaat &bull; Online Giving</span>
-          </div>
+          <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.28em] text-blue-300 mb-2">
+            Persembahan Jemaat &bull; Online Giving
+          </p>
 
           <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight sm:leading-tight">
-            Memberi dengan <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-300">Sukacita & Kerelaan Hati</span>
+            Memberi dengan <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-200 to-sky-300">Sukacita & Kerelaan Hati</span>
           </h1>
 
-          <p className="mt-4 text-base sm:text-lg text-slate-300 font-light leading-relaxed">
+          <p className="mt-4 text-sm sm:text-base text-slate-300 font-normal leading-relaxed">
             &ldquo;Hendaklah masing-masing memberikan menurut kerelaan hatinya, jangan dengan sedih hati atau karena paksaan, sebab Allah mengasihi orang yang memberi dengan sukacita.&rdquo;
-            <span className="block mt-1 font-semibold text-blue-400 text-sm">— 2 Korintus 9:7</span>
+            <span className="block mt-1 font-semibold text-blue-400 text-xs sm:text-sm">— 2 Korintus 9:7</span>
           </p>
         </div>
 
@@ -55,59 +54,60 @@ export default function GivePage() {
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/60 backdrop-blur-xl border border-blue-500/20 rounded-3xl p-6 sm:p-9 shadow-2xl relative overflow-hidden space-y-6"
+          className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-9 shadow-2xl relative overflow-hidden space-y-6"
         >
-          <div className="absolute -right-16 -top-16 w-56 h-56 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          {/* Subtle Ambient Light */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Header BCA */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80">
-            <div className="flex items-center gap-3.5">
-              <div className="h-12 w-auto max-w-[130px] rounded-xl bg-white/10 p-1.5 border border-white/10 flex items-center justify-center shrink-0 shadow-inner">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-auto max-w-[130px] rounded-xl bg-white p-2 flex items-center justify-center shrink-0 shadow-sm">
                 <img
                   src="/bca-logo.png"
                   alt="Bank Central Asia (BCA)"
-                  className="h-full w-auto object-contain rounded-lg"
+                  className="h-full w-auto object-contain"
                 />
               </div>
               <div>
-                <h2 className="font-bold text-white text-lg sm:text-xl">Bank Central Asia (BCA)</h2>
+                <h2 className="font-extrabold text-white text-lg sm:text-xl tracking-tight">Bank Central Asia (BCA)</h2>
                 <p className="text-xs sm:text-sm text-slate-400">Rekening Resmi Persembahan & Persepuluhan</p>
               </div>
             </div>
-            <span className="self-start sm:self-auto px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 shrink-0">
-              <ShieldCheck size={14} />
-              Resmi Terverifikasi
-            </span>
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+              <ShieldCheck size={16} className="text-emerald-400 shrink-0" />
+              <span>Resmi Terverifikasi Gereja</span>
+            </div>
           </div>
 
           {/* Account Details Box */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            <div className="md:col-span-7 bg-slate-950/70 rounded-2xl p-4 sm:p-5 border border-slate-800/80 flex flex-col justify-between">
-              <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Nomor Rekening BCA</p>
-              <div className="flex items-center justify-between mt-2 gap-3 flex-nowrap">
-                <span className="text-xl sm:text-2xl lg:text-3xl font-mono font-black text-white tracking-wider whitespace-nowrap">
+            <div className="md:col-span-7 bg-slate-950/80 rounded-2xl p-5 border border-white/10 flex flex-col justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Nomor Rekening BCA</span>
+              <div className="flex items-center justify-between mt-3 gap-3 flex-nowrap">
+                <span className="text-2xl sm:text-3xl font-mono font-black text-white tracking-wider whitespace-nowrap">
                   7020 908 500
                 </span>
                 <button
                   type="button"
                   onClick={handleCopyBca}
-                  className={`px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold active:scale-95 cursor-pointer shrink-0 ${
+                  className={`px-4 py-2.5 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold active:scale-95 cursor-pointer shrink-0 shadow-xs ${
                     copiedBca
-                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                      : 'bg-blue-600/20 border-blue-500/30 text-blue-300 hover:bg-blue-600 hover:text-white'
+                      ? 'bg-emerald-600 border-emerald-500 text-white'
+                      : 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white'
                   }`}
                   title="Salin Nomor Rekening"
                 >
-                  {copiedBca ? <Check size={15} /> : <Copy size={15} />}
-                  <span>{copiedBca ? 'Tersalin' : 'Salin'}</span>
+                  {copiedBca ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{copiedBca ? 'Tersalin!' : 'Salin Rekening'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="md:col-span-5 bg-slate-950/70 rounded-2xl p-4 sm:p-5 border border-slate-800/80 flex flex-col justify-between">
-              <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Atas Nama Rekening</p>
-              <div className="flex items-center mt-2 min-h-[38px]">
-                <p className="text-base sm:text-lg font-bold text-slate-100 tracking-wide break-words">
+            <div className="md:col-span-5 bg-slate-950/80 rounded-2xl p-5 border border-white/10 flex flex-col justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Atas Nama Rekening</span>
+              <div className="flex items-center mt-3 min-h-[38px]">
+                <p className="text-base sm:text-lg font-extrabold text-white tracking-wide break-words">
                   GEREJA BETHEL INDONESIA
                 </p>
               </div>
@@ -115,37 +115,37 @@ export default function GivePage() {
           </div>
 
           {/* Petunjuk Transfer & Format Berita */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-blue-500/10 border border-blue-500/20 space-y-3">
-            <div className="flex items-center gap-2 text-blue-300 font-bold text-sm">
-              <Info size={18} className="text-blue-400 shrink-0" />
-              <span>Petunjuk Transfer & Pengisian Kolom Berita:</span>
+          <div className="p-5 sm:p-6 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+            <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <Info size={17} className="text-blue-400 shrink-0" />
+              <span>Petunjuk Transfer & Pengisian Kolom Berita</span>
             </div>
             
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               Mohon pastikan nama penerima yang muncul pada layar ATM atau Mobile Banking Anda adalah <strong>GEREJA BETHEL INDONESIA</strong>.
             </p>
 
-            <div className="pt-2 border-t border-blue-500/15">
-              <p className="text-xs text-slate-400 mb-2.5">
+            <div className="pt-3 border-t border-white/10">
+              <p className="text-xs text-slate-400 mb-3">
                 Untuk ketertiban administrasi dan pembukuan keuangan gereja, mohon cantumkan peruntukan persembahan pada kolom <em>Berita / Keterangan Transfer</em>:
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
-                  <p className="font-semibold text-white">&bull; Persepuluhan</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Tulis: <span className="text-blue-300 font-medium">Persepuluhan - [Nama Jemaat]</span></p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-950/90 p-3.5 rounded-xl border border-white/10">
+                  <p className="font-bold text-white text-xs">&bull; Persepuluhan</p>
+                  <p className="text-slate-400 text-[11px] mt-1">Tulis: <span className="text-sky-300 font-medium">Persepuluhan - [Nama Jemaat]</span></p>
                 </div>
-                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
-                  <p className="font-semibold text-white">&bull; Persembahan Umum</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Tulis: <span className="text-blue-300 font-medium">Persembahan Umum</span></p>
+                <div className="bg-slate-950/90 p-3.5 rounded-xl border border-white/10">
+                  <p className="font-bold text-white text-xs">&bull; Persembahan Umum</p>
+                  <p className="text-slate-400 text-[11px] mt-1">Tulis: <span className="text-sky-300 font-medium">Persembahan Umum</span></p>
                 </div>
-                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
-                  <p className="font-semibold text-white">&bull; Persembahan Syukur</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Tulis: <span className="text-blue-300 font-medium">Syukur - [Nama/Keperluan]</span></p>
+                <div className="bg-slate-950/90 p-3.5 rounded-xl border border-white/10">
+                  <p className="font-bold text-white text-xs">&bull; Persembahan Syukur</p>
+                  <p className="text-slate-400 text-[11px] mt-1">Tulis: <span className="text-sky-300 font-medium">Syukur - [Nama/Keperluan]</span></p>
                 </div>
-                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
-                  <p className="font-semibold text-white">&bull; Misi & Pelayanan Kasih</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Tulis: <span className="text-blue-300 font-medium">Misi / Diakonia</span></p>
+                <div className="bg-slate-950/90 p-3.5 rounded-xl border border-white/10">
+                  <p className="font-bold text-white text-xs">&bull; Misi & Pelayanan Kasih</p>
+                  <p className="text-slate-400 text-[11px] mt-1">Tulis: <span className="text-sky-300 font-medium">Misi / Diakonia</span></p>
                 </div>
               </div>
             </div>
@@ -157,13 +157,13 @@ export default function GivePage() {
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.15 }}
-          className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800/80 text-xs sm:text-sm text-slate-400 space-y-2 text-center max-w-3xl mx-auto"
+          className="p-6 sm:p-7 rounded-3xl bg-slate-900/60 border border-white/10 text-xs sm:text-sm text-slate-300 space-y-2 text-center max-w-3xl mx-auto shadow-xl"
         >
-          <p className="font-semibold text-slate-200 text-sm sm:text-base flex items-center justify-center gap-2">
+          <p className="font-bold text-white text-sm sm:text-base flex items-center justify-center gap-2">
             <Sparkles size={16} className="text-amber-400" />
-            Doa Berkat atas Persembahan
+            <span>Doa Berkat atas Persembahan</span>
           </p>
-          <p className="leading-relaxed font-light text-slate-300">
+          <p className="leading-relaxed font-normal text-slate-300 max-w-2xl mx-auto">
             Tuhan memberkati setiap tangan yang memberi dan setiap hati yang rindu melayani pekerjaan Kerajaan Allah. Diberkatilah keluar masukmu, keluarga, dan pekerjaanmu senantiasa melimpah dengan damai sejahtera.
           </p>
         </motion.div>
