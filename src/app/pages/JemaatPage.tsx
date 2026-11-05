@@ -452,11 +452,10 @@ export default function JemaatPage() {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
             <FadeInSection>
               <div className="text-center mb-10 sm:mb-14">
-                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold tracking-wide bg-amber-500/10 text-amber-300 border border-amber-500/25 mb-4 backdrop-blur-md shadow-xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  <span>Pendaftaran Dibuka</span>
-                </span>
-                <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">
+                <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-blue-300 mb-2">
+                  Pendaftaran Dibuka
+                </p>
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight">
                   Event & Kegiatan Khusus
                 </h2>
                 <p className="text-slate-300 text-sm sm:text-base mt-2.5 max-w-xl mx-auto font-normal leading-relaxed">
@@ -544,13 +543,13 @@ export default function JemaatPage() {
 
                       <div className="p-6 sm:p-8 flex-1 flex flex-col justify-between">
                         <div>
-                          {/* Badges row */}
-                          <div className="flex items-center gap-2 mb-4 flex-wrap">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold tracking-wide border shadow-2xs ${themeMeta.badgeBg}`}>
+                          {/* Clean Category Label & Status */}
+                          <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-white/10">
+                            <span className="text-xs font-bold uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
                               <span>{themeMeta.icon}</span>
                               <span>{themeMeta.label}</span>
                             </span>
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold tracking-wide bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                            <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                               <span>Pendaftaran Dibuka</span>
                             </span>

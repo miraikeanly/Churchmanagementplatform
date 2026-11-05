@@ -330,20 +330,18 @@ export default function TentangPage() {
                 return (
                   <FadeIn key={tier.key} delay={ti * 0.05}>
                     <div>
-                      {/* Tier label above container */}
-                      <div className="flex items-center gap-3 sm:gap-4 mb-8">
-                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center">
-                          <span className={`inline-flex items-center px-4 py-1.5 rounded-xl text-xs font-semibold tracking-wider border backdrop-blur-md shadow-xs ${tier.badge}`}>
-                            {TIER_LABELS[tier.key]}
+                      {/* Tier title header without capsule/border (clean, bold white uppercase & script accent) */}
+                      <div className="flex items-center gap-4 sm:gap-6 mb-8 sm:mb-10">
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/10" />
+                        <div className="text-center flex flex-col items-center">
+                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.25em] text-blue-300/90 mb-1">
+                            {isGembalaSidang ? 'Pendiri & Perintis Pelayanan' : 'Struktur Pelayanan'}
                           </span>
-                          {isGembalaSidang && (
-                            <span className="inline-flex items-center px-4 py-1.5 rounded-xl text-xs font-semibold tracking-wider bg-amber-500/10 border border-amber-500/30 text-amber-300 backdrop-blur-md shadow-xs">
-                              Pendiri & Perintis Pelayanan
-                            </span>
-                          )}
+                          <h3 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-wide">
+                            {TIER_LABELS[tier.key]}
+                          </h3>
                         </div>
-                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+                        <div className="flex-1 h-px bg-gradient-to-r from-white/10 via-white/20 to-transparent" />
                       </div>
 
                       {/* Cards */}
