@@ -333,20 +333,16 @@ export default function TentangPage() {
               {tiers.filter(t => t.key === 'gembala_sidang').map((tier) => (
                 <FadeIn key={tier.key}>
                   <div className="mb-20">
-                    <div className="flex items-center gap-4 sm:gap-6 mb-8 sm:mb-10">
-                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/10" />
-                      <div className="text-center flex flex-col items-center">
-                        <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.25em] text-blue-300/90 mb-1">
-                          Pendiri & Perintis Pelayanan
-                        </span>
-                        <h3
-                          className="font-cursive text-3xl sm:text-4xl md:text-5xl font-bold text-amber-200/95 tracking-wide drop-shadow-sm"
-                          style={{ fontFamily: 'Caveat, cursive' }}
-                        >
-                          {TIER_LABELS[tier.key]}
-                        </h3>
-                      </div>
-                      <div className="flex-1 h-px bg-gradient-to-r from-white/10 via-white/20 to-transparent" />
+                    <div className="text-center mb-8 sm:mb-10">
+                      <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.25em] text-blue-300/90 mb-1.5 block">
+                        Pendiri & Perintis Pelayanan
+                      </span>
+                      <h3
+                        className="font-cursive text-3xl sm:text-4xl md:text-5xl font-normal text-amber-200/95 tracking-normal drop-shadow-sm px-3 inline-block"
+                        style={{ fontFamily: 'Caveat, cursive' }}
+                      >
+                        {TIER_LABELS[tier.key]}
+                      </h3>
                     </div>
 
                     <div className="space-y-8">
@@ -362,19 +358,13 @@ export default function TentangPage() {
                 </FadeIn>
               ))}
 
-              {/* ── 2. Struktur Pelayanan Section Header (Di bawah container Gina Jaya & Poppy) ── */}
+              {/* ── 2. Struktur Pelayanan Section Header (Di bawah container Gina Jaya & Poppy tanpa garis) ── */}
               {tiers.some(t => t.key !== 'gembala_sidang') && (
                 <FadeIn>
-                  <div className="pt-8 mb-12 sm:mb-16">
-                    <div className="flex items-center gap-4 sm:gap-6">
-                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-blue-400/20" />
-                      <div className="text-center px-4">
-                        <span className="inline-block text-xs sm:text-sm font-extrabold uppercase tracking-[0.3em] text-blue-300">
-                          STRUKTUR PELAYANAN
-                        </span>
-                      </div>
-                      <div className="flex-1 h-px bg-gradient-to-r from-blue-400/20 via-blue-500/40 to-transparent" />
-                    </div>
+                  <div className="pt-10 pb-4 text-center">
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/25 text-blue-300 text-xs sm:text-sm font-bold uppercase tracking-[0.25em]">
+                      Struktur Pelayanan
+                    </span>
                   </div>
                 </FadeIn>
               )}
@@ -383,18 +373,14 @@ export default function TentangPage() {
               {tiers.filter(t => t.key !== 'gembala_sidang').map((tier, ti) => (
                 <FadeIn key={tier.key} delay={ti * 0.05}>
                   <div>
-                    {/* Tier title in cursive Caveat font */}
-                    <div className="flex items-center gap-4 sm:gap-6 mb-8 sm:mb-10">
-                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/15 to-white/5" />
-                      <div className="text-center flex flex-col items-center">
-                        <h3
-                          className="font-cursive text-3xl sm:text-4xl md:text-5xl font-bold text-white tracking-wide drop-shadow-sm"
-                          style={{ fontFamily: 'Caveat, cursive' }}
-                        >
-                          {TIER_LABELS[tier.key]}
-                        </h3>
-                      </div>
-                      <div className="flex-1 h-px bg-gradient-to-r from-white/5 via-white/15 to-transparent" />
+                    {/* Tier title in regular cursive Caveat font without lines and with extra side padding */}
+                    <div className="text-center mb-8 sm:mb-10">
+                      <h3
+                        className="font-cursive text-3xl sm:text-4xl md:text-5xl font-normal text-white tracking-normal drop-shadow-sm px-4 inline-block"
+                        style={{ fontFamily: 'Caveat, cursive' }}
+                      >
+                        {TIER_LABELS[tier.key]}
+                      </h3>
                     </div>
 
                     {/* Cards */}
