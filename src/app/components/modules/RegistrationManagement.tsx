@@ -83,6 +83,7 @@ export default function RegistrationManagement() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [viewingProof, setViewingProof] = useState<{ title: string; dataUrl: string; fileName: string; isImage: boolean } | null>(null);
 
   // ── Load All Data ──────────────────────────────────────────────────────────
