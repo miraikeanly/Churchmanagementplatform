@@ -7,3 +7,7 @@
 .font-display {
   font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
 }
+
+.font-cursive {
+  font-family: 'Caveat', cursive, system-ui, sans-serif !important;
+}
