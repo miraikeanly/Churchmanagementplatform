@@ -173,6 +173,75 @@ export default function CustomFormPage() {
     );
   }
 
+  // Theme configuration helper
+  const theme = form?.theme || 'standard';
+  const customColor = form?.customColor || '#2563eb';
+
+  const themeStyles = {
+    standard: {
+      borderTop: 'border-t-blue-600',
+      badgeBg: 'bg-blue-50 border-blue-200 text-blue-700',
+      badgeIcon: '⛪',
+      badgeLabel: 'GBI Jelambar Timur',
+      btnBg: 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/25',
+      accentGlow: 'from-blue-600/10 via-indigo-600/5 to-transparent',
+      heroBg: 'from-blue-900 via-indigo-950 to-slate-950',
+    },
+    natal: {
+      borderTop: 'border-t-rose-600',
+      badgeBg: 'bg-rose-50 border-rose-200 text-rose-700',
+      badgeIcon: '🎄',
+      badgeLabel: 'Ibadah & Perayaan Natal',
+      btnBg: 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/25',
+      accentGlow: 'from-rose-600/15 via-emerald-600/10 to-transparent',
+      heroBg: 'from-red-950 via-rose-950 to-emerald-950',
+    },
+    paskah: {
+      borderTop: 'border-t-amber-500',
+      badgeBg: 'bg-amber-50 border-amber-200 text-amber-700',
+      badgeIcon: '✝️',
+      badgeLabel: 'Ibadah & Perayaan Paskah',
+      btnBg: 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/25',
+      accentGlow: 'from-amber-500/15 via-yellow-500/10 to-transparent',
+      heroBg: 'from-amber-950 via-stone-900 to-purple-950',
+    },
+    retret: {
+      borderTop: 'border-t-emerald-600',
+      badgeBg: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+      badgeIcon: '⛺',
+      badgeLabel: 'Retret & Camp Jemaat',
+      btnBg: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25',
+      accentGlow: 'from-emerald-600/15 via-teal-600/10 to-transparent',
+      heroBg: 'from-emerald-950 via-teal-950 to-slate-950',
+    },
+    youth: {
+      borderTop: 'border-t-purple-600',
+      badgeBg: 'bg-purple-50 border-purple-200 text-purple-700',
+      badgeIcon: '🔥',
+      badgeLabel: 'Youth & Teens Event',
+      btnBg: 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/25',
+      accentGlow: 'from-purple-600/15 via-fuchsia-600/10 to-transparent',
+      heroBg: 'from-purple-950 via-indigo-950 to-slate-950',
+    },
+    custom: {
+      borderTop: 'border-t-indigo-600',
+      badgeBg: 'bg-indigo-50 border-indigo-200 text-indigo-700',
+      badgeIcon: '✨',
+      badgeLabel: 'Kegiatan Khusus Gereja',
+      btnBg: 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/25',
+      accentGlow: 'from-indigo-600/10 via-blue-600/5 to-transparent',
+      heroBg: 'from-slate-900 via-indigo-950 to-slate-950',
+    },
+  }[theme] || {
+    borderTop: 'border-t-blue-600',
+    badgeBg: 'bg-blue-50 border-blue-200 text-blue-700',
+    badgeIcon: '⛪',
+    badgeLabel: 'GBI Jelambar Timur',
+    btnBg: 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/25',
+    accentGlow: 'from-blue-600/10 via-indigo-600/5 to-transparent',
+    heroBg: 'from-blue-900 via-indigo-950 to-slate-950',
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 text-slate-900 flex flex-col justify-between">
       <PublicNavbar />
@@ -180,12 +249,29 @@ export default function CustomFormPage() {
       <main className="flex-1 pt-28 pb-20 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto">
           {/* Header Card */}
-          <div className="rounded-3xl border-t-8 border-t-blue-600 bg-white border border-slate-200/90 shadow-xl overflow-hidden mb-6">
+          <div
+            className={`rounded-3xl border-t-8 bg-white border border-slate-200/90 shadow-xl overflow-hidden mb-6 ${
+              theme === 'custom' ? '' : themeStyles.borderTop
+            }`}
+            style={theme === 'custom' && customColor ? { borderTopColor: customColor } : undefined}
+          >
+            {/* Optional Header Banner Image */}
+            {form.headerBannerUrl && (
+              <div className="w-full h-44 sm:h-56 overflow-hidden bg-slate-900 relative">
+                <img
+                  src={form.headerBannerUrl}
+                  alt={form.title}
+                  className="w-full h-full object-cover object-center"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              </div>
+            )}
+
             <div className="p-6 sm:p-9">
               <div className="flex items-center justify-between gap-3 mb-3">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                  <Sparkles size={12} className="text-blue-500" />
-                  <span>GBI Jelambar Timur</span>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${themeStyles.badgeBg}`}>
+                  <span>{themeStyles.badgeIcon}</span>
+                  <span>{themeStyles.badgeLabel}</span>
                 </span>
 
                 <button
@@ -398,7 +484,10 @@ export default function CustomFormPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-xl shadow-blue-600/25 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className={`px-8 py-3.5 rounded-2xl text-white font-bold text-sm shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 cursor-pointer disabled:opacity-50 ${
+                    theme === 'custom' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/25' : themeStyles.btnBg
+                  }`}
+                  style={theme === 'custom' && customColor ? { backgroundColor: customColor } : undefined}
                 >
                   {submitting ? (
                     <>

@@ -4,6 +4,7 @@ import {
   FormQuestion,
   QuestionType,
   QUESTION_TYPES,
+  FormTheme,
 } from '../../../lib/customFormTypes';
 import {
   Plus,
@@ -24,6 +25,11 @@ import {
   Clock,
   Sparkles,
   HelpCircle,
+  Palette,
+  Flame,
+  Tent,
+  Cross,
+  Gift,
 } from 'lucide-react';
 
 interface Props {
@@ -32,11 +38,85 @@ interface Props {
   onCancel: () => void;
 }
 
+export const THEME_PRESETS: {
+  id: FormTheme;
+  name: string;
+  badge: string;
+  icon: string;
+  borderClass: string;
+  badgeBg: string;
+  badgeText: string;
+  description: string;
+}[] = [
+  {
+    id: 'standard',
+    name: 'Standar GBI',
+    badge: 'GBI Jelambar Timur',
+    icon: '⛪',
+    borderClass: 'border-t-blue-600',
+    badgeBg: 'bg-blue-50 border-blue-200',
+    badgeText: 'text-blue-700',
+    description: 'Warna biru elegan khas GBI Jelambar Timur.',
+  },
+  {
+    id: 'natal',
+    name: 'Natal / Christmas',
+    badge: 'Ibadah & Perayaan Natal',
+    icon: '🎄',
+    borderClass: 'border-t-rose-600',
+    badgeBg: 'bg-rose-50 border-rose-200',
+    badgeText: 'text-rose-700',
+    description: 'Nuansa merah, emas & kemeriahan Natal.',
+  },
+  {
+    id: 'paskah',
+    name: 'Paskah / Easter',
+    badge: 'Ibadah & Perayaan Paskah',
+    icon: '✝️',
+    borderClass: 'border-t-amber-600',
+    badgeBg: 'bg-amber-50 border-amber-200',
+    badgeText: 'text-amber-700',
+    description: 'Nuansa agung emas & putih kebangkitan Kristus.',
+  },
+  {
+    id: 'retret',
+    name: 'Retret / Camp',
+    badge: 'Retret & Camp Jemaat',
+    icon: '⛺',
+    borderClass: 'border-t-emerald-600',
+    badgeBg: 'bg-emerald-50 border-emerald-200',
+    badgeText: 'text-emerald-700',
+    description: 'Nuansa hijau alam & persekutuan outdoor.',
+  },
+  {
+    id: 'youth',
+    name: 'Youth / Remaja',
+    badge: 'Youth & Teens Event',
+    icon: '🔥',
+    borderClass: 'border-t-purple-600',
+    badgeBg: 'bg-purple-50 border-purple-200',
+    badgeText: 'text-purple-700',
+    description: 'Nuansa energik ungu & violet generasi muda.',
+  },
+  {
+    id: 'custom',
+    name: 'Custom',
+    badge: 'Kustom Acara',
+    icon: '🎨',
+    borderClass: 'border-t-indigo-600',
+    badgeBg: 'bg-indigo-50 border-indigo-200',
+    badgeText: 'text-indigo-700',
+    description: 'Pilih warna tema dan banner Anda sendiri.',
+  },
+];
+
 export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Props) {
   const [title, setTitle] = useState(initialForm?.title || 'Formulir Pendaftaran Acara');
   const [description, setDescription] = useState(
     initialForm?.description || 'Silakan lengkapi formulir pendaftaran berikut dengan data yang benar.'
   );
+  const [theme, setTheme] = useState<FormTheme>(initialForm?.theme || 'standard');
+  const [customColor, setCustomColor] = useState(initialForm?.customColor || '#2563eb');
   const [showOnHomepage, setShowOnHomepage] = useState(initialForm?.showOnHomepage ?? true);
   const [active, setActive] = useState(initialForm?.active ?? true);
   const [headerBannerUrl, setHeaderBannerUrl] = useState(initialForm?.headerBannerUrl || '');
@@ -222,6 +302,8 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
         active,
         showOnHomepage,
         headerBannerUrl: headerBannerUrl.trim() || undefined,
+        theme,
+        customColor: theme === 'custom' ? customColor : undefined,
         questions,
         createdAt: initialForm?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -235,17 +317,24 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
     }
   };
 
+  const selectedPreset = THEME_PRESETS.find(p => p.id === theme) || THEME_PRESETS[0];
+
   return (
     <div className="max-w-4xl mx-auto pb-20">
       {/* Top action bar */}
       <div className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 -mx-4 mb-6 flex items-center justify-between gap-3 text-white">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-sm">
-            GF
+            {selectedPreset.icon}
           </div>
-          <span className="font-bold text-sm truncate">
-            {initialForm ? 'Edit Formulir Pendaftaran' : 'Buat Formulir Pendaftaran Baru'}
-          </span>
+          <div className="min-w-0">
+            <span className="font-bold text-sm truncate block">
+              {initialForm ? 'Edit Formulir Pendaftaran' : 'Buat Formulir Pendaftaran Baru'}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Tema: <strong className="text-slate-200">{selectedPreset.name}</strong>
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -281,8 +370,119 @@ export default function CustomFormBuilder({ initialForm, onSave, onCancel }: Pro
         </div>
       )}
 
+      {/* Theme Presets Picker Card */}
+      <div className="rounded-2xl bg-slate-900 text-white border border-slate-800 p-5 sm:p-6 mb-5 shadow-lg">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600/30 text-indigo-400 flex items-center justify-center">
+              <Palette size={16} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Pilih Tema & Tampilan Formulir</h3>
+              <p className="text-[11px] text-slate-400">
+                Pilih tema acara gereja (Natal, Paskah, Retret, Youth) atau tema kustom.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Preset Pills */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 mt-4">
+          {THEME_PRESETS.map(p => {
+            const isCurrent = theme === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setTheme(p.id)}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                  isCurrent
+                    ? 'bg-indigo-600/20 border-indigo-500 ring-2 ring-indigo-500/30'
+                    : 'bg-slate-800/60 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xl">{p.icon}</span>
+                  {isCurrent && (
+                    <span className="w-4 h-4 rounded-full bg-indigo-500 text-white flex items-center justify-center">
+                      <Check size={10} />
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white leading-tight">{p.name}</div>
+                  <div className="text-[10px] text-slate-400 mt-1 line-clamp-1">{p.description}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Custom Theme Color Picker & Banner URL (if custom or optional header) */}
+        <div className="mt-4 pt-4 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {theme === 'custom' && (
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1.5">
+                Warna Aksen Kustom (Hex / Color Picker)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={customColor}
+                  onChange={e => setCustomColor(e.target.value)}
+                  className="w-9 h-9 rounded-lg border border-slate-700 cursor-pointer bg-transparent p-0.5"
+                />
+                <input
+                  type="text"
+                  value={customColor}
+                  onChange={e => setCustomColor(e.target.value)}
+                  placeholder="#2563eb"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white font-mono focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className={theme === 'custom' ? '' : 'sm:col-span-2'}>
+            <label className="block text-[11px] font-bold text-slate-300 mb-1.5">
+              URL Banner Gambar Header (Opsional)
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={headerBannerUrl}
+                onChange={e => setHeaderBannerUrl(e.target.value)}
+                placeholder="https://example.com/banner-natal.jpg (opsional jika ada poster acara)"
+                className="w-full px-3 py-1.5 pl-8 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:border-indigo-500 focus:outline-none placeholder-slate-500"
+              />
+              <ImageIcon size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Header Container (Like Google Form Top Card) */}
-      <div className="rounded-2xl border-t-8 border-t-indigo-600 bg-white border border-slate-200/90 shadow-sm p-6 sm:p-8 mb-5 transition-all">
+      <div
+        className={`rounded-2xl border-t-8 bg-white border border-slate-200/90 shadow-sm p-6 sm:p-8 mb-5 transition-all ${
+          theme === 'custom'
+            ? 'border-t-indigo-600'
+            : selectedPreset.borderClass
+        }`}
+        style={theme === 'custom' && customColor ? { borderTopColor: customColor } : undefined}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
+              theme === 'custom'
+                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                : `${selectedPreset.badgeBg} ${selectedPreset.badgeText}`
+            }`}
+          >
+            <span>{selectedPreset.icon}</span>
+            <span>{selectedPreset.badge}</span>
+          </span>
+        </div>
+
         <input
           type="text"
           value={title}

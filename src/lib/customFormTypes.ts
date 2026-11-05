@@ -17,6 +17,8 @@ export interface FormQuestion {
   placeholder?: string;
 }
 
+export type FormTheme = 'standard' | 'natal' | 'paskah' | 'retret' | 'youth' | 'custom';
+
 export interface CustomEventForm {
   id: string;
   title: string;
@@ -25,6 +27,8 @@ export interface CustomEventForm {
   active: boolean;
   showOnHomepage: boolean;
   headerBannerUrl?: string;
+  theme?: FormTheme;
+  customColor?: string; // hex or tailwind-like color e.g. '#2563eb'
   questions: FormQuestion[];
   createdAt: string;
   updatedAt: string;

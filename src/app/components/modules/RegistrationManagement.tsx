@@ -120,13 +120,36 @@ export default function RegistrationManagement() {
 
   // ── Custom Form CRUD ───────────────────────────────────────────────────────
   const handleSaveCustomForm = async (savedForm: CustomEventForm) => {
-    await supabase.from('kv_store_561004a0').upsert({
-      key: `custom_form:${savedForm.slug}`,
-      value: savedForm,
-    });
-    setIsBuildingForm(false);
-    setEditingForm(null);
-    await loadAll();
+    try {
+      const formKey = `custom_form:${savedForm.slug}`;
+      const { data: existing } = await supabase
+        .from('kv_store_561004a0')
+        .select('key')
+        .eq('key', formKey)
+        .maybeSingle();
+
+      if (existing) {
+        const { error: updErr } = await supabase
+          .from('kv_store_561004a0')
+          .update({ value: savedForm })
+          .eq('key', formKey);
+        if (updErr) throw updErr;
+      } else {
+        const { error: insErr } = await supabase
+          .from('kv_store_561004a0')
+          .insert({
+            key: formKey,
+            value: savedForm,
+          });
+        if (insErr) throw insErr;
+      }
+
+      setIsBuildingForm(false);
+      setEditingForm(null);
+      await loadAll();
+    } catch (err: any) {
+      alert('Gagal menyimpan formulir: ' + (err.message || 'Terjadi kesalahan sistem'));
+    }
   };
 
   const handleDeleteCustomForm = async (f: CustomEventForm) => {

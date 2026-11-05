@@ -458,38 +458,55 @@ export default function JemaatPage() {
             </FadeInSection>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {eventForms.map((f, i) => (
-                <FadeInSection key={f.id} delay={i * 0.1}>
-                  <div className="rounded-3xl bg-white/10 border border-white/15 p-6 backdrop-blur-md hover:bg-white/15 transition-all flex flex-col justify-between shadow-xl">
-                    <div>
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 mb-3">
-                        Pendaftaran Terbuka
-                      </span>
-                      <h3 className="text-xl font-bold text-white mb-2 leading-snug">
-                        {f.title}
-                      </h3>
-                      {f.description && (
-                        <p className="text-xs sm:text-sm text-blue-100/80 line-clamp-2 leading-relaxed mb-4">
-                          {f.description}
-                        </p>
-                      )}
-                    </div>
+              {eventForms.map((f, i) => {
+                const themeMeta = {
+                  natal: { icon: '🎄', label: 'Natal', badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-400/30', btnBg: 'bg-rose-600 hover:bg-rose-500' },
+                  paskah: { icon: '✝️', label: 'Paskah', badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-400/30', btnBg: 'bg-amber-600 hover:bg-amber-500' },
+                  retret: { icon: '⛺', label: 'Retret & Camp', badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30', btnBg: 'bg-emerald-600 hover:bg-emerald-500' },
+                  youth: { icon: '🔥', label: 'Youth', badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-400/30', btnBg: 'bg-purple-600 hover:bg-purple-500' },
+                  custom: { icon: '✨', label: 'Event Khusus', badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/30', btnBg: 'bg-indigo-600 hover:bg-indigo-500' },
+                  standard: { icon: '⛪', label: 'Pendaftaran', badgeBg: 'bg-blue-500/20 text-blue-300 border-blue-400/30', btnBg: 'bg-blue-600 hover:bg-blue-500' },
+                }[f.theme || 'standard'];
 
-                    <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-                      <span className="text-xs text-blue-200">
-                        {f.questions?.length || 0} Pertanyaan
-                      </span>
-                      <Link
-                        to={`/form/${f.slug}`}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs shadow-lg transition-all hover:scale-105 active:scale-95"
-                      >
-                        <span>Daftar Sekarang</span>
-                        <ArrowRight size={14} />
-                      </Link>
+                return (
+                  <FadeInSection key={f.id} delay={i * 0.1}>
+                    <div className="rounded-3xl bg-white/10 border border-white/15 p-6 backdrop-blur-md hover:bg-white/15 transition-all flex flex-col justify-between shadow-xl">
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${themeMeta.badgeBg}`}>
+                            <span>{themeMeta.icon}</span>
+                            <span>{themeMeta.label}</span>
+                          </span>
+                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                            Pendaftaran Terbuka
+                          </span>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2 leading-snug">
+                          {f.title}
+                        </h3>
+                        {f.description && (
+                          <p className="text-xs sm:text-sm text-blue-100/80 line-clamp-2 leading-relaxed mb-4">
+                            {f.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                        <span className="text-xs text-blue-200">
+                          {f.questions?.length || 0} Pertanyaan
+                        </span>
+                        <Link
+                          to={`/form/${f.slug}`}
+                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full ${themeMeta.btnBg} text-white font-bold text-xs shadow-lg transition-all hover:scale-105 active:scale-95`}
+                        >
+                          <span>Daftar Sekarang</span>
+                          <ArrowRight size={14} />
+                        </Link>
+                      </div>
                     </div>
-                  </div>
-                </FadeInSection>
-              ))}
+                  </FadeInSection>
+                );
+              })}
             </div>
           </div>
         </section>
