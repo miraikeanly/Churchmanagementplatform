@@ -55,7 +55,8 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    if (response.status === 401) {
+    const isPublicEndpoint = url.includes('/api/content') || url.includes('custom_form');
+    if (response.status === 401 && !isPublicEndpoint) {
       // Unauthorized - session might be expired
       // AuthContext will handle state, but we could trigger an event here
       window.dispatchEvent(new CustomEvent('auth:unauthorized'));
