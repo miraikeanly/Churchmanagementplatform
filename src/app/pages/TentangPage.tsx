@@ -261,7 +261,12 @@ export default function TentangPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
             <FadeIn>
               <div>
-                <span className="inline-block text-blue-600 text-sm font-semibold uppercase tracking-widest mb-4">Profil Gereja</span>
+                <span
+                  className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-normal mb-2 drop-shadow-sm px-2"
+                  style={{ fontFamily: 'Caveat, cursive' }}
+                >
+                  Profil Gereja
+                </span>
                 <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6 leading-tight">Komunitas Iman yang Penuh Kasih & Sukacita</h2>
                 <div className="space-y-4 text-gray-600 leading-relaxed">
                   <p><strong className="text-gray-900">GBI Jelambar Timur</strong> adalah komunitas iman yang berdedikasi untuk melayani Tuhan dan sesama. Berdiri sejak lebih dari 30 tahun lalu, kami telah menjadi bagian dari kehidupan ribuan keluarga di Jakarta Barat dan sekitarnya.</p>
