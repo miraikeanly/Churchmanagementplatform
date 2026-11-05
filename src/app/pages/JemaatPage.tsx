@@ -37,7 +37,8 @@ function FlyerCarousel({ items }: { items: Announcement[] }) {
 
   useEffect(() => {
     if (items.length <= 1) return;
-    timerRef.current = setInterval(next, 10000);
+    // Auto-advance interval changed to 5 seconds (smooth & faster than 10s)
+    timerRef.current = setInterval(next, 5000);
     return () => clearInterval(timerRef.current);
   }, [next, items.length]);
 
@@ -51,34 +52,34 @@ function FlyerCarousel({ items }: { items: Announcement[] }) {
   };
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl shadow-2xl bg-gray-900" style={{ aspectRatio: '16/9' }}>
+    <div className="relative w-full overflow-hidden rounded-3xl shadow-2xl bg-gray-950 border border-slate-100/80 group" style={{ aspectRatio: '16/9' }}>
       <AnimatePresence initial={false} custom={direction} mode="popLayout">
         <motion.div key={item.id} custom={direction} variants={variants} initial="enter" animate="center" exit="exit"
-          transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }} className="absolute inset-0">
+          transition={{ duration: 0.55, ease: [0.25, 1, 0.5, 1] }} className="absolute inset-0">
           {item.imageUrl ? (
             <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-800 to-indigo-900 text-white">
-              <ImageIcon size={48} className="opacity-40 mb-4" />
-              <p className="text-xl font-bold">{item.title}</p>
-              {item.description && <p className="text-sm opacity-70 mt-2 max-w-sm text-center px-4">{item.description}</p>}
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-950 text-white p-6">
+              <ImageIcon size={52} className="opacity-40 mb-4" />
+              <p className="text-2xl font-black">{item.title}</p>
+              {item.description && <p className="text-sm opacity-80 mt-2 max-w-md text-center px-4 leading-relaxed">{item.description}</p>}
             </div>
           )}
           {(item.title || item.description) && item.imageUrl && (
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-6">
-              <p className="text-white font-bold text-lg leading-tight">{item.title}</p>
-              {item.description && <p className="text-white/80 text-sm mt-1">{item.description}</p>}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent pt-12 pb-5 px-6 sm:px-8">
+              <p className="text-white font-extrabold text-base sm:text-xl leading-snug drop-shadow-md">{item.title}</p>
+              {item.description && <p className="text-white/85 text-xs sm:text-sm mt-1 max-w-3xl leading-relaxed drop-shadow-sm">{item.description}</p>}
             </div>
           )}
         </motion.div>
       </AnimatePresence>
       {items.length > 1 && (
         <>
-          <button onClick={prev} className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"><ChevronLeft size={22} /></button>
-          <button onClick={next} className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"><ChevronRight size={22} /></button>
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex gap-1.5">
+          <button onClick={prev} aria-label="Flyer Sebelumnya" className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg"><ChevronLeft size={22} /></button>
+          <button onClick={next} aria-label="Flyer Selanjutnya" className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg"><ChevronRight size={22} /></button>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex gap-1.5 px-3 py-1 rounded-full bg-black/25 backdrop-blur-xs">
             {items.map((_, i) => (
-              <button key={i} onClick={() => go(i, i > current ? 1 : -1)} className={`rounded-full transition-all duration-300 ${i === current ? 'w-6 h-2 bg-white' : 'w-2 h-2 bg-white/50 hover:bg-white/80'}`} />
+              <button key={i} onClick={() => go(i, i > current ? 1 : -1)} aria-label={`Ke flyer ${i + 1}`} className={`rounded-full transition-all duration-300 cursor-pointer ${i === current ? 'w-6 h-2 bg-white shadow-xs' : 'w-2 h-2 bg-white/50 hover:bg-white/80'}`} />
             ))}
           </div>
         </>
@@ -427,12 +428,12 @@ export default function JemaatPage() {
 
       {/* ── Pengumuman / Flyer ── */}
       {announcements.length > 0 && (
-        <section id="pengumuman" className="py-16 bg-white">
-          <div className="max-w-5xl mx-auto px-6">
+        <section id="pengumuman" className="py-16 sm:py-20 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <FadeInSection>
-              <div className="text-center mb-8">
-                <span className="inline-block text-blue-600 text-sm font-semibold uppercase tracking-widest mb-3">Pengumuman</span>
-                <h2 className="font-display text-2xl sm:text-3xl font-bold text-gray-900">Info & Event Terkini</h2>
+              <div className="text-center mb-8 sm:mb-10">
+                <span className="inline-block text-blue-600 text-sm font-bold uppercase tracking-widest mb-2.5">Pengumuman</span>
+                <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 tracking-tight">Info & Event Terkini</h2>
               </div>
             </FadeInSection>
             <FadeInSection delay={0.1}><FlyerCarousel items={announcements} /></FadeInSection>

@@ -56,10 +56,16 @@ export default async function handler(req, res) {
       return res.status(200).send(Buffer.from(img.data, 'base64'));
     }
 
-    // ── Public reads ──
     if (m === 'GET' && resource === 'announcements') {
       const items = (await byPrefix('announcement:')).filter((x) => x.id)
-        .sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt));
+        .sort((x, y) => {
+          if (typeof x.order === 'number' && typeof y.order === 'number') {
+            return x.order - y.order;
+          }
+          if (typeof x.order === 'number') return -1;
+          if (typeof y.order === 'number') return 1;
+          return new Date(y.createdAt) - new Date(x.createdAt);
+        });
       return sendJson(res, 200, { success: true, announcements: items });
     }
     if (m === 'GET' && resource === 'gallery' && a === 'albums' && !b) {
@@ -176,10 +182,24 @@ export default async function handler(req, res) {
     const body = ['POST', 'PUT'].includes(m) ? getBody(req) : {};
 
     if (resource === 'announcements') {
+      if (m === 'POST' && a === 'reorder') {
+        const { orders } = body; // Array of { id, order }
+        if (Array.isArray(orders)) {
+          for (const o of orders) {
+            const ex = await get(`announcement:${o.id}`);
+            if (ex) {
+              await set(`announcement:${o.id}`, { ...ex, order: o.order, updatedAt: now() });
+            }
+          }
+        }
+        return sendJson(res, 200, { success: true });
+      }
       if (m === 'POST') {
         if (!body.title) return sendError(res, 400, 'Title is required');
         const id = uid('ann');
+        const count = (await byPrefix('announcement:')).length;
         const item = { id, title: body.title, description: body.description || '', imageUrl: body.imageUrl || null,
+          order: typeof body.order === 'number' ? body.order : count,
           active: body.active !== false, createdAt: now(), updatedAt: now(), createdBy: user.id };
         await set(`announcement:${id}`, item);
         return sendJson(res, 200, { success: true, announcement: item });

@@ -5,7 +5,8 @@ import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { useAuth } from '../../contexts/AuthContext';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import {
-  Plus, Pencil, Trash2, Eye, EyeOff, ImageIcon, X, Check, Loader2, AlertCircle, Camera, Upload
+  Plus, Pencil, Trash2, Eye, EyeOff, ImageIcon, X, Check, Loader2, AlertCircle, Camera, Upload,
+  GripVertical, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 const API_URL = `${apiBase()}/api/content`;
@@ -16,6 +17,7 @@ interface Announcement {
   description: string;
   imagePath?: string | null;
   imageUrl: string | null;
+  order?: number;
   active: boolean;
   createdAt: string;
 }
@@ -175,6 +177,84 @@ export default function AnnouncementManagement() {
     } catch (e: any) {
       setError(e.message);
     }
+  };
+
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+
+  const saveReorder = async (newItems: Announcement[]) => {
+    setIsReordering(true);
+    try {
+      const orders = newItems.map((item, index) => ({ id: item.id, order: index }));
+      const res = await fetch(`${API_URL}/announcements/reorder`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orders }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Gagal menyimpan urutan');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Gagal menyimpan urutan');
+      await fetchAll();
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!canEdit) return;
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    if (!canEdit || draggedIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = (index: number) => {
+    if (dragOverIndex === index) {
+      setDragOverIndex(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (!canEdit || draggedIndex === null || draggedIndex === targetIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const reordered = [...items];
+    const [moved] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    setItems(reordered);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    await saveReorder(reordered);
+  };
+
+  const handleMoveStep = async (currentIndex: number, direction: 'up' | 'down') => {
+    if (!canEdit) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= items.length) return;
+
+    const reordered = [...items];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    setItems(reordered);
+    await saveReorder(reordered);
   };
 
   return (
@@ -422,63 +502,164 @@ export default function AnnouncementManagement() {
           <p className="text-sm text-gray-400">Klik "Tambah Flyer" untuk membuat pengumuman pertama</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {items.map(item => (
-            <div key={item.id} className={`bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow ${item.active ? 'border-gray-100' : 'border-dashed border-gray-200 opacity-70'}`}>
-              {/* 16:9 image */}
-              <div className="relative bg-gray-100" style={{ aspectRatio: '16/9' }}>
-                {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-300">
-                    <ImageIcon size={40} />
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200/80">
+            <span className="flex items-center gap-1.5 font-medium">
+              <GripVertical size={14} className="text-indigo-500 shrink-0" />
+              <span>
+                <strong>Urutan Tampilan:</strong> Drag & drop kartu flyer untuk mengatur urutan. Posisi <strong>#1 (paling kiri atas)</strong> akan muncul pertama di homepage, dan posisi terakhir di kanan bawah akan tampil paling akhir.
+              </span>
+            </span>
+            {isReordering && (
+              <span className="inline-flex items-center gap-1 text-indigo-600 font-bold shrink-0">
+                <Loader2 size={13} className="animate-spin" />
+                <span>Menyimpan urutan...</span>
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {items.map((item, index) => {
+              const isDragging = draggedIndex === index;
+              const isOver = dragOverIndex === index;
+
+              return (
+                <div
+                  key={item.id}
+                  draggable={canEdit}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={() => handleDragLeave(index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={() => {
+                    setDraggedIndex(null);
+                    setDragOverIndex(null);
+                  }}
+                  className={`bg-white rounded-2xl border overflow-hidden shadow-sm transition-all relative ${
+                    canEdit ? 'cursor-grab active:cursor-grabbing' : ''
+                  } ${
+                    isDragging
+                      ? 'opacity-40 scale-95 border-indigo-400 ring-2 ring-indigo-400/30'
+                      : isOver
+                      ? 'border-indigo-500 ring-2 ring-indigo-500/40 shadow-lg scale-[1.02]'
+                      : item.active
+                      ? 'border-gray-100 hover:shadow-md'
+                      : 'border-dashed border-gray-200 opacity-70'
+                  }`}
+                >
+                  {/* 16:9 image */}
+                  <div className="relative bg-gray-100 group" style={{ aspectRatio: '16/9' }}>
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover select-none pointer-events-none" />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-300">
+                        <ImageIcon size={40} />
+                      </div>
+                    )}
+
+                    {/* Order index badge */}
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-black bg-slate-900/80 text-white backdrop-blur-md shadow-xs border border-white/20 flex items-center gap-1">
+                        <GripVertical size={12} className="text-indigo-400" />
+                        <span>#{index + 1}</span>
+                      </span>
+                    </div>
+
+                    {/* Active badge */}
+                    <span className={`absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-xs ${item.active ? 'bg-emerald-500 text-white' : 'bg-gray-400 text-white'}`}>
+                      {item.active ? 'Aktif' : 'Nonaktif'}
+                    </span>
                   </div>
-                )}
-                {/* Active badge */}
-                <span className={`absolute top-2 right-2 px-2.5 py-1 rounded-full text-xs font-semibold ${item.active ? 'bg-emerald-500 text-white' : 'bg-gray-400 text-white'}`}>
-                  {item.active ? 'Aktif' : 'Nonaktif'}
-                </span>
-              </div>
 
-              <div className="p-4">
-                <h3 className="font-bold text-gray-900 mb-1 truncate">{item.title}</h3>
-                {item.description && (
-                  <p className="text-sm text-gray-500 line-clamp-2 mb-3">{item.description}</p>
-                )}
-                <p className="text-xs text-gray-400 mb-4">
-                  {new Date(item.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </p>
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <h3 className="font-bold text-gray-900 truncate flex-1 text-base leading-snug">{item.title}</h3>
+                    </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => canEdit && handleToggleActive(item)}
-                    title={item.active ? 'Nonaktifkan' : 'Aktifkan'}
-                    className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${canEdit ? 'border-gray-200 text-gray-600 hover:bg-gray-50' : 'border-gray-200 text-gray-400 cursor-not-allowed opacity-50'}`}
-                    disabled={!canEdit}
-                  >
-                    {item.active ? <EyeOff size={14} /> : <Eye size={14} />}
-                    {item.active ? 'Nonaktif' : 'Aktifkan'}
-                  </button>
-                  {canEdit && (
-                    <button
-                      onClick={() => openEdit(item)}
-                      className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors"
-                    >
-                      <Pencil size={14} /> Edit
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button
-                      onClick={() => setDeleteConfirm(item.id)}
-                      className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors ml-auto"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                    {item.description && (
+                      <p className="text-sm text-gray-500 line-clamp-2 mb-3 leading-relaxed">{item.description}</p>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs text-gray-400 mb-4 pt-1 border-t border-slate-100">
+                      <span>{new Date(item.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                      <span className="text-[11px] font-semibold text-slate-500">Urutan ke-{index + 1}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Step order buttons for accessibility & quick ordering */}
+                      {canEdit && (
+                        <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 mr-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveStep(index, 'up');
+                            }}
+                            disabled={index === 0}
+                            title="Geser ke kiri / urutan sebelumnya"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-white transition-colors cursor-pointer"
+                          >
+                            <ArrowUp size={13} className="-rotate-90" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveStep(index, 'down');
+                            }}
+                            disabled={index === items.length - 1}
+                            title="Geser ke kanan / urutan selanjutnya"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-white transition-colors cursor-pointer"
+                          >
+                            <ArrowDown size={13} className="-rotate-90" />
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (canEdit) handleToggleActive(item);
+                        }}
+                        title={item.active ? 'Nonaktifkan' : 'Aktifkan'}
+                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${canEdit ? 'border-gray-200 text-gray-600 hover:bg-gray-50 cursor-pointer' : 'border-gray-200 text-gray-400 cursor-not-allowed opacity-50'}`}
+                        disabled={!canEdit}
+                      >
+                        {item.active ? <EyeOff size={13} /> : <Eye size={13} />}
+                        <span>{item.active ? 'Nonaktif' : 'Aktif'}</span>
+                      </button>
+
+                      {canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(item);
+                          }}
+                          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer"
+                        >
+                          <Pencil size={13} />
+                          <span>Edit</span>
+                        </button>
+                      )}
+
+                      {canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm(item.id);
+                          }}
+                          className="flex items-center justify-center p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors ml-auto cursor-pointer"
+                          title="Hapus flyer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
