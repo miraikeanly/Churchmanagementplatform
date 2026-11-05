@@ -452,8 +452,8 @@ export default function JemaatPage() {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
             <FadeInSection>
               <div className="text-center mb-10 sm:mb-14">
-                <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-widest bg-amber-400/15 text-amber-300 border border-amber-300/30 mb-3.5 shadow-xs backdrop-blur-md">
-                  <Sparkles size={13} className="text-amber-400" />
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold tracking-wide bg-amber-500/10 text-amber-300 border border-amber-500/25 mb-4 backdrop-blur-md shadow-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                   <span>Pendaftaran Dibuka</span>
                 </span>
                 <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">
@@ -546,11 +546,11 @@ export default function JemaatPage() {
                         <div>
                           {/* Badges row */}
                           <div className="flex items-center gap-2 mb-4 flex-wrap">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border shadow-xs ${themeMeta.badgeBg}`}>
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold tracking-wide border shadow-2xs ${themeMeta.badgeBg}`}>
                               <span>{themeMeta.icon}</span>
                               <span>{themeMeta.label}</span>
                             </span>
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold tracking-wide bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                               <span>Pendaftaran Dibuka</span>
                             </span>

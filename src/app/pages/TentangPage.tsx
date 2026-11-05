@@ -214,11 +214,11 @@ export default function TentangPage() {
   const byTier = (tier: string) => teamMembers.filter(m => m.tier === tier);
 
   const tiers = [
-    { key: 'gembala_sidang',  members: byTier('gembala_sidang'),  cardSize: 'lg' as const, badge: 'bg-yellow-400/20 border-yellow-300/40 text-yellow-200' },
-    { key: 'penerus_gembala', members: byTier('penerus_gembala'), cardSize: 'lg' as const, badge: 'bg-blue-400/20 border-blue-300/40 text-blue-200' },
-    { key: 'wakil_gembala',   members: byTier('wakil_gembala'),   cardSize: 'md' as const, badge: 'bg-indigo-400/20 border-indigo-300/40 text-indigo-200' },
-    { key: 'pastoral',        members: byTier('pastoral'),        cardSize: 'md' as const, badge: 'bg-emerald-400/20 border-emerald-300/40 text-emerald-200' },
-    { key: 'koordinator',     members: byTier('koordinator'),     cardSize: 'sm' as const, badge: 'bg-white/10 border-white/20 text-white/70' },
+    { key: 'gembala_sidang',  members: byTier('gembala_sidang'),  cardSize: 'lg' as const, badge: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
+    { key: 'penerus_gembala', members: byTier('penerus_gembala'), cardSize: 'lg' as const, badge: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
+    { key: 'wakil_gembala',   members: byTier('wakil_gembala'),   cardSize: 'md' as const, badge: 'text-indigo-300 border-indigo-500/30 bg-indigo-500/10' },
+    { key: 'pastoral',        members: byTier('pastoral'),        cardSize: 'md' as const, badge: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+    { key: 'koordinator',     members: byTier('koordinator'),     cardSize: 'sm' as const, badge: 'text-slate-300 border-slate-600 bg-slate-800/40' },
   ].filter(t => t.members.length > 0);
 
   const hasTeam = teamMembers.length > 0;
@@ -332,18 +332,18 @@ export default function TentangPage() {
                     <div>
                       {/* Tier label above container */}
                       <div className="flex items-center gap-3 sm:gap-4 mb-8">
-                        <div className="flex-1 h-px bg-white/10" />
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
                         <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center">
-                          <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest border backdrop-blur-sm ${tier.badge}`}>
+                          <span className={`inline-flex items-center px-4 py-1.5 rounded-xl text-xs font-semibold tracking-wider border backdrop-blur-md shadow-xs ${tier.badge}`}>
                             {TIER_LABELS[tier.key]}
                           </span>
                           {isGembalaSidang && (
-                            <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest bg-amber-400/15 border border-amber-300/35 text-amber-200 backdrop-blur-sm">
+                            <span className="inline-flex items-center px-4 py-1.5 rounded-xl text-xs font-semibold tracking-wider bg-amber-500/10 border border-amber-500/30 text-amber-300 backdrop-blur-md shadow-xs">
                               Pendiri & Perintis Pelayanan
                             </span>
                           )}
                         </div>
-                        <div className="flex-1 h-px bg-white/10" />
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
                       </div>
 
                       {/* Cards */}
