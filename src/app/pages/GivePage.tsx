@@ -35,7 +35,10 @@ export default function GivePage() {
         
         {/* Hero Section */}
         <div className="text-center max-w-2xl mx-auto">
-          <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.28em] text-blue-300 mb-2">
+          <p
+            className="font-cursive text-3xl sm:text-4xl text-blue-300 font-normal mb-1 drop-shadow-sm px-2 inline-block"
+            style={{ fontFamily: 'Caveat, cursive' }}
+          >
             Persembahan Jemaat &bull; Online Giving
           </p>
 

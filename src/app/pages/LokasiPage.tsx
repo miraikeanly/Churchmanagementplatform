@@ -15,7 +15,8 @@ export default function LokasiPage() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-3"
+          className="font-cursive text-3xl sm:text-4xl text-blue-600 font-normal mb-1 drop-shadow-sm px-2 inline-block"
+          style={{ fontFamily: 'Caveat, cursive' }}
         >
           Temukan Kami
         </motion.p>
