@@ -8,6 +8,7 @@ import { ALL_MINISTRIES } from '../../lib/ministries';
 import { useChurchStats, yearsServing } from '../../lib/stats';
 import PublicFooter from '../components/public/PublicFooter';
 import gbiLogo from '../../imports/pngegg__1_-1.png';
+import heroBgImage from '../../imports/tentang-hero-bg.jpg';
 
 const API_URL = `${apiBase()}/api/content`;
 
@@ -227,17 +228,28 @@ export default function TentangPage() {
       <PublicNavbar />
 
       {/* Hero */}
-      <section className="relative pt-36 pb-20 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #312e81 60%, #1e1b4b 100%)' }}>
-        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+      <section className="relative pt-36 pb-24 overflow-hidden bg-[#1e2a5e]" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 60%, #0f172a 100%)' }}>
+        {/* Background Image with 50% opacity and gradient blend */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <img
+            src={heroBgImage}
+            alt="Jemaat GBI Jelambar Timur"
+            className="w-full h-full object-cover object-center opacity-50 mix-blend-luminosity filter brightness-90 contrast-110"
+          />
+          {/* Subtle gradient overlays to ensure text & logo stand out cleanly */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#1e3a8a]/60 via-[#1e1b4b]/75 to-[#0f172a]/90" />
+          <div className="absolute inset-0 bg-radial from-transparent via-[#1e1b4b]/40 to-[#0f172a]/80" />
+        </div>
+
         <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
           <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6 }}
-            className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-6 ring-4 ring-white/20 shadow-2xl">
+            className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-6 ring-4 ring-white/30 shadow-2xl bg-white/10 backdrop-blur-sm">
             <img src={gbiLogo} alt="GBI Logo" className="w-full h-full object-cover" />
           </motion.div>
           <motion.h1 initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.1 }}
-            className="text-4xl md:text-5xl font-bold text-white mb-4">Tentang Kami</motion.h1>
+            className="text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight drop-shadow-md">Tentang Kami</motion.h1>
           <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.2 }}
-            className="text-blue-200 text-lg max-w-2xl mx-auto leading-relaxed">
+            className="text-blue-100 text-lg max-w-2xl mx-auto leading-relaxed drop-shadow-sm font-medium">
             Mengenal lebih dekat komunitas iman GBI Jelambar Timur
           </motion.p>
         </div>
