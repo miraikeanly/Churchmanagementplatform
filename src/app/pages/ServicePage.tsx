@@ -513,7 +513,10 @@ export default function ServicePage() {
         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
         <div className="max-w-5xl mx-auto px-6 text-center relative z-10">
           <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-            className="text-blue-400 text-xs font-bold uppercase tracking-[0.22em] mb-3">Program Ibadah</motion.p>
+            className="font-cursive text-3xl sm:text-4xl text-blue-400 font-normal mb-1 drop-shadow-sm px-2 inline-block"
+            style={{ fontFamily: 'Caveat, cursive' }}>
+            Program Ibadah
+          </motion.p>
           <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.06 }}
             className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">Layanan &amp; Ibadah</motion.h1>
           <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.12 }}
