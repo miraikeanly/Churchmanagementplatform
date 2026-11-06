@@ -303,23 +303,32 @@ export default function JemaatPage() {
             Komunitas iman yang hangat dan melayani dengan kasih. Kami menyambut Anda dan keluarga untuk bersekutu, beribadah, dan bertumbuh bersama dalam hadirat Tuhan.
           </motion.p>
 
-          {/* Action CTA Buttons: Single primary button */}
+          {/* Action CTA Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.48 }}
             className="flex flex-col items-center justify-center gap-4 w-full sm:w-auto"
           >
-            <a
-              href="#jadwal"
-              className="inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-blue-500 via-indigo-600 to-blue-600 text-white font-bold text-sm sm:text-base px-8 py-3.5 sm:px-10 sm:py-4 rounded-full shadow-xl shadow-blue-600/35 hover:shadow-blue-500/60 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 cursor-pointer"
-            >
-              <span>Lihat Jadwal Ibadah</span>
-              <ArrowRight size={18} />
-            </a>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <a
+                href="#jadwal"
+                className="inline-flex items-center justify-center gap-2.5 bg-white text-slate-950 hover:bg-slate-100 font-semibold text-sm px-6 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer active:scale-95"
+              >
+                <span>Lihat Jadwal Ibadah</span>
+                <ArrowRight size={16} />
+              </a>
+              <Link
+                to="/lokasi"
+                className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/15 text-white border border-white/20 backdrop-blur-md font-medium text-sm px-6 py-3 rounded-full transition-all duration-200 active:scale-95"
+              >
+                <MapPin size={16} className="text-blue-300" />
+                <span>Petunjuk Arah</span>
+              </Link>
+            </div>
 
             {/* Quick Icon Links: YouTube, Instagram, Google Maps, Galeri */}
-            <div className="flex items-center justify-center gap-3 sm:gap-3.5 pt-1">
+            <div className="flex items-center justify-center gap-2.5 pt-2">
               {/* YouTube */}
               <a
                 href={CHURCH.youtubeUrl}
@@ -327,11 +336,9 @@ export default function JemaatPage() {
                 rel="noopener noreferrer"
                 title="YouTube GBI Jelambar Timur"
                 aria-label="YouTube"
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur-md flex items-center justify-center text-white shadow-md hover:scale-110 active:scale-95 transition-all duration-200 hover:-translate-y-0.5 group"
+                className="w-10 h-10 rounded-full bg-white/[0.08] hover:bg-white/[0.16] border border-white/10 backdrop-blur-md flex items-center justify-center text-white/90 hover:text-white transition-all duration-200"
               >
-                <span className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center text-white flex-shrink-0 shadow-sm group-hover:bg-red-500 transition-colors">
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                </span>
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-red-500"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
               </a>
 
               {/* Instagram */}
@@ -341,11 +348,9 @@ export default function JemaatPage() {
                 rel="noopener noreferrer"
                 title="Instagram GBI Jelambar Timur"
                 aria-label="Instagram"
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur-md flex items-center justify-center text-white shadow-md hover:scale-110 active:scale-95 transition-all duration-200 hover:-translate-y-0.5 group"
+                className="w-10 h-10 rounded-full bg-white/[0.08] hover:bg-white/[0.16] border border-white/10 backdrop-blur-md flex items-center justify-center text-white/90 hover:text-white transition-all duration-200"
               >
-                <span className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-amber-400 flex items-center justify-center text-white flex-shrink-0 shadow-sm">
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-                </span>
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-pink-400"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
               </a>
 
               {/* Google Maps */}
@@ -355,9 +360,9 @@ export default function JemaatPage() {
                 rel="noopener noreferrer"
                 title="Petunjuk Arah Google Maps"
                 aria-label="Google Maps"
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 backdrop-blur-md flex items-center justify-center text-emerald-300 hover:text-white shadow-md hover:scale-110 active:scale-95 transition-all duration-200 hover:-translate-y-0.5"
+                className="w-10 h-10 rounded-full bg-white/[0.08] hover:bg-white/[0.16] border border-white/10 backdrop-blur-md flex items-center justify-center text-emerald-400 hover:text-white transition-all duration-200"
               >
-                <MapPin size={18} />
+                <MapPin size={17} />
               </a>
 
               {/* Galeri */}
@@ -365,9 +370,9 @@ export default function JemaatPage() {
                 to="/galeri"
                 title="Lihat Galeri Foto"
                 aria-label="Galeri Foto"
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur-md flex items-center justify-center text-white/90 hover:text-white shadow-md hover:scale-110 active:scale-95 transition-all duration-200 hover:-translate-y-0.5"
+                className="w-10 h-10 rounded-full bg-white/[0.08] hover:bg-white/[0.16] border border-white/10 backdrop-blur-md flex items-center justify-center text-white/80 hover:text-white transition-all duration-200"
               >
-                <Images size={18} />
+                <Images size={17} />
               </Link>
             </div>
           </motion.div>
@@ -384,24 +389,24 @@ export default function JemaatPage() {
       </section>
 
       {/* ── Akses cepat ── */}
-      <section className="relative z-20 -mt-6 sm:-mt-8 md:-mt-12 px-3 sm:px-4">
-        <div className="max-w-4xl mx-auto bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl shadow-blue-950/10 border border-gray-100 p-2 sm:p-4 grid grid-cols-5 gap-1 sm:gap-2">
+      <section className="relative z-20 -mt-7 sm:-mt-9 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto bg-white/95 backdrop-blur-md rounded-2xl shadow-lg shadow-slate-900/5 border border-slate-200/80 p-2 sm:p-3 grid grid-cols-5 gap-1 sm:gap-2">
           {[
-            { href: '#jadwal', label: 'Jadwal', icon: Clock, color: 'from-blue-500 to-indigo-600' },
-            { to: '/give', label: 'Persembahan', icon: Heart, color: 'from-emerald-500 to-teal-600' },
-            { to: '/lokasi', label: 'Lokasi', icon: MapPin, color: 'from-sky-500 to-blue-600' },
-            { to: '/service', label: 'Layanan', icon: CalendarHeart, color: 'from-rose-500 to-orange-500' },
-            { to: '/galeri', label: 'Galeri', icon: Images, color: 'from-amber-500 to-amber-600' },
+            { href: '#jadwal', label: 'Jadwal', icon: Clock, color: 'text-slate-700 bg-slate-100' },
+            { to: '/give', label: 'Persembahan', icon: Heart, color: 'text-slate-700 bg-slate-100' },
+            { to: '/lokasi', label: 'Lokasi', icon: MapPin, color: 'text-slate-700 bg-slate-100' },
+            { to: '/service', label: 'Layanan', icon: CalendarHeart, color: 'text-slate-700 bg-slate-100' },
+            { to: '/galeri', label: 'Galeri', icon: Images, color: 'text-slate-700 bg-slate-100' },
           ].map(item => {
             const inner = (
               <>
-                <span className={`w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br ${item.color} flex items-center justify-center shadow-md group-hover:-translate-y-1 group-hover:scale-105 transition-all duration-300`}>
-                  <item.icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                <span className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl ${item.color} flex items-center justify-center transition-all duration-200 group-hover:bg-slate-900 group-hover:text-white`}>
+                  <item.icon className="w-4 h-4 sm:w-5 sm:h-5 transition-colors" />
                 </span>
-                <span className="text-[11px] sm:text-xs md:text-sm font-semibold text-gray-700 mt-1.5 sm:mt-2 group-hover:text-blue-600 transition-colors">{item.label}</span>
+                <span className="text-[11px] sm:text-xs font-medium text-slate-700 mt-1.5 group-hover:text-slate-950 transition-colors">{item.label}</span>
               </>
             );
-            const cls = 'group flex flex-col items-center py-1.5 sm:py-2 rounded-2xl hover:bg-gray-50/80 transition-colors cursor-pointer';
+            const cls = 'group flex flex-col items-center py-1.5 sm:py-2 rounded-xl hover:bg-slate-50 transition-all cursor-pointer';
             return item.to
               ? <Link key={item.label} to={item.to} className={cls}>{inner}</Link>
               : <a key={item.label} href={item.href} className={cls}>{inner}</a>;
@@ -411,8 +416,8 @@ export default function JemaatPage() {
 
       {/* ── Stats bar ── */}
       <FadeInSection>
-        <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 mt-8 sm:mt-12 shadow-inner">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-center text-white">
+        <div className="border-y border-slate-200/80 bg-slate-50/60 mt-8 sm:mt-12">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-7 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-center text-slate-900">
             {[
               { n: stats ? String(stats.members) : '–', label: 'Jemaat Terdaftar' },
               { n: String(ALL_MINISTRIES.length), label: 'Komunitas & Ibadah' },
@@ -420,8 +425,8 @@ export default function JemaatPage() {
               { n: `${yearsServing()}+`, label: 'Tahun Melayani' },
             ].map(item => (
               <div key={item.label} className="p-2">
-                <div className="font-display text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white">{item.n}</div>
-                <div className="text-blue-200 text-xs sm:text-sm font-medium mt-1">{item.label}</div>
+                <div className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{item.n}</div>
+                <div className="text-slate-500 text-xs sm:text-sm font-normal mt-0.5">{item.label}</div>
               </div>
             ))}
           </div>
@@ -596,47 +601,44 @@ export default function JemaatPage() {
       )}
 
       {/* ── Jadwal ── */}
-      <section id="jadwal" className="py-20 sm:py-24 bg-gray-50">
+      <section id="jadwal" className="py-20 sm:py-24 bg-slate-50/70 border-b border-slate-200/70">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <FadeInSection>
             <div className="text-center mb-12 sm:mb-14">
               <span className="font-cursive inline-block text-blue-600 text-3xl sm:text-4xl font-normal mb-1 drop-shadow-sm px-2" style={{ fontFamily: 'Caveat, cursive' }}>Jadwal</span>
-              <h2 className="font-display text-3xl sm:text-4xl font-bold text-gray-900 mb-4">Ibadah & Kegiatan</h2>
-              <p className="text-gray-500 max-w-xl mx-auto text-xs sm:text-base">Bergabunglah bersama kami dalam berbagai kegiatan ibadah yang tersedia setiap minggu.</p>
+              <h2 className="font-display text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-2">Ibadah & Kegiatan</h2>
+              <p className="text-slate-500 max-w-xl mx-auto text-sm sm:text-base font-normal">Bergabunglah bersama kami dalam rangkaian ibadah mingguan di GBI Jelambar Timur.</p>
             </div>
           </FadeInSection>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {HOME_SCHEDULES.map((s, i) => (
-              <FadeInSection key={s.id} delay={i * 0.1}>
-                <div className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-gray-100 flex flex-col justify-between">
-                  <div>
-                    <div className={`h-2 bg-gradient-to-r ${s.color}`} />
-                    <div className="p-6 sm:p-7 flex items-start gap-4 sm:gap-5">
-                      <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br ${s.color} flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
-                        <s.icon size={24} className="text-white" />
+              <FadeInSection key={s.id} delay={i * 0.08}>
+                <div className="group bg-white rounded-2xl p-6 sm:p-7 border border-slate-200/80 shadow-xs hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between">
+                  <div className="flex items-start gap-4 sm:gap-5">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-800 group-hover:bg-slate-900 group-hover:text-white transition-all duration-200">
+                      <s.icon size={22} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900">{s.title}</h3>
+                        <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full shrink-0 border border-slate-200/60">{s.tag}</span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <h3 className="text-lg sm:text-xl font-bold text-gray-900">{s.title}</h3>
-                          <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full shrink-0">{s.tag}</span>
-                        </div>
-                        <div className="flex items-start gap-2 text-gray-700 text-sm font-medium mb-1.5">
-                          <Clock size={15} className="text-blue-600 shrink-0 mt-0.5" />
-                          <span className="leading-snug">
-                            {(s as any).shortTime ? (
-                              <>
-                                <span className="sm:hidden">{(s as any).shortTime}</span>
-                                <span className="hidden sm:inline">{s.time}</span>
-                              </>
-                            ) : (
-                              s.time
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 text-gray-500 text-xs sm:text-sm">
-                          <MapPin size={15} className="text-gray-400 shrink-0 mt-0.5" />
-                          <span className="leading-snug">{s.location}</span>
-                        </div>
+                      <div className="flex items-center gap-2 text-slate-800 text-sm font-semibold mb-1">
+                        <Clock size={14} className="text-blue-600 shrink-0" />
+                        <span className="leading-snug">
+                          {(s as any).shortTime ? (
+                            <>
+                              <span className="sm:hidden">{(s as any).shortTime}</span>
+                              <span className="hidden sm:inline">{s.time}</span>
+                            </>
+                          ) : (
+                            s.time
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-500 text-xs sm:text-sm">
+                        <MapPin size={14} className="text-slate-400 shrink-0" />
+                        <span className="leading-snug">{s.location}</span>
                       </div>
                     </div>
                   </div>
@@ -753,42 +755,39 @@ export default function JemaatPage() {
       </section>
 
       {/* ── Komsel ── */}
-      <section className="py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #312e81 100%)' }}>
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-blue-400/10 blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-80 h-80 rounded-full bg-indigo-400/10 blur-3xl" />
-        </div>
-        <div className="max-w-6xl mx-auto px-6 relative z-10">
+      <section className="py-20 sm:py-24 bg-slate-900 text-white relative overflow-hidden">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
           <FadeInSection>
-            <div className="text-center mb-12">
+            <div className="text-center mb-12 sm:mb-14">
               <span className="font-cursive inline-block text-blue-300 text-3xl sm:text-4xl font-normal mb-1 drop-shadow-sm px-2" style={{ fontFamily: 'Caveat, cursive' }}>Komsel</span>
-              <h2 className="font-display text-3xl sm:text-4xl font-bold text-white mb-4">Kelompok Sel</h2>
-              <p className="text-blue-200 max-w-xl mx-auto leading-relaxed">
-                Bergabunglah dengan kelompok kecil kami di mana Anda dapat belajar firman Tuhan, berdoa bersama, dan saling mendukung.
+              <h2 className="font-display text-3xl sm:text-4xl font-bold text-white tracking-tight mb-3">Kelompok Sel & Komunitas</h2>
+              <p className="text-slate-300 max-w-xl mx-auto text-sm sm:text-base leading-relaxed font-normal">
+                Bertumbuh bersama dalam persekutuan iman, pembelajaran Alkitab, dan saling mendoakan dalam suasana keluarga.
               </p>
             </div>
           </FadeInSection>
           <FadeInSection delay={0.1}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
               {[
-                { icon: BookOpen, title: 'Belajar Firman', desc: 'Mendalami Alkitab bersama dalam suasana yang akrab dan hangat' },
-                { icon: Heart, title: 'Doa Bersama', desc: 'Saling mendoakan dan menguatkan satu dengan yang lain' },
-                { icon: Users, title: 'Komunitas', desc: 'Membangun persahabatan yang tulus dan bermakna dalam iman' },
+                { icon: BookOpen, title: 'Belajar Firman', desc: 'Mendalami kebenaran Alkitab secara aplikatif dalam keseharian.' },
+                { icon: Heart, title: 'Doa Bersama', desc: 'Saling menopang dan menguatkan satu sama lain dalam pergumulan hidup.' },
+                { icon: Users, title: 'Komunitas Sejati', desc: 'Membangun persahabatan yang tulus dan berakar pada kasih Kristus.' },
               ].map(card => (
-                <div key={card.title} className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-7 text-white">
-                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-5">
-                    <card.icon size={22} className="text-blue-200" />
+                <div key={card.title} className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 sm:p-7 text-white transition-all duration-200 hover:border-slate-600">
+                  <div className="w-10 h-10 bg-slate-700/70 rounded-xl flex items-center justify-center mb-4 text-blue-300">
+                    <card.icon size={20} />
                   </div>
-                  <h3 className="font-bold text-lg mb-2">{card.title}</h3>
-                  <p className="text-blue-200 text-sm leading-relaxed">{card.desc}</p>
+                  <h3 className="font-bold text-base sm:text-lg mb-1.5 text-white">{card.title}</h3>
+                  <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">{card.desc}</p>
                 </div>
               ))}
             </div>
           </FadeInSection>
           <FadeInSection delay={0.2}>
             <div className="text-center">
-              <Link to="/lokasi" className="inline-flex items-center gap-2 bg-white text-blue-900 font-bold px-8 py-4 rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-200">
-                Daftar Komsel Sekarang <ArrowRight size={18} />
+              <Link to="/lokasi" className="inline-flex items-center gap-2 bg-white text-slate-950 font-semibold text-sm px-7 py-3.5 rounded-full hover:bg-slate-100 transition-all duration-200 active:scale-95 shadow-lg">
+                <span>Daftar Komsel</span>
+                <ArrowRight size={16} />
               </Link>
             </div>
           </FadeInSection>
@@ -845,29 +844,30 @@ export default function JemaatPage() {
       </section>
 
       {/* ── Quick links to other pages ── */}
-      <section className="py-20 bg-white">
-        <div className="max-w-5xl mx-auto px-6">
+      <section className="py-20 sm:py-24 bg-slate-50/60 border-t border-slate-200/80">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
           <FadeInSection>
-            <div className="text-center mb-10">
-              <h2 className="font-display text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Jelajahi Lebih Lanjut</h2>
-              <p className="text-gray-500">Kenali kami lebih dekat melalui halaman-halaman berikut</p>
+            <div className="text-center mb-10 sm:mb-12">
+              <h2 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-2">Jelajahi Pelayanan</h2>
+              <p className="text-slate-500 text-sm sm:text-base font-normal">Informasi lengkap seputar gereja, jadwal dokumentasi, dan kontak pelayanan.</p>
             </div>
           </FadeInSection>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
             {[
-              { to: '/tentang', label: 'Tentang Kami', desc: 'Sejarah, visi misi, dan tim pelayanan gereja', color: 'from-blue-500 to-indigo-600', icon: Heart },
-              { to: '/galeri', label: 'Galeri Foto', desc: 'Foto-foto kegiatan dan momen bersama jemaat', color: 'from-purple-500 to-pink-600', icon: Images },
-              { to: '/lokasi', label: 'Lokasi & Kontak', desc: 'Peta, alamat, jam ibadah, dan cara menghubungi', color: 'from-emerald-500 to-teal-600', icon: MapPin },
+              { to: '/tentang', label: 'Tentang Kami', desc: 'Sejarah, visi misi, dan tim kepemimpinan pastoral.', icon: Heart },
+              { to: '/galeri', label: 'Galeri Foto', desc: 'Dokumentasi kegiatan dan momen kebersamaan jemaat.', icon: Images },
+              { to: '/lokasi', label: 'Lokasi & Kontak', desc: 'Alamat lengkap, rute transportasi, dan informasi kontak.', icon: MapPin },
             ].map((item, i) => (
-              <FadeInSection key={item.to} delay={i * 0.1}>
-                <Link to={item.to} className="group block bg-gray-50 hover:bg-white border border-gray-100 hover:border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
-                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-4 shadow-md group-hover:scale-110 transition-transform`}>
-                    <item.icon size={22} className="text-white" />
+              <FadeInSection key={item.to} delay={i * 0.08}>
+                <Link to={item.to} className="group block bg-white border border-slate-200/80 hover:border-slate-300 rounded-2xl p-6 shadow-xs hover:shadow-md transition-all duration-200">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-slate-900 text-slate-700 group-hover:text-white flex items-center justify-center mb-4 transition-all duration-200">
+                    <item.icon size={20} />
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-1.5">{item.label}</h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-blue-600 text-xs font-semibold group-hover:gap-2 transition-all">
-                    Selengkapnya <ArrowRight size={12} />
+                  <h3 className="font-bold text-slate-900 text-base mb-1.5">{item.label}</h3>
+                  <p className="text-xs sm:text-sm text-slate-500 leading-relaxed font-normal">{item.desc}</p>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-slate-900 text-xs font-semibold group-hover:gap-2.5 transition-all">
+                    <span>Lihat Halaman</span>
+                    <ArrowRight size={13} />
                   </span>
                 </Link>
               </FadeInSection>
