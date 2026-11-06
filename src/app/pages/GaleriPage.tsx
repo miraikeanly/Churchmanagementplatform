@@ -91,31 +91,41 @@ export default function GaleriPage() {
   const closeFolder = () => { setOpenAlbum(null); setPhotos([]); setLightboxIdx(null); };
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <div className="min-h-screen bg-white text-slate-900">
       <PublicNavbar />
 
-      {/* Hero */}
-      <section className="relative pt-36 pb-16 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #312e81 60%, #1e1b4b 100%)' }}>
-        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-        <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
-            className="w-14 h-14 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center mx-auto mb-5">
-            <Images size={28} className="text-white" />
-          </motion.div>
-          <motion.h1 initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.1 }}
-            className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Galeri Foto
-          </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.2 }}
-            className="text-blue-200 text-lg max-w-xl mx-auto">
-            Kenangan indah bersama keluarga besar GBI Jelambar Timur
-          </motion.p>
-        </div>
+      {/* Hero — clean, light */}
+      <section className="pt-28 pb-10 px-4 sm:px-6 text-center">
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="font-cursive text-3xl sm:text-4xl text-blue-600 font-normal mb-1 drop-shadow-sm px-2 inline-block"
+          style={{ fontFamily: 'Caveat, cursive' }}
+        >
+          Momen Bersama
+        </motion.p>
+        <motion.h1
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.08 }}
+          className="text-3xl md:text-4xl font-display font-bold text-slate-900 tracking-tight mb-3"
+        >
+          Galeri Foto
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="text-slate-500 text-base max-w-md mx-auto"
+        >
+          Kenangan indah bersama keluarga besar GBI Jelambar Timur
+        </motion.p>
       </section>
 
       {/* Content */}
-      <section className="py-16">
-        <div className="max-w-6xl mx-auto px-6">
+      <section className="py-8 pb-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
 
           {/* Breadcrumb */}
           {openAlbum && (
@@ -123,9 +133,9 @@ export default function GaleriPage() {
               <button onClick={closeFolder} className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors">
                 <ChevronLeft size={16} />Semua Album
               </button>
-              <span className="text-gray-300">/</span>
-              <span className="font-bold text-gray-900">{openAlbum.name}</span>
-              {openAlbum.description && <span className="text-gray-500 text-sm">— {openAlbum.description}</span>}
+              <span className="text-slate-300">/</span>
+              <span className="font-bold text-slate-900">{openAlbum.name}</span>
+              {openAlbum.description && <span className="text-slate-500 text-sm">— {openAlbum.description}</span>}
             </div>
           )}
 
@@ -133,68 +143,73 @@ export default function GaleriPage() {
           {loading && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 animate-pulse">
-                  <div className="aspect-square bg-gray-200" />
+                <div key={i} className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 animate-pulse">
+                  <div className="aspect-square bg-slate-100" />
                   <div className="p-3.5 space-y-2">
-                    <div className="h-3.5 bg-gray-200 rounded w-3/4" />
-                    <div className="h-2.5 bg-gray-100 rounded w-1/2" />
+                    <div className="h-3.5 bg-slate-100 rounded w-3/4" />
+                    <div className="h-2.5 bg-slate-50 rounded w-1/2" />
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Albums grid */}
+          {/* Error state */}
           {!loading && !openAlbum && loadError && (
-            <div className="text-center py-16 text-gray-500">
+            <div className="text-center py-16 text-slate-500">
               <p className="font-medium">Galeri belum bisa dimuat.</p>
               <button onClick={() => location.reload()} className="mt-3 text-blue-600 font-semibold text-sm">Coba lagi</button>
             </div>
           )}
-          {!loading && !openAlbum && !loadError && (
-            albums.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-                <Images size={52} className="mb-4 opacity-25" />
-                <p className="font-medium text-lg">Belum ada album galeri</p>
-                <p className="text-sm mt-1">Foto-foto kegiatan akan segera hadir</p>
+
+          {/* Empty state */}
+          {!loading && !openAlbum && !loadError && albums.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                <Images size={28} className="text-slate-400" />
               </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-                {albums.map((album, i) => (
-                  <motion.div
-                    key={album.id}
-                    initial={{ opacity: 0, y: 24 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: i * 0.06 }}
-                    onClick={() => openFolder(album)}
-                    className="group cursor-pointer bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl border border-gray-100 transition-all duration-300 hover:-translate-y-1"
-                  >
-                    <div className="aspect-square relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-100">
-                      {album.coverUrl ? (
-                        <img src={album.coverUrl} alt={album.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <FolderOpen size={36} className="text-blue-300" />
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-center">
-                          <ZoomIn size={24} className="mx-auto mb-1" />
-                          <span className="text-xs font-semibold">Buka Album</span>
-                        </div>
+              <p className="font-medium text-lg text-slate-500">Belum ada album galeri</p>
+              <p className="text-sm mt-1 text-slate-400">Foto-foto kegiatan akan segera hadir</p>
+            </div>
+          )}
+
+          {/* Albums grid */}
+          {!loading && !openAlbum && !loadError && albums.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+              {albums.map((album, i) => (
+                <motion.div
+                  key={album.id}
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: i * 0.06 }}
+                  onClick={() => openFolder(album)}
+                  className="group cursor-pointer bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200 hover:-translate-y-0.5"
+                >
+                  <div className="aspect-square relative overflow-hidden bg-slate-100">
+                    {album.coverUrl ? (
+                      <img src={album.coverUrl} alt={album.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <FolderOpen size={36} className="text-slate-300" />
                       </div>
-                      <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <ImageIcon size={10} />{album.photoCount} foto
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-300 flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-center">
+                        <ZoomIn size={24} className="mx-auto mb-1" />
+                        <span className="text-xs font-semibold">Buka Album</span>
                       </div>
                     </div>
-                    <div className="p-3.5">
-                      <p className="font-semibold text-gray-900 text-sm truncate">{album.name}</p>
-                      {album.description && <p className="text-xs text-gray-500 truncate mt-0.5">{album.description}</p>}
+                    <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <ImageIcon size={10} />{album.photoCount} foto
                     </div>
-                  </motion.div>
-                ))}
-              </div>
-            )
+                  </div>
+                  <div className="p-3.5">
+                    <p className="font-semibold text-slate-900 text-sm truncate">{album.name}</p>
+                    {album.description && <p className="text-xs text-slate-400 truncate mt-0.5">{album.description}</p>}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           )}
 
           {/* Photos grid */}
@@ -202,13 +217,15 @@ export default function GaleriPage() {
             photosLoading ? (
               <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 space-y-4">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="break-inside-avoid rounded-xl overflow-hidden bg-gray-200 animate-pulse" style={{ height: `${160 + (i % 3) * 60}px` }} />
+                  <div key={i} className="break-inside-avoid rounded-xl overflow-hidden bg-slate-100 animate-pulse" style={{ height: `${160 + (i % 3) * 60}px` }} />
                 ))}
               </div>
             ) : photos.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                <ImageIcon size={40} className="mb-3 opacity-30" />
-                <p>Belum ada foto di album ini</p>
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
+                  <ImageIcon size={24} className="text-slate-300" />
+                </div>
+                <p className="text-slate-500 font-medium">Belum ada foto di album ini</p>
               </div>
             ) : (
               <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 space-y-4">
@@ -219,7 +236,7 @@ export default function GaleriPage() {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.4, delay: idx * 0.04 }}
                     onClick={() => setLightboxIdx(idx)}
-                    className="group relative break-inside-avoid rounded-xl overflow-hidden cursor-zoom-in bg-gray-100 shadow-sm hover:shadow-md transition-all"
+                    className="group relative break-inside-avoid rounded-xl overflow-hidden cursor-zoom-in bg-slate-100 border border-slate-200/80 shadow-sm hover:shadow-md transition-all"
                   >
                     {photo.imageUrl ? (
                       <img
@@ -231,7 +248,7 @@ export default function GaleriPage() {
                         className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : (
-                      <div className="aspect-square flex items-center justify-center text-gray-300"><ImageIcon size={24} /></div>
+                      <div className="aspect-square flex items-center justify-center text-slate-300"><ImageIcon size={24} /></div>
                     )}
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
                       <ZoomIn size={22} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />

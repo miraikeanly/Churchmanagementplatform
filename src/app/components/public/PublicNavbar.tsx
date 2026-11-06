@@ -14,9 +14,6 @@ const SERVICE_ITEMS = [
     label: 'Adult',
     sub: 'Dewasa & Pasangan',
     icon: Crown,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-    border: 'border-blue-100',
   },
   {
     tab: 'nxtgen',
@@ -24,9 +21,6 @@ const SERVICE_ITEMS = [
     label: 'NXT GEN',
     sub: 'Pemuda & Remaja',
     icon: Flame,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-    border: 'border-purple-100',
   },
   {
     tab: 'kids',
@@ -34,9 +28,6 @@ const SERVICE_ITEMS = [
     label: 'Kids',
     sub: 'Anak-anak',
     icon: Rocket,
-    color: 'text-amber-500',
-    bg: 'bg-amber-50',
-    border: 'border-amber-100',
   },
   {
     tab: 'layanan',
@@ -44,9 +35,6 @@ const SERVICE_ITEMS = [
     label: 'Layanan',
     sub: 'Baptis, Konseling & Lainnya',
     icon: HandHeart,
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
-    border: 'border-emerald-100',
   },
 ];
 
@@ -185,14 +173,14 @@ export default function PublicNavbar() {
                           setServiceOpen(false);
                           window.scrollTo({ top: 0, behavior: 'instant' });
                         }}
-                        className="flex items-center gap-3.5 px-4 py-3 hover:bg-gray-50/80 transition-all group"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-100/80 transition-all group"
                       >
-                        <div className={`w-9 h-9 rounded-2xl ${item.bg} ${item.border} border flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-2xs ${item.color}`}>
-                          <Icon size={17} strokeWidth={2.3} />
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-slate-900 border border-slate-200/80 group-hover:border-slate-900 flex items-center justify-center text-slate-700 group-hover:text-white transition-all duration-200 shrink-0">
+                          <Icon size={15} strokeWidth={2} />
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-800 leading-tight">{item.label}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 leading-tight">{item.sub}</p>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-900 leading-tight group-hover:text-blue-600 transition-colors">{item.label}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-tight truncate">{item.sub}</p>
                         </div>
                       </Link>
                     );

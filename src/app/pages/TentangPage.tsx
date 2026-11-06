@@ -37,10 +37,10 @@ function FadeIn({ children, delay = 0, className = '' }: { children: React.React
 }
 
 const values = [
-  { label: 'Kasih',       desc: 'Mengasihi Tuhan dan sesama dengan tulus dan sepenuh hati',  icon: Heart,    color: 'text-rose-500',    bg: 'bg-rose-50',    border: 'border-rose-100' },
-  { label: 'Iman',        desc: 'Bertumbuh dalam pengenalan akan Kristus setiap harinya',     icon: Star,     color: 'text-amber-500',   bg: 'bg-amber-50',   border: 'border-amber-100' },
-  { label: 'Pelayanan',   desc: 'Melayani dengan rendah hati dan penuh sukacita',             icon: BookOpen, color: 'text-blue-500',    bg: 'bg-blue-50',    border: 'border-blue-100' },
-  { label: 'Persekutuan', desc: 'Membangun komunitas yang kuat dan saling mendukung',         icon: Users,    color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+  { label: 'Kasih',       desc: 'Mengasihi Tuhan dan sesama dengan tulus dan sepenuh hati',  icon: Heart },
+  { label: 'Iman',        desc: 'Bertumbuh dalam pengenalan akan Kristus setiap harinya',     icon: Star },
+  { label: 'Pelayanan',   desc: 'Melayani dengan rendah hati dan penuh sukacita',             icon: BookOpen },
+  { label: 'Persekutuan', desc: 'Membangun komunitas yang kuat dan saling mendukung',         icon: Users },
 ];
 
 
@@ -278,12 +278,12 @@ export default function TentangPage() {
             <FadeIn delay={0.15}>
               <div className="grid grid-cols-2 gap-4">
                 {values.map(v => (
-                  <div key={v.label} className={`${v.bg} border ${v.border} rounded-2xl p-6`}>
-                    <div className={`w-11 h-11 rounded-xl ${v.bg} border ${v.border} flex items-center justify-center mb-4`}>
-                      <v.icon size={22} className={v.color} />
+                  <div key={v.label} className="bg-slate-50/80 border border-slate-200/80 hover:border-slate-300 rounded-2xl p-6 transition-all duration-200 group">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center mb-4 text-slate-800 group-hover:bg-slate-900 group-hover:text-white transition-all duration-200">
+                      <v.icon size={18} />
                     </div>
-                    <h4 className="font-bold text-gray-900 mb-2">{v.label}</h4>
-                    <p className="text-sm text-gray-600 leading-relaxed">{v.desc}</p>
+                    <h4 className="font-bold text-slate-900 text-base mb-1.5">{v.label}</h4>
+                    <p className="text-xs sm:text-sm text-slate-500 leading-relaxed font-normal">{v.desc}</p>
                   </div>
                 ))}
               </div>
@@ -293,13 +293,13 @@ export default function TentangPage() {
       </section>
 
       {/* Stats */}
-      <section className="py-16 bg-gradient-to-r from-blue-700 to-indigo-700">
+      <section className="py-12 border-y border-slate-200/80 bg-slate-50/60">
         <div className="max-w-4xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center text-white">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center text-slate-900">
             {[{ n: stats ? String(stats.members) : '–', label: 'Jemaat' }, { n: String(ALL_MINISTRIES.length), label: 'Komunitas & Ibadah' }, { n: stats ? String(stats.komsel) : '–', label: 'Kelompok Komsel' }, { n: `${yearsServing()}+`, label: 'Tahun Melayani' }].map((s, i) => (
               <FadeIn key={s.label} delay={i * 0.08}>
-                <div className="text-3xl md:text-4xl font-bold">{s.n}</div>
-                <div className="text-blue-200 text-sm mt-1">{s.label}</div>
+                <div className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{s.n}</div>
+                <div className="text-slate-500 text-xs sm:text-sm font-normal mt-0.5">{s.label}</div>
               </FadeIn>
             ))}
           </div>
@@ -406,17 +406,18 @@ export default function TentangPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-16 bg-white border-t border-gray-100">
+      <section className="py-20 bg-slate-50/60 border-t border-slate-200/80">
         <div className="max-w-2xl mx-auto px-6 text-center">
           <FadeIn>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Bergabunglah Bersama Kami</h2>
-            <p className="text-gray-500 mb-8">Kami menyambut semua orang untuk hadir dan bertumbuh bersama dalam komunitas iman ini.</p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link to="/lokasi" className="inline-flex items-center justify-center gap-2 bg-blue-700 text-white font-semibold px-7 py-3.5 rounded-full hover:bg-blue-800 hover:shadow-lg transition-all">
-                Temukan Lokasi Kami <ArrowRight size={18} />
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-3">Bergabunglah Bersama Kami</h2>
+            <p className="text-slate-500 text-sm sm:text-base font-normal mb-8">Pintu kami selalu terbuka untuk Anda dan keluarga bertumbuh dalam hadirat Tuhan.</p>
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Link to="/lokasi" className="inline-flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold text-sm px-7 py-3 rounded-full hover:bg-slate-800 transition-all shadow-md active:scale-95">
+                <span>Temukan Lokasi</span>
+                <ArrowRight size={16} />
               </Link>
-              <Link to="/service" className="inline-flex items-center justify-center gap-2 border border-gray-200 text-gray-700 font-medium px-7 py-3.5 rounded-full hover:bg-gray-50 transition-all">
-                Lihat Jadwal Ibadah
+              <Link to="/service" className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 font-medium text-sm px-7 py-3 rounded-full hover:bg-slate-50 transition-all active:scale-95">
+                <span>Jadwal Ibadah</span>
               </Link>
             </div>
           </FadeIn>
