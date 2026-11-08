@@ -1,9 +1,10 @@
 import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
-import { UploadCloud, FileText, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck, Sparkles, Building2, Wallet, Plus, Trash2 } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck, Sparkles, Building2, Wallet, Plus, Trash2, Clipboard } from 'lucide-react';
 import { GL_ACCOUNTS, BankStatementRow, CashJournalEntry, classifyTransaction } from '../../../lib/glDefinitions';
 import { parseBcaStatementText, parseBcaCsvRows } from '../../../lib/bcaParser';
+import { apiBase } from '../../../lib/api';
 
 interface Props {
   sourceType: 'bank' | 'petty_cash';
@@ -20,6 +21,8 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [openPasteDialog, setOpenPasteDialog] = useState(false);
+  const [pastedText, setPastedText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Manual transaction input state
@@ -72,29 +75,45 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
           setStatusMsg({ type: 'error', text: 'Tidak dapat menemukan format tanggal & mutasi dari file Excel/CSV ini.' });
         } else {
           setPreviewRows(parsed);
+          setStatusMsg({ type: 'success', text: `Berhasil membaca ${parsed.length} transaksi dari ${uploadedFile.name}` });
         }
       } else if (fileName.endsWith('.pdf')) {
-        // Dynamic client-side reader or text fallback
-        // Read as text if supported or inform user
+        // Send base64 to server parser endpoint for accurate pdf-parse extraction
         const reader = new FileReader();
         reader.onload = async () => {
           try {
-            const rawText = reader.result as string;
-            const parsed = parseBcaStatementText(rawText, selectedYear);
-            if (parsed.length > 0) {
-              setPreviewRows(parsed);
+            const dataUrl = reader.result as string;
+            const base64Data = dataUrl.split(',')[1];
+
+            const res = await fetch(`${apiBase()}/api/content/finance/parse-pdf`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ base64Data, year: selectedYear })
+            });
+
+            const resJson = await res.json();
+            if (resJson.success && resJson.text) {
+              const parsed = parseBcaStatementText(resJson.text, selectedYear);
+              if (parsed.length > 0) {
+                setPreviewRows(parsed);
+                setStatusMsg({ type: 'success', text: `Berhasil mengekstrak ${parsed.length} transaksi dari PDF BCA!` });
+              } else {
+                setStatusMsg({
+                  type: 'error',
+                  text: 'PDF berhasil dibaca namun tidak terdeteksi tabel mutasi. Anda bisa copy-paste teks mutasi langsung lewat tombol "Paste Teks Mutasi".'
+                });
+              }
             } else {
-              // Try parsing with pdf-parse on server or prompt text paste
-              setStatusMsg({
-                type: 'error',
-                text: 'PDF BCA terenkripsi/berformat binary. Silakan simpan / copy text mutasi atau gunakan format Excel/CSV untuk hasil 100% akurat.'
-              });
+              setStatusMsg({ type: 'error', text: resJson.error || 'Gagal memproses file PDF.' });
             }
           } catch (err: any) {
             setStatusMsg({ type: 'error', text: 'Gagal membaca PDF: ' + err.message });
+          } finally {
+            setIsParsing(false);
           }
         };
-        reader.readAsText(uploadedFile);
+        reader.readAsDataURL(uploadedFile);
+        return; // wait for async reader
       } else {
         setStatusMsg({ type: 'error', text: 'Format file tidak didukung. Harap upload .xlsx, .xls, .csv, atau .pdf' });
       }
@@ -230,10 +249,30 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
           </select>
 
           <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setOpenPasteDialog(true)}
+            startIcon={<Clipboard size={15} />}
+            sx={{
+              borderColor: '#cbd5e1',
+              color: '#334155',
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '12px',
+              borderRadius: '10px',
+              padding: '6px 12px',
+              '&:hover': { backgroundColor: '#f1f5f9' }
+            }}
+          >
+            Paste Teks Mutasi
+          </Button>
+
+          <Button
             variant="contained"
             size="small"
             onClick={() => fileInputRef.current?.click()}
             startIcon={<UploadCloud size={16} />}
+            disabled={isParsing}
             sx={{
               backgroundColor: '#0f172a',
               textTransform: 'none',
@@ -244,7 +283,7 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
               '&:hover': { backgroundColor: '#1e293b' }
             }}
           >
-            Upload RK BCA / Excel
+            {isParsing ? 'Membaca...' : 'Upload RK BCA / Excel'}
           </Button>
           <input
             ref={fileInputRef}
@@ -435,6 +474,54 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
             }}
           >
             {isSubmitting ? 'Memproses...' : 'Ya, Simpan ke GL Sekarang'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Paste Text Mutasi Modal */}
+      <Dialog open={openPasteDialog} onClose={() => setOpenPasteDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle className="font-bold text-slate-900 flex items-center gap-2">
+          <Clipboard size={18} className="text-blue-600" />
+          Paste Teks Rekening Koran BCA
+        </DialogTitle>
+        <DialogContent>
+          <p className="text-xs text-slate-500 mb-2">
+            Anda dapat mem-blok dan copy teks dari mutasi internet banking BCA (KlikBCA) atau dari PDF BCA, lalu paste di bawah ini:
+          </p>
+          <textarea
+            rows={10}
+            value={pastedText}
+            onChange={(e) => setPastedText(e.target.value)}
+            placeholder="Contoh:&#10;01/09 TRSF E-BANKING CR 5,295,700.00&#10;01/09 TRSF E-BANKING DB 29,080,050.00 DB Top Up KK Ags 2026..."
+            className="w-full font-mono text-xs p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenPasteDialog(false)} sx={{ textTransform: 'none' }}>
+            Batal
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (!pastedText.trim()) return;
+              const parsed = parseBcaStatementText(pastedText, selectedYear);
+              if (parsed.length > 0) {
+                setPreviewRows(parsed);
+                setStatusMsg({ type: 'success', text: `Berhasil mengekstrak ${parsed.length} transaksi dari teks!` });
+                setOpenPasteDialog(false);
+                setPastedText('');
+              } else {
+                alert('Tidak dapat mendeteksi baris mutasi tanggal & nominal. Pastikan format teks memuat tanggal (DD/MM) dan nominal angka.');
+              }
+            }}
+            sx={{
+              backgroundColor: '#0f172a',
+              textTransform: 'none',
+              fontWeight: 600,
+              '&:hover': { backgroundColor: '#1e293b' }
+            }}
+          >
+            Proses Teks Mutasi
           </Button>
         </DialogActions>
       </Dialog>

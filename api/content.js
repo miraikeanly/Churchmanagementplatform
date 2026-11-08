@@ -340,6 +340,25 @@ export default async function handler(req, res) {
       }
     }
 
+    // Parse BCA PDF file via pdf-parse
+    if (resource === 'finance' && a === 'parse-pdf') {
+      if (m === 'POST') {
+        const { base64Data, year } = body;
+        if (!base64Data) {
+          return sendError(res, 400, 'base64Data PDF diperlukan');
+        }
+        try {
+          const pdfParse = require('pdf-parse');
+          const pdfBuffer = Buffer.from(base64Data, 'base64');
+          const data = await pdfParse(pdfBuffer);
+          return sendJson(res, 200, { success: true, text: data.text });
+        } catch (pdfErr) {
+          console.error('PDF parsing error:', pdfErr);
+          return sendError(res, 500, 'Gagal membaca isi file PDF: ' + (pdfErr.message || String(pdfErr)));
+        }
+      }
+    }
+
     // Admin: Manage Giving Categories
     if (resource === 'giving' && a === 'categories') {
       if (m === 'POST' || m === 'PUT') {

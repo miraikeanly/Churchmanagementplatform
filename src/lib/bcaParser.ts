@@ -119,60 +119,134 @@ export function parseBcaStatementText(text: string, defaultYear: number = new Da
 export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().getFullYear()): BankStatementRow[] {
   const rows: BankStatementRow[] = [];
 
+  if (!Array.isArray(data)) return rows;
+
   for (const row of data) {
-    if (!row || row.length < 3) continue;
+    if (!row || !Array.isArray(row) || row.length < 2) continue;
 
-    const rowStr = row.map(c => String(c || '').trim());
-    const firstCol = rowStr[0];
+    // Filter out completely empty rows
+    const nonNullCols = row.filter(c => c !== null && c !== undefined && String(c).trim() !== '');
+    if (nonNullCols.length === 0) continue;
 
-    // Check if first col is a date (YYYY-MM-DD or DD/MM/YYYY or DD/MM)
+    // Look for date in the first 3 columns
     let isoDate = '';
     let rawDate = '';
-    
-    if (firstCol.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      isoDate = firstCol;
-      rawDate = firstCol.slice(8, 10) + '/' + firstCol.slice(5, 7);
-    } else if (firstCol.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)) {
-      const match = firstCol.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)!;
-      const y = match[3].length === 2 ? `20${match[3]}` : match[3];
-      isoDate = `${y}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
-      rawDate = `${match[1].padStart(2, '0')}/${match[2].padStart(2, '0')}`;
-    } else if (firstCol.match(/^(\d{2})\/(\d{2})$/)) {
-      const match = firstCol.match(/^(\d{2})\/(\d{2})$/)!;
-      isoDate = `${defaultYear}-${match[2]}-${match[1]}`;
-      rawDate = firstCol;
+    let dateColIdx = -1;
+
+    for (let c = 0; c < Math.min(row.length, 3); c++) {
+      const cellVal = row[c];
+      if (cellVal === null || cellVal === undefined) continue;
+
+      let cellStr = '';
+      if (typeof cellVal === 'number') {
+        // Excel serial date number check (e.g., 45500 for ~2024)
+        if (cellVal > 25569 && cellVal < 60000) {
+          const jsDate = new Date(Math.round((cellVal - 25569) * 86400 * 1000));
+          if (!isNaN(jsDate.getTime())) {
+            const y = jsDate.getFullYear();
+            const m = String(jsDate.getMonth() + 1).padStart(2, '0');
+            const d = String(jsDate.getDate()).padStart(2, '0');
+            isoDate = `${y}-${m}-${d}`;
+            rawDate = `${d}/${m}`;
+            dateColIdx = c;
+            break;
+          }
+        }
+        cellStr = String(cellVal);
+      } else if (cellVal instanceof Date) {
+        const y = cellVal.getFullYear();
+        const m = String(cellVal.getMonth() + 1).padStart(2, '0');
+        const d = String(cellVal.getDate()).padStart(2, '0');
+        isoDate = `${y}-${m}-${d}`;
+        rawDate = `${d}/${m}`;
+        dateColIdx = c;
+        break;
+      } else {
+        cellStr = String(cellVal).trim();
+      }
+
+      if (!cellStr) continue;
+
+      // 1. Format: YYYY-MM-DD
+      const mIso = cellStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (mIso) {
+        isoDate = `${mIso[1]}-${mIso[2].padStart(2, '0')}-${mIso[3].padStart(2, '0')}`;
+        rawDate = `${mIso[3].padStart(2, '0')}/${mIso[2].padStart(2, '0')}`;
+        dateColIdx = c;
+        break;
+      }
+
+      // 2. Format: DD/MM/YYYY or DD-MM-YYYY
+      const mDmy = cellStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if (mDmy) {
+        const y = mDmy[3].length === 2 ? `20${mDmy[3]}` : mDmy[3];
+        isoDate = `${y}-${mDmy[2].padStart(2, '0')}-${mDmy[1].padStart(2, '0')}`;
+        rawDate = `${mDmy[1].padStart(2, '0')}/${mDmy[2].padStart(2, '0')}`;
+        dateColIdx = c;
+        break;
+      }
+
+      // 3. Format: DD/MM
+      const mDm = cellStr.match(/^(\d{1,2})\/(\d{1,2})$/);
+      if (mDm) {
+        isoDate = `${defaultYear}-${mDm[2].padStart(2, '0')}-${mDm[1].padStart(2, '0')}`;
+        rawDate = `${mDm[1].padStart(2, '0')}/${mDm[2].padStart(2, '0')}`;
+        dateColIdx = c;
+        break;
+      }
     }
 
-    if (!isoDate) continue;
+    if (!isoDate || dateColIdx === -1) continue;
 
-    // Find description and debet/kredit
-    // In typical GL format: Tanggal, No, Reff, Keterangan, Rincian, Debet, Kredit, Saldo
+    // Scan subsequent columns for text description and debet/kredit amounts
     let desc = '';
     let debet = 0;
     let kredit = 0;
 
-    for (let c = 1; c < rowStr.length; c++) {
-      const val = rowStr[c];
-      const num = parseFloat(val.replace(/[^\d.-]/g, ''));
-      if (isNaN(num)) {
-        if (val.length > 3 && !val.startsWith('BCA') && !val.startsWith('KB') && !val.startsWith('i2')) {
-          desc += (desc ? ' - ' : '') + val;
+    for (let c = 0; c < row.length; c++) {
+      if (c === dateColIdx) continue;
+      const cell = row[c];
+      if (cell === null || cell === undefined) continue;
+
+      if (typeof cell === 'number') {
+        if (cell > 0) {
+          if (debet === 0) debet = cell;
+          else if (kredit === 0) kredit = cell;
         }
-      } else if (num > 0) {
-        if (debet === 0) debet = num;
-        else if (kredit === 0) kredit = num;
+      } else {
+        const strVal = String(cell).trim();
+        if (!strVal) continue;
+
+        // Skip headers or saldo words
+        if (strVal.toUpperCase() === 'SALDO' || strVal.toUpperCase() === 'TANGGAL' || strVal.toUpperCase() === 'DEBET' || strVal.toUpperCase() === 'KREDIT') {
+          continue;
+        }
+
+        // Check if string is a number (e.g. "6,300,000" or "6300000.00")
+        const cleanNumStr = strVal.replace(/[^\d.-]/g, '');
+        const parsedNum = parseFloat(cleanNumStr);
+        if (!isNaN(parsedNum) && parsedNum > 0 && /^\d/.test(strVal)) {
+          if (debet === 0) debet = parsedNum;
+          else if (kredit === 0) kredit = parsedNum;
+        } else {
+          // It's a text description
+          if (!strVal.startsWith('BCA') && !strVal.startsWith('KB') && !strVal.startsWith('KK') && !strVal.startsWith('i2')) {
+            desc += (desc ? ' ' : '') + strVal;
+          }
+        }
       }
     }
 
     if (debet > 0 || kredit > 0) {
       const mutasiType = kredit > 0 ? 'DB' : 'CR';
       const amount = kredit > 0 ? kredit : debet;
-      const classified = classifyTransaction(desc, mutasiType, amount);
+      const cleanDesc = desc || 'Transaksi Kas';
+      const classified = classifyTransaction(cleanDesc, mutasiType, amount);
 
       rows.push({
         date: isoDate,
         rawDate,
-        description: desc,
+        description: cleanDesc,
         mutasiType,
         amount,
         autoGLCode: classified.glCode,
