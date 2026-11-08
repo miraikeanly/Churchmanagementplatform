@@ -340,7 +340,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Parse BCA PDF file via pdf-parse
+    // Parse BCA PDF file via pdf-parse v2 (ESM compatible)
     if (resource === 'finance' && a === 'parse-pdf') {
       if (m === 'POST') {
         const { base64Data, year } = body;
@@ -348,10 +348,11 @@ export default async function handler(req, res) {
           return sendError(res, 400, 'base64Data PDF diperlukan');
         }
         try {
-          const pdfParse = require('pdf-parse');
+          const { PDFParse } = await import('pdf-parse');
           const pdfBuffer = Buffer.from(base64Data, 'base64');
-          const data = await pdfParse(pdfBuffer);
-          return sendJson(res, 200, { success: true, text: data.text });
+          const parser = new PDFParse({ data: pdfBuffer });
+          const resText = await parser.getText();
+          return sendJson(res, 200, { success: true, text: resText.text || '' });
         } catch (pdfErr) {
           console.error('PDF parsing error:', pdfErr);
           return sendError(res, 500, 'Gagal membaca isi file PDF: ' + (pdfErr.message || String(pdfErr)));
