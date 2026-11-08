@@ -69,6 +69,29 @@ export default function FinanceManagement() {
     }
   };
 
+  const handleUpdateJournalEntry = async (updated: CashJournalEntry) => {
+    if (!canEdit) return;
+    try {
+      const res = await fetch(`${API_URL}/finance/journal`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ entry: updated })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setJournalEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+        setSuccessMsg('Perubahan transaksi berhasil disimpan');
+        setTimeout(() => setSuccessMsg(''), 3000);
+      }
+    } catch (err: any) {
+      console.error('Update journal error:', err);
+      setError(err.message);
+    }
+  };
+
   const handleDeleteJournalEntry = async (id: string) => {
     if (!canEdit) return;
     if (!confirm('Yakin ingin menghapus transaksi jurnal ini?')) return;
@@ -177,6 +200,7 @@ export default function FinanceManagement() {
             sourceFilter="bank"
             canEdit={canEdit}
             onDeleteEntry={handleDeleteJournalEntry}
+            onUpdateEntry={handleUpdateJournalEntry}
           />
         </div>
       )}
@@ -195,6 +219,7 @@ export default function FinanceManagement() {
             sourceFilter="petty_cash"
             canEdit={canEdit}
             onDeleteEntry={handleDeleteJournalEntry}
+            onUpdateEntry={handleUpdateJournalEntry}
           />
         </div>
       )}
@@ -207,6 +232,7 @@ export default function FinanceManagement() {
             sourceFilter="all"
             canEdit={canEdit}
             onDeleteEntry={handleDeleteJournalEntry}
+            onUpdateEntry={handleUpdateJournalEntry}
           />
         </div>
       )}

@@ -7,16 +7,12 @@ export function parseBcaStatementText(text: string, defaultYear: number = new Da
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   const rows: BankStatementRow[] = [];
 
-  // Regex for date: e.g. 01/09 or 28/09 or 30/09
   const dateRegex = /^(\d{2}\/\d{2})\b/;
-  const amountRegex = /([\d,]+\.\d{2})(\s+(?:DB|CR))?$/;
 
   let currentEntry: {
     rawDate: string;
     lines: string[];
-    amountStr?: string;
     isDb?: boolean;
-    saldoStr?: string;
   } | null = null;
 
   const flushEntry = () => {
@@ -24,12 +20,11 @@ export function parseBcaStatementText(text: string, defaultYear: number = new Da
     
     const combinedDesc = currentEntry.lines.join(' ');
     // Skip headers and summary lines
-    if (combinedDesc.includes('SALDO AWAL') || combinedDesc.includes('MUTASI CR') || combinedDesc.includes('MUTASI DB') || combinedDesc.includes('SALDO AKHIR') || combinedDesc.includes('Bersambung ke halaman')) {
+    if (combinedDesc.includes('SALDO AWAL') || combinedDesc.includes('MUTASI CR') || combinedDesc.includes('MUTASI DB') || combinedDesc.includes('SALDO AKHIR') || combinedDesc.includes('Bersambung ke halaman') || combinedDesc.includes('KETERANGAN')) {
       currentEntry = null;
       return;
     }
 
-    // Try to find amount and DB/CR from lines
     let mutasiType: 'CR' | 'DB' = currentEntry.isDb ? 'DB' : 'CR';
     let amount = 0;
     let saldo: number | undefined = undefined;
@@ -60,7 +55,6 @@ export function parseBcaStatementText(text: string, defaultYear: number = new Da
       const [day, month] = currentEntry.rawDate.split('/');
       const isoDate = `${defaultYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
       
-      // Clean description
       const cleanDesc = combinedDesc
         .replace(/([\d,]+\.\d{2})(\s+(?:DB|CR))?/g, '')
         .replace(/\b\d{4}\/FTSCY\/[A-Z0-9]+\b/g, '')
@@ -75,6 +69,9 @@ export function parseBcaStatementText(text: string, defaultYear: number = new Da
 
       const classified = classifyTransaction(cleanDesc || combinedDesc, mutasiType, amount);
 
+      // Check if this is a Top Up that should have breakdown template
+      const isTopUp = classified.isTopUp || cleanDesc.toUpperCase().includes('TOP UP');
+
       rows.push({
         date: isoDate,
         rawDate: currentEntry.rawDate,
@@ -83,7 +80,15 @@ export function parseBcaStatementText(text: string, defaultYear: number = new Da
         amount,
         saldo,
         autoGLCode: classified.glCode,
-        notes: classified.targetUnit ? `Auto Masuk Kas Unit: ${classified.targetUnit}` : undefined
+        notes: classified.targetUnit ? `Auto Masuk Kas: ${classified.targetUnit}` : undefined,
+        isTopUpBreakdown: isTopUp,
+        breakdownItems: isTopUp ? [
+          { glCode: 'U', description: `Top Up KK Umum`, amount: 0 },
+          { glCode: 'ABI', description: `Top Up KK ABI`, amount: 0 },
+          { glCode: 'WBI', description: `Top Up KK WBI`, amount: 0 },
+          { glCode: 'RBI', description: `Top Up KK RBI`, amount: 0 },
+          { glCode: 'VSS', description: `Top Up KK Vessel`, amount: 0 },
+        ] : undefined
       });
     }
 
@@ -124,11 +129,9 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
   for (const row of data) {
     if (!row || !Array.isArray(row) || row.length < 2) continue;
 
-    // Filter out completely empty rows
     const nonNullCols = row.filter(c => c !== null && c !== undefined && String(c).trim() !== '');
     if (nonNullCols.length === 0) continue;
 
-    // Look for date in the first 3 columns
     let isoDate = '';
     let rawDate = '';
     let dateColIdx = -1;
@@ -139,7 +142,6 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
 
       let cellStr = '';
       if (typeof cellVal === 'number') {
-        // Excel serial date number check (e.g., 45500 for ~2024)
         if (cellVal > 25569 && cellVal < 60000) {
           const jsDate = new Date(Math.round((cellVal - 25569) * 86400 * 1000));
           if (!isNaN(jsDate.getTime())) {
@@ -167,7 +169,6 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
 
       if (!cellStr) continue;
 
-      // 1. Format: YYYY-MM-DD
       const mIso = cellStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (mIso) {
         isoDate = `${mIso[1]}-${mIso[2].padStart(2, '0')}-${mIso[3].padStart(2, '0')}`;
@@ -176,7 +177,6 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
         break;
       }
 
-      // 2. Format: DD/MM/YYYY or DD-MM-YYYY
       const mDmy = cellStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
       if (mDmy) {
         const y = mDmy[3].length === 2 ? `20${mDmy[3]}` : mDmy[3];
@@ -186,7 +186,6 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
         break;
       }
 
-      // 3. Format: DD/MM
       const mDm = cellStr.match(/^(\d{1,2})\/(\d{1,2})$/);
       if (mDm) {
         isoDate = `${defaultYear}-${mDm[2].padStart(2, '0')}-${mDm[1].padStart(2, '0')}`;
@@ -198,7 +197,6 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
 
     if (!isoDate || dateColIdx === -1) continue;
 
-    // Scan subsequent columns for text description and debet/kredit amounts
     let desc = '';
     let debet = 0;
     let kredit = 0;
@@ -217,19 +215,16 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
         const strVal = String(cell).trim();
         if (!strVal) continue;
 
-        // Skip headers or saldo words
         if (strVal.toUpperCase() === 'SALDO' || strVal.toUpperCase() === 'TANGGAL' || strVal.toUpperCase() === 'DEBET' || strVal.toUpperCase() === 'KREDIT') {
           continue;
         }
 
-        // Check if string is a number (e.g. "6,300,000" or "6300000.00")
         const cleanNumStr = strVal.replace(/[^\d.-]/g, '');
         const parsedNum = parseFloat(cleanNumStr);
         if (!isNaN(parsedNum) && parsedNum > 0 && /^\d/.test(strVal)) {
           if (debet === 0) debet = parsedNum;
           else if (kredit === 0) kredit = parsedNum;
         } else {
-          // It's a text description
           if (!strVal.startsWith('BCA') && !strVal.startsWith('KB') && !strVal.startsWith('KK') && !strVal.startsWith('i2')) {
             desc += (desc ? ' ' : '') + strVal;
           }
@@ -243,6 +238,8 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
       const cleanDesc = desc || 'Transaksi Kas';
       const classified = classifyTransaction(cleanDesc, mutasiType, amount);
 
+      const isTopUp = classified.isTopUp || cleanDesc.toUpperCase().includes('TOP UP');
+
       rows.push({
         date: isoDate,
         rawDate,
@@ -250,7 +247,8 @@ export function parseBcaCsvRows(data: any[][], defaultYear: number = new Date().
         mutasiType,
         amount,
         autoGLCode: classified.glCode,
-        notes: classified.targetUnit ? `Auto Masuk Kas: ${classified.targetUnit}` : undefined
+        notes: classified.targetUnit ? `Auto Masuk Kas: ${classified.targetUnit}` : undefined,
+        isTopUpBreakdown: isTopUp
       });
     }
   }

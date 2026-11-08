@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Button } from '@mui/material';
-import { Download, Filter, Search, Calendar, Building2, Wallet, Users, ChevronRight, Layers, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
+import { Download, Search, Building2, Wallet, Users, Layers, ArrowUpRight, ArrowDownRight, Edit2, Trash2, Calendar, Plus } from 'lucide-react';
 import { CashJournalEntry, GL_ACCOUNTS } from '../../../lib/glDefinitions';
 
 interface Props {
   entries: CashJournalEntry[];
   sourceFilter: 'all' | 'bank' | 'petty_cash';
   onDeleteEntry?: (id: string) => Promise<void>;
+  onUpdateEntry?: (entry: CashJournalEntry) => Promise<void>;
   canEdit: boolean;
 }
 
@@ -16,36 +17,78 @@ const MONTH_NAMES = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
-export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEntry, canEdit }: Props) {
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number>(0); // 0 = all
+export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEntry, onUpdateEntry, canEdit }: Props) {
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number>(9); // Default September (month 9) or current
   const [selectedGL, setSelectedGL] = useState<string>('all');
-  const [selectedUnit, setSelectedUnit] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<'buku_kas' | 'gl_rekap' | 'komisi_unit'>('buku_kas');
 
-  // Filter entries
-  const filteredEntries = useMemo(() => {
-    return entries.filter(e => {
-      // Source filter
-      if (sourceFilter !== 'all' && e.sourceType !== sourceFilter) return false;
+  // Edit Row State
+  const [editingEntry, setEditingEntry] = useState<CashJournalEntry | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<CashJournalEntry>>({});
+  const [openEditDialog, setOpenEditDialog] = useState(false);
 
-      // Year & Month filter
+  // Set Saldo Awal per month modal state
+  const [openSaldoAwalDialog, setOpenSaldoAwalDialog] = useState(false);
+  const [saldoAwalAmount, setSaldoAwalAmount] = useState<string>('');
+
+  // 1. Filter entries for the selected month & year
+  const monthEntries = useMemo(() => {
+    return entries.filter(e => {
+      if (sourceFilter !== 'all' && e.sourceType !== sourceFilter) return false;
       if (e.date) {
         const [y, m] = e.date.split('-');
         if (parseInt(y, 10) !== selectedYear) return false;
         if (selectedMonth > 0 && parseInt(m, 10) !== selectedMonth) return false;
       }
+      return true;
+    }).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.noRef || '').localeCompare(b.noRef || ''));
+  }, [entries, sourceFilter, selectedYear, selectedMonth]);
 
-      // GL Account filter
-      if (selectedGL !== 'all' && e.glCode !== selectedGL) return false;
+  // Find if there is an explicit Saldo Awal header entry for this month
+  const saldoAwalEntry = useMemo(() => {
+    return monthEntries.find(e => e.isHeader || (e.description || '').toUpperCase().includes('SALDO AWAL') || ((e.description || '').trim() === 'Saldo' && !e.debet && !e.kredit));
+  }, [monthEntries]);
 
-      // Unit filter
-      if (selectedUnit !== 'all') {
-        if (e.targetUnit !== selectedUnit && e.glCode !== selectedUnit) return false;
+  // Compute exact running balances like Excel:
+  // Saldo = Saldo Sebelumnya + Debet - Kredit
+  const { tableRows, totalDebet, totalKredit, finalSaldo } = useMemo(() => {
+    let currentBalance = saldoAwalEntry?.saldo || (saldoAwalAmount ? parseFloat(saldoAwalAmount) : 0);
+    let sumDebet = 0;
+    let sumKredit = 0;
+
+    const rows = monthEntries.map(e => {
+      // If it's a header line (Saldo awal)
+      if (e.id === saldoAwalEntry?.id) {
+        return { ...e, calculatedSaldo: e.saldo || currentBalance };
       }
 
-      // Search term
+      const d = Number(e.debet || 0);
+      const k = Number(e.kredit || 0);
+      sumDebet += d;
+      sumKredit += k;
+      currentBalance = currentBalance + d - k;
+
+      return {
+        ...e,
+        calculatedSaldo: currentBalance
+      };
+    });
+
+    return {
+      tableRows: rows,
+      totalDebet: sumDebet,
+      totalKredit: sumKredit,
+      finalSaldo: currentBalance
+    };
+  }, [monthEntries, saldoAwalEntry, saldoAwalAmount]);
+
+  // Filtered by Search & GL Account
+  const displayedRows = useMemo(() => {
+    return tableRows.filter(e => {
+      if (selectedGL !== 'all' && e.glCode !== selectedGL && e.targetUnit !== selectedGL) return false;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const matchDesc = (e.description || '').toLowerCase().includes(term);
@@ -53,38 +96,15 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
         const matchGl = (e.glCode || '').toLowerCase().includes(term);
         if (!matchDesc && !matchRef && !matchGl) return false;
       }
-
       return true;
-    }).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.noRef || '').localeCompare(b.noRef || ''));
-  }, [entries, sourceFilter, selectedYear, selectedMonth, selectedGL, selectedUnit, searchTerm]);
-
-  // Compute running balance & summary
-  const { totalDebet, totalKredit, balance, runningEntries } = useMemo(() => {
-    let deb = 0;
-    let kre = 0;
-    let bal = 0;
-
-    const running = filteredEntries.map(e => {
-      deb += Number(e.debet || 0);
-      kre += Number(e.kredit || 0);
-      bal = bal + Number(e.debet || 0) - Number(e.kredit || 0);
-      return { ...e, calculatedSaldo: bal };
     });
-
-    return { totalDebet: deb, totalKredit: kre, balance: deb - kre, runningEntries: running };
-  }, [filteredEntries]);
+  }, [tableRows, selectedGL, searchTerm]);
 
   // GL Grouped Summary
   const glSummary = useMemo(() => {
     const map: Record<string, { code: string; name: string; debet: number; kredit: number; count: number }> = {};
     
-    entries.forEach(e => {
-      if (e.date) {
-        const [y, m] = e.date.split('-');
-        if (parseInt(y, 10) !== selectedYear) return;
-        if (selectedMonth > 0 && parseInt(m, 10) !== selectedMonth) return;
-      }
-
+    monthEntries.forEach(e => {
       const code = e.glCode || '6001';
       const acc = GL_ACCOUNTS[code] || { code, name: 'Lainnya' };
       if (!map[code]) {
@@ -96,7 +116,7 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
     });
 
     return Object.values(map).sort((a, b) => a.code.localeCompare(b.code));
-  }, [entries, selectedYear, selectedMonth]);
+  }, [monthEntries]);
 
   // Unit / Komisi Summary
   const unitSummary = useMemo(() => {
@@ -113,7 +133,7 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
         return true;
       });
 
-      const masuk = items.reduce((sum, x) => sum + Number(x.debet || 0), 0);
+      const masuk = items.reduce((sum, x) => sum + Number(x.debet || 0) + Number(x.rincian || 0), 0);
       const keluar = items.reduce((sum, x) => sum + Number(x.kredit || 0), 0);
 
       return {
@@ -128,31 +148,42 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
     });
   }, [entries, selectedYear, selectedMonth]);
 
-  // Export to Excel
+  // Handle Edit Action
+  const handleStartEdit = (entry: CashJournalEntry) => {
+    setEditingEntry(entry);
+    setEditFormData({ ...entry });
+    setOpenEditDialog(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingEntry || !onUpdateEntry) return;
+    const updated = { ...editingEntry, ...editFormData } as CashJournalEntry;
+    await onUpdateEntry(updated);
+    setOpenEditDialog(false);
+  };
+
+  // Export to Excel (Exact format of GBI Jeltim Excel file)
   const handleExportExcel = () => {
-    const sheetData = runningEntries.map((e, idx) => ({
-      'No': idx + 1,
+    const sheetData = displayedRows.map((e) => ({
       'Tanggal': e.date,
-      'No. Ref': e.noRef,
-      'Kode GL': e.glCode,
-      'Nama Akun / GL': GL_ACCOUNTS[e.glCode]?.name || e.glCode,
+      'No': e.noRef,
+      'Reff.': e.glCode,
       'Keterangan': e.description,
       'Rincian': e.rincian || '',
-      'Debet (Masuk)': e.debet || 0,
-      'Kredit (Keluar)': e.kredit || 0,
-      'Saldo': e.calculatedSaldo || 0,
-      'Unit / Komisi': e.targetUnit || ''
+      'Debet': e.debet || '',
+      'Kredit': e.kredit || '',
+      'Saldo': e.calculatedSaldo || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(sheetData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Buku Kas & GL');
-    XLSX.writeFile(wb, `Buku_Kas_GL_GBIJeltim_${selectedYear}_${selectedMonth || 'Semua'}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, `Kas_${selectedYear}_${selectedMonth}`);
+    XLSX.writeFile(wb, `Kas_Bank_GBI_Jeltim_${selectedYear}_${MONTH_NAMES[selectedMonth]}.xlsx`);
   };
 
   return (
     <div className="space-y-6">
-      {/* Sub Tabs: Buku Kas vs Rekap GL vs Kas Komisi */}
+      {/* Sub Tabs Switcher */}
       <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200">
         <button
           onClick={() => setActiveSubTab('buku_kas')}
@@ -160,7 +191,7 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
             activeSubTab === 'buku_kas' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Building2 size={14} /> Buku Kas (Arus Kas Bank & Kas Kecil)
+          <Building2 size={14} /> Buku Kas (Format Persis Excel)
         </button>
 
         <button
@@ -169,7 +200,7 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
             activeSubTab === 'gl_rekap' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Layers size={14} /> Rekap General Ledger (GL Kode Akun)
+          <Layers size={14} /> Rekap General Ledger (GL)
         </button>
 
         <button
@@ -178,87 +209,108 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
             activeSubTab === 'komisi_unit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users size={14} /> Kas Komisi & Unit (Pecahan Masuk)
+          <Users size={14} /> Kas Komisi & Unit Terpecah
         </button>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {/* Year */}
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 font-medium text-slate-700"
+      {/* Filter Toolbar & Calendar Tabs per Bulan (Like Excel Sheet Tabs JAN26, FEB26, etc) */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        {/* Month selector pills (JAN, FEB, MAR, APR, MEI, JUN, JUL, AGS, SEP, OKT, NOV, DES) */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-100">
+          <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1">
+            <Calendar size={13} /> Bulan:
+          </span>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => {
+            const shortName = ['JAN', 'FEB', 'MAR', 'APR', 'MEI', 'JUN', 'JUL', 'AGS', 'SEP', 'OKT', 'NOV', 'DES'][m - 1];
+            const isSelected = selectedMonth === m;
+            return (
+              <button
+                key={m}
+                onClick={() => setSelectedMonth(m)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all whitespace-nowrap ${
+                  isSelected
+                    ? 'bg-blue-600 text-white shadow-sm scale-105'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {shortName}{String(selectedYear).slice(-2)}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setSelectedMonth(0)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              selectedMonth === 0 ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            {[2024, 2025, 2026, 2027].map(yr => (
-              <option key={yr} value={yr}>Tahun {yr}</option>
-            ))}
-          </select>
+            Semua
+          </button>
+        </div>
 
-          {/* Month */}
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 font-medium text-slate-700"
-          >
-            {MONTH_NAMES.map((name, i) => (
-              <option key={i} value={i}>{name}</option>
-            ))}
-          </select>
+        {/* Filter controls row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50 font-bold text-slate-800"
+            >
+              {[2024, 2025, 2026, 2027].map(yr => (
+                <option key={yr} value={yr}>Tahun {yr}</option>
+              ))}
+            </select>
 
-          {/* GL filter if in Buku Kas */}
-          {activeSubTab === 'buku_kas' && (
             <select
               value={selectedGL}
               onChange={(e) => setSelectedGL(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 font-medium text-slate-700 max-w-xs"
+              className="border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50 font-medium text-slate-700 max-w-xs"
             >
-              <option value="all">Semua Kode GL</option>
+              <option value="all">Semua Kode Reff / GL</option>
               {Object.values(GL_ACCOUNTS).map(acc => (
                 <option key={acc.code} value={acc.code}>{acc.code} - {acc.name}</option>
               ))}
             </select>
-          )}
 
-          {/* Search bar */}
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Cari transaksi / no ref..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs bg-slate-50 w-44 md:w-56"
-            />
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari transaksi / no ref..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs bg-slate-50 w-44 md:w-56"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleExportExcel}
+              startIcon={<Download size={14} />}
+              sx={{
+                borderColor: '#e2e8f0',
+                color: '#334155',
+                textTransform: 'none',
+                fontSize: '12px',
+                borderRadius: '10px',
+                '&:hover': { backgroundColor: '#f8fafc', borderColor: '#cbd5e1' }
+              }}
+            >
+              Export Excel
+            </Button>
           </div>
         </div>
-
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={handleExportExcel}
-          startIcon={<Download size={14} />}
-          sx={{
-            borderColor: '#e2e8f0',
-            color: '#334155',
-            textTransform: 'none',
-            fontSize: '12px',
-            borderRadius: '10px',
-            '&:hover': { backgroundColor: '#f8fafc', borderColor: '#cbd5e1' }
-          }}
-        >
-          Export Excel
-        </Button>
       </div>
 
-      {/* Overview Metric Cards */}
+      {/* Overview Cards (Debet, Kredit, Saldo Akhir) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Kas Masuk (Debet)</div>
-            <div className="text-xl font-bold text-emerald-600 mt-1">Rp {totalDebet.toLocaleString('id-ID')}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Penerimaan & Persembahan</div>
+            <div className="text-xl font-bold text-emerald-600 mt-1 font-mono">Rp {totalDebet.toLocaleString('id-ID')}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">{MONTH_NAMES[selectedMonth]} {selectedYear}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <ArrowDownRight size={22} />
@@ -268,8 +320,8 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Kas Keluar (Kredit)</div>
-            <div className="text-xl font-bold text-red-600 mt-1">Rp {totalKredit.toLocaleString('id-ID')}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Operasional, Pastoral & Komisi</div>
+            <div className="text-xl font-bold text-red-600 mt-1 font-mono">Rp {totalKredit.toLocaleString('id-ID')}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Operasional & Komisi</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
             <ArrowUpRight size={22} />
@@ -278,11 +330,11 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Saldo Kas Berjalan</div>
-            <div className={`text-xl font-bold mt-1 ${balance >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
-              Rp {balance.toLocaleString('id-ID')}
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Saldo Akhir Bank</div>
+            <div className="text-xl font-bold mt-1 font-mono text-blue-600">
+              Rp {finalSaldo.toLocaleString('id-ID')}
             </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Selisih Debet & Kredit</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Saldo Buku Kas Berjalan</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
             <Wallet size={22} />
@@ -290,90 +342,124 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
         </div>
       </div>
 
-      {/* VIEW 1: BUKU KAS TABLE */}
+      {/* VIEW 1: BUKU KAS (EXACT EXCEL COLUMNS) */}
       {activeSubTab === 'buku_kas' && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h4 className="font-bold text-slate-900 text-sm">
-              Daftar Transaksi Arus Kas ({runningEntries.length} entri)
-            </h4>
-            <div className="text-xs text-slate-500">
-              Periode: {selectedMonth ? MONTH_NAMES[selectedMonth] : 'Sepanjang'} {selectedYear}
+          <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+            <div>
+              <h4 className="font-bold text-sm">
+                Arus Kas Bank - {selectedMonth ? `Per ${MONTH_NAMES[selectedMonth]}` : 'Sepanjang'} {selectedYear}
+              </h4>
+              <p className="text-xs text-slate-400">
+                Format 8 Kolom: Tanggal | No | Reff. | Keterangan | Rincian | Debet | Kredit | Saldo
+              </p>
+            </div>
+            <div className="text-xs font-mono font-bold text-amber-400">
+              Saldo: Rp {finalSaldo.toLocaleString('id-ID')}
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
                 <tr>
-                  <th className="p-3 w-28">Tanggal</th>
-                  <th className="p-3 w-28">No. Ref</th>
-                  <th className="p-3 w-24">Kode GL</th>
-                  <th className="p-3">Keterangan Transaksi</th>
-                  <th className="p-3 w-32 text-right">Debet (Masuk)</th>
-                  <th className="p-3 w-32 text-right">Kredit (Keluar)</th>
-                  <th className="p-3 w-36 text-right">Saldo</th>
-                  <th className="p-3 w-24 text-center">Unit</th>
-                  {canEdit && <th className="p-3 w-16 text-center">Aksi</th>}
+                  <th className="p-2.5 border-r border-slate-200 w-28">Tanggal</th>
+                  <th className="p-2.5 border-r border-slate-200 w-28">No</th>
+                  <th className="p-2.5 border-r border-slate-200 w-20 text-center">Reff.</th>
+                  <th className="p-2.5 border-r border-slate-200">Keterangan</th>
+                  <th className="p-2.5 border-r border-slate-200 w-28 text-right">Rincian</th>
+                  <th className="p-2.5 border-r border-slate-200 w-32 text-right">Debet</th>
+                  <th className="p-2.5 border-r border-slate-200 w-32 text-right">Kredit</th>
+                  <th className="p-2.5 border-r border-slate-200 w-36 text-right">Saldo</th>
+                  {canEdit && <th className="p-2.5 w-16 text-center">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-normal">
-                {runningEntries.length === 0 ? (
+                {displayedRows.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="p-8 text-center text-slate-400">
-                      Belum ada transaksi di periode ini. Silakan upload file RK BCA di atas.
+                      Belum ada transaksi di bulan {MONTH_NAMES[selectedMonth]} {selectedYear}.
+                      Silakan upload RK BCA di atas.
                     </td>
                   </tr>
                 ) : (
-                  runningEntries.map((e) => (
-                    <tr key={e.id} className="hover:bg-slate-50/70">
-                      <td className="p-3 font-mono text-slate-600">{e.date}</td>
-                      <td className="p-3 font-mono font-bold text-slate-800">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px]">
-                          {e.noRef}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded font-bold text-[11px] bg-blue-50 text-blue-700 border border-blue-200/60">
-                          {e.glCode}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <div className="font-medium text-slate-900">{e.description}</div>
-                        {e.rincian && <div className="text-[11px] text-slate-500">{e.rincian}</div>}
-                      </td>
-                      <td className="p-3 text-right font-mono font-semibold text-emerald-600">
-                        {e.debet > 0 ? `Rp ${e.debet.toLocaleString('id-ID')}` : '-'}
-                      </td>
-                      <td className="p-3 text-right font-mono font-semibold text-red-600">
-                        {e.kredit > 0 ? `Rp ${e.kredit.toLocaleString('id-ID')}` : '-'}
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold text-slate-900">
-                        Rp {e.calculatedSaldo?.toLocaleString('id-ID')}
-                      </td>
-                      <td className="p-3 text-center">
-                        {e.targetUnit ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                            {e.targetUnit}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">-</span>
-                        )}
-                      </td>
-                      {canEdit && (
-                        <td className="p-3 text-center">
-                          {onDeleteEntry && (
-                            <button
-                              onClick={() => onDeleteEntry(e.id)}
-                              className="text-slate-400 hover:text-red-600 transition-colors text-[11px]"
-                            >
-                              Hapus
-                            </button>
-                          )}
+                  displayedRows.map((e, idx) => {
+                    const isHeaderRow = e.isHeader || (e.description || '').toUpperCase() === 'SALDO';
+                    return (
+                      <tr
+                        key={e.id || idx}
+                        className={isHeaderRow ? 'bg-amber-50/60 font-bold' : 'hover:bg-slate-50/80'}
+                      >
+                        {/* Tanggal */}
+                        <td className="p-2.5 border-r border-slate-100 font-mono text-slate-700">
+                          {e.date || ''}
                         </td>
-                      )}
-                    </tr>
-                  ))
+
+                        {/* No Ref */}
+                        <td className="p-2.5 border-r border-slate-100 font-mono font-semibold text-slate-800">
+                          {e.noRef || ''}
+                        </td>
+
+                        {/* Reff / GL Code */}
+                        <td className="p-2.5 border-r border-slate-100 text-center font-bold">
+                          {e.glCode ? (
+                            <span className="px-1.5 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700">
+                              {e.glCode}
+                            </span>
+                          ) : ''}
+                        </td>
+
+                        {/* Keterangan */}
+                        <td className="p-2.5 border-r border-slate-100 font-medium text-slate-900">
+                          {e.description}
+                        </td>
+
+                        {/* Rincian (e.g. breakdown topup or breakdown persembahan) */}
+                        <td className="p-2.5 border-r border-slate-100 text-right font-mono text-slate-600">
+                          {e.rincian ? Number(e.rincian).toLocaleString('id-ID') : ''}
+                        </td>
+
+                        {/* Debet */}
+                        <td className="p-2.5 border-r border-slate-100 text-right font-mono font-semibold text-emerald-600">
+                          {e.debet ? Number(e.debet).toLocaleString('id-ID') : ''}
+                        </td>
+
+                        {/* Kredit */}
+                        <td className="p-2.5 border-r border-slate-100 text-right font-mono font-semibold text-red-600">
+                          {e.kredit ? Number(e.kredit).toLocaleString('id-ID') : ''}
+                        </td>
+
+                        {/* Saldo */}
+                        <td className="p-2.5 border-r border-slate-100 text-right font-mono font-bold text-slate-900">
+                          {e.calculatedSaldo ? Number(e.calculatedSaldo).toLocaleString('id-ID') : ''}
+                        </td>
+
+                        {/* Action buttons (Edit & Delete) */}
+                        {canEdit && (
+                          <td className="p-2.5 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleStartEdit(e)}
+                                className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                                title="Edit Transaksi"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              {onDeleteEntry && (
+                                <button
+                                  onClick={() => onDeleteEntry(e.id)}
+                                  className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                                  title="Hapus Transaksi"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -386,10 +472,10 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-100">
             <h4 className="font-bold text-slate-900 text-sm">
-              Rekapitulasi General Ledger per Kode Akun
+              Rekapitulasi General Ledger per Kode Akun ({MONTH_NAMES[selectedMonth]} {selectedYear})
             </h4>
             <p className="text-xs text-slate-500">
-              Semua transaksi otomatis terkelompokkan ke akun penerimaan & biaya masing-masing
+              Semua mutasi otomatis terkelompokkan ke pos pendapatan dan biaya masing-masing
             </p>
           </div>
 
@@ -436,10 +522,10 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
         <div className="space-y-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
             <h4 className="font-bold text-slate-900 text-sm">
-              Pecahan Kas Bank & Kas Kecil ke Komisi & Unit Terkait
+              Kas Komisi & Unit Terkait ({MONTH_NAMES[selectedMonth]} {selectedYear})
             </h4>
             <p className="text-xs text-slate-500">
-              Transaksi yang memiliki referensi komisi otomatis masuk ke buku kas masing-masing komisi
+              Transaksi yang mencantumkan referensi komisi otomatis dialirkan ke masing-masing saldo kas komisi
             </p>
           </div>
 
@@ -479,6 +565,105 @@ export default function GeneralLedgerViewer({ entries, sourceFilter, onDeleteEnt
           </div>
         </div>
       )}
+
+      {/* Edit Entry Dialog Modal */}
+      <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle className="font-bold text-slate-900 text-base">
+          Edit Baris Transaksi Buku Kas
+        </DialogTitle>
+        <DialogContent>
+          <div className="space-y-3.5 mt-3 text-xs">
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">Tanggal</label>
+              <input
+                type="date"
+                value={editFormData.date || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+                className="w-full border border-slate-200 rounded-lg p-2 font-mono"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">No. Ref</label>
+                <input
+                  type="text"
+                  value={editFormData.noRef || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, noRef: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg p-2 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Kode GL / Reff</label>
+                <select
+                  value={editFormData.glCode || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, glCode: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg p-2 font-bold"
+                >
+                  <option value="">- Kosong -</option>
+                  {Object.values(GL_ACCOUNTS).map(acc => (
+                    <option key={acc.code} value={acc.code}>{acc.code} - {acc.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">Keterangan Transaksi</label>
+              <input
+                type="text"
+                value={editFormData.description || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                className="w-full border border-slate-200 rounded-lg p-2 font-medium"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Rincian</label>
+                <input
+                  type="number"
+                  value={editFormData.rincian || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, rincian: parseFloat(e.target.value) || null })}
+                  className="w-full border border-slate-200 rounded-lg p-2 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Debet (Masuk)</label>
+                <input
+                  type="number"
+                  value={editFormData.debet || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, debet: parseFloat(e.target.value) || null })}
+                  className="w-full border border-slate-200 rounded-lg p-2 font-mono text-emerald-600 font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Kredit (Keluar)</label>
+                <input
+                  type="number"
+                  value={editFormData.kredit || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, kredit: parseFloat(e.target.value) || null })}
+                  className="w-full border border-slate-200 rounded-lg p-2 font-mono text-red-600 font-bold"
+                />
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenEditDialog(false)} sx={{ textTransform: 'none' }}>
+            Batal
+          </Button>
+          <Button
+            onClick={handleSaveEdit}
+            variant="contained"
+            sx={{
+              backgroundColor: '#0f172a',
+              textTransform: 'none',
+              fontWeight: 600,
+              '&:hover': { backgroundColor: '#1e293b' }
+            }}
+          >
+            Simpan Perubahan
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }

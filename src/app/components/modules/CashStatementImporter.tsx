@@ -1,7 +1,7 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
-import { UploadCloud, FileText, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck, Sparkles, Building2, Wallet, Plus, Trash2, Clipboard } from 'lucide-react';
+import { Button, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { UploadCloud, CheckCircle2, AlertCircle, Sparkles, Building2, Wallet, Plus, Trash2, Clipboard, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { GL_ACCOUNTS, BankStatementRow, CashJournalEntry, classifyTransaction } from '../../../lib/glDefinitions';
 import { parseBcaStatementText, parseBcaCsvRows } from '../../../lib/bcaParser';
 import { apiBase } from '../../../lib/api';
@@ -14,7 +14,6 @@ interface Props {
 }
 
 export default function CashStatementImporter({ sourceType, existingEntries, canEdit, onImportComplete }: Props) {
-  const [file, setFile] = useState<File | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [previewRows, setPreviewRows] = useState<BankStatementRow[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -37,7 +36,6 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
     const yr2 = String(year).slice(-2);
     const prefix = `${type}${yr2}`;
     
-    // Find highest existing sequence for this prefix
     let maxSeq = 0;
     currentList.forEach(e => {
       if (e.noRef && e.noRef.startsWith(prefix)) {
@@ -56,7 +54,6 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
 
-    setFile(uploadedFile);
     setIsParsing(true);
     setStatusMsg(null);
 
@@ -77,8 +74,8 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
           setPreviewRows(parsed);
           setStatusMsg({ type: 'success', text: `Berhasil membaca ${parsed.length} transaksi dari ${uploadedFile.name}` });
         }
+        setIsParsing(false);
       } else if (fileName.endsWith('.pdf')) {
-        // Send base64 to server parser endpoint for accurate pdf-parse extraction
         const reader = new FileReader();
         reader.onload = async () => {
           try {
@@ -100,27 +97,26 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
               } else {
                 setStatusMsg({
                   type: 'error',
-                  text: 'PDF berhasil dibaca namun tidak terdeteksi tabel mutasi. Anda bisa copy-paste teks mutasi langsung lewat tombol "Paste Teks Mutasi".'
+                  text: 'PDF terbaca tapi tidak ada mutasi yang cocok. Anda dapat mem-paste teksnya langsung lewat "Paste Teks Mutasi".'
                 });
               }
             } else {
-              setStatusMsg({ type: 'error', text: resJson.error || 'Gagal memproses file PDF.' });
+              setStatusMsg({ type: 'error', text: resJson.error || 'Gagal membaca isi PDF.' });
             }
           } catch (err: any) {
-            setStatusMsg({ type: 'error', text: 'Gagal membaca PDF: ' + err.message });
+            setStatusMsg({ type: 'error', text: 'Gagal memproses file PDF: ' + err.message });
           } finally {
             setIsParsing(false);
           }
         };
         reader.readAsDataURL(uploadedFile);
-        return; // wait for async reader
       } else {
-        setStatusMsg({ type: 'error', text: 'Format file tidak didukung. Harap upload .xlsx, .xls, .csv, atau .pdf' });
+        setStatusMsg({ type: 'error', text: 'Format tidak didukung. Harap upload .xlsx, .xls, .csv, atau .pdf' });
+        setIsParsing(false);
       }
     } catch (err: any) {
       console.error('File parsing error:', err);
       setStatusMsg({ type: 'error', text: 'Gagal memproses file: ' + err.message });
-    } finally {
       setIsParsing(false);
     }
   };
@@ -133,6 +129,59 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
         autoGLCode: newGLCode,
         notes: GL_ACCOUNTS[newGLCode]?.unitCategory ? `Masuk Kas: ${newGLCode}` : undefined
       };
+      return updated;
+    });
+  };
+
+  const handleUpdateRowDesc = (index: number, newDesc: string) => {
+    setPreviewRows(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], description: newDesc };
+      return updated;
+    });
+  };
+
+  const handleToggleBreakdown = (index: number) => {
+    setPreviewRows(prev => {
+      const updated = [...prev];
+      const curr = updated[index];
+      const isTopUp = !curr.isTopUpBreakdown;
+      updated[index] = {
+        ...curr,
+        isTopUpBreakdown: isTopUp,
+        breakdownItems: isTopUp ? [
+          { glCode: 'U', description: 'Top Up KK Umum', amount: 0 },
+          { glCode: 'ABI', description: 'Top Up KK ABI', amount: 0 },
+          { glCode: 'WBI', description: 'Top Up KK WBI', amount: 0 },
+          { glCode: 'RBI', description: 'Top Up KK RBI', amount: 0 },
+          { glCode: 'VSS', description: 'Top Up KK Vessel', amount: 0 },
+        ] : undefined
+      };
+      return updated;
+    });
+  };
+
+  const handleUpdateBreakdownItem = (rowIndex: number, itemIndex: number, field: 'glCode' | 'description' | 'amount', val: any) => {
+    setPreviewRows(prev => {
+      const updated = [...prev];
+      const row = { ...updated[rowIndex] };
+      if (!row.breakdownItems) return prev;
+      
+      const newItems = [...row.breakdownItems];
+      newItems[itemIndex] = { ...newItems[itemIndex], [field]: val };
+      row.breakdownItems = newItems;
+      updated[rowIndex] = row;
+      return updated;
+    });
+  };
+
+  const handleAddBreakdownItem = (rowIndex: number) => {
+    setPreviewRows(prev => {
+      const updated = [...prev];
+      const row = { ...updated[rowIndex] };
+      if (!row.breakdownItems) row.breakdownItems = [];
+      row.breakdownItems = [...row.breakdownItems, { glCode: 'DK', description: 'Top Up KK Kowari', amount: 0 }];
+      updated[rowIndex] = row;
       return updated;
     });
   };
@@ -166,7 +215,7 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
     setPreviewRows(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Process rows into formal CashJournalEntry records
+  // Commit preview rows into formal CashJournalEntry records (matching Excel GL structure)
   const handleCommitToJournal = async () => {
     if (previewRows.length === 0) return;
     setIsSubmitting(true);
@@ -174,9 +223,9 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
     try {
       const convertedEntries: CashJournalEntry[] = [];
       const currentFullList = [...existingEntries];
+      let seqOffset = 0;
 
-      previewRows.forEach((row, i) => {
-        // Reference code prefix
+      previewRows.forEach((row) => {
         let refPrefix: 'BCA' | 'KB' | 'KK' = 'BCA';
         if (sourceType === 'petty_cash') {
           refPrefix = 'KK';
@@ -184,34 +233,79 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
           refPrefix = row.mutasiType === 'DB' ? 'KB' : 'BCA';
         }
 
-        const refNo = getNextRefSequence(refPrefix, selectedYear, currentFullList, i);
-        const glAccount = GL_ACCOUNTS[row.autoGLCode || '6001'];
-        const isTargetUnit = glAccount && glAccount.type === 'unit';
+        const mainRefNo = getNextRefSequence(refPrefix, selectedYear, currentFullList, seqOffset);
+        seqOffset++;
 
-        const entry: CashJournalEntry = {
-          id: `cj_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-          sourceType,
-          date: row.date,
-          noRef: refNo,
-          glCode: row.autoGLCode || '6001',
-          description: row.description,
-          rincian: isTargetUnit ? `Pecahan ke ${glAccount.name}` : undefined,
-          debet: row.mutasiType === 'CR' ? row.amount : 0,
-          kredit: row.mutasiType === 'DB' ? row.amount : 0,
-          targetUnit: isTargetUnit ? row.autoGLCode : undefined,
-          isAutoClassified: true,
-          createdAt: new Date().toISOString()
-        };
+        // If top up or breakdown is active (e.g. Image 3 & 4: KB260196 top up rincian)
+        if (row.isTopUpBreakdown && row.breakdownItems && row.breakdownItems.length > 0) {
+          // Add sub-breakdown rows
+          row.breakdownItems.forEach((subItem) => {
+            if (subItem.amount > 0 || row.breakdownItems!.length <= 6) {
+              const subEntry: CashJournalEntry = {
+                id: `cj_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+                sourceType,
+                date: row.date,
+                noRef: mainRefNo,
+                glCode: subItem.glCode,
+                description: subItem.description,
+                rincian: subItem.amount > 0 ? subItem.amount : null,
+                debet: null,
+                kredit: null,
+                targetUnit: subItem.glCode,
+                isAutoClassified: true,
+                createdAt: new Date().toISOString()
+              };
+              convertedEntries.push(subEntry);
+              currentFullList.push(subEntry);
+            }
+          });
 
-        convertedEntries.push(entry);
-        currentFullList.push(entry);
+          // Add final summary row with full amount in Kredit
+          const totalSummaryEntry: CashJournalEntry = {
+            id: `cj_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            sourceType,
+            date: row.date,
+            noRef: mainRefNo,
+            glCode: '',
+            description: 'Transfer',
+            rincian: null,
+            debet: null,
+            kredit: row.amount,
+            targetUnit: undefined,
+            isAutoClassified: true,
+            createdAt: new Date().toISOString()
+          };
+          convertedEntries.push(totalSummaryEntry);
+          currentFullList.push(totalSummaryEntry);
+        } else {
+          // Standard Single Row
+          const glAccount = GL_ACCOUNTS[row.autoGLCode || '6001'];
+          const isTargetUnit = glAccount && glAccount.type === 'unit';
+
+          const entry: CashJournalEntry = {
+            id: `cj_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            sourceType,
+            date: row.date,
+            noRef: mainRefNo,
+            glCode: row.autoGLCode || '6001',
+            description: row.description,
+            rincian: null,
+            debet: row.mutasiType === 'CR' ? row.amount : null,
+            kredit: row.mutasiType === 'DB' ? row.amount : null,
+            targetUnit: isTargetUnit ? row.autoGLCode : undefined,
+            isAutoClassified: true,
+            createdAt: new Date().toISOString()
+          };
+
+          convertedEntries.push(entry);
+          currentFullList.push(entry);
+        }
       });
 
       await onImportComplete(convertedEntries);
       setPreviewRows([]);
-      setFile(null);
       setOpenConfirmDialog(false);
-      setStatusMsg({ type: 'success', text: `Sukses menginput ${convertedEntries.length} transaksi ke Kas & GL!` });
+      setStatusMsg({ type: 'success', text: `Sukses menginput ${convertedEntries.length} baris transaksi ke Buku Kas & GL!` });
     } catch (err: any) {
       console.error('Commit error:', err);
       setStatusMsg({ type: 'error', text: 'Gagal menyimpan ke jurnal: ' + err.message });
@@ -232,7 +326,7 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
               {sourceType === 'bank' ? 'Otomatisasi Rekening Koran BCA ➔ GL' : 'Pencatatan Kas Kecil (Operasional Tante Yanti)'}
             </h3>
             <p className="text-xs text-slate-500">
-              Auto-generate No Ref (BCA/KB/KK), auto-klasifikasi kode GL (1001, 1004, 2001, dll) & auto-split ke kas komisi
+              Auto-generate No Ref (BCA/KB/KK), auto-klasifikasi kode GL & rincian pecahan kas komisi persis format Excel
             </p>
           </div>
         </div>
@@ -283,7 +377,7 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
               '&:hover': { backgroundColor: '#1e293b' }
             }}
           >
-            {isParsing ? 'Membaca...' : 'Upload RK BCA / Excel'}
+            {isParsing ? 'Membaca PDF/Excel...' : 'Upload RK BCA / Excel'}
           </Button>
           <input
             ref={fileInputRef}
@@ -314,7 +408,7 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
             type="date"
             value={manualDate}
             onChange={(e) => setManualDate(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white"
+            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-mono"
           />
           <input
             type="text"
@@ -326,23 +420,23 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
           <select
             value={manualType}
             onChange={(e) => setManualType(e.target.value as any)}
-            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white"
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-medium"
           >
-            <option value="CR">Penerimaan (CR / Masuk)</option>
-            <option value="DB">Pengeluaran (DB / Keluar)</option>
+            <option value="CR">Penerimaan (CR / Debet)</option>
+            <option value="DB">Pengeluaran (DB / Kredit)</option>
           </select>
           <input
             type="number"
             placeholder="Nominal (Rp)"
             value={manualAmount}
             onChange={(e) => setManualAmount(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white"
+            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-mono"
           />
           <div className="flex gap-1.5">
             <select
               value={manualGL}
               onChange={(e) => setManualGL(e.target.value)}
-              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white flex-1"
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white flex-1 font-medium"
             >
               {Object.values(GL_ACCOUNTS).map(acc => (
                 <option key={acc.code} value={acc.code}>{acc.code} - {acc.name}</option>
@@ -360,11 +454,11 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
 
       {/* Preview Table if rows parsed */}
       {previewRows.length > 0 && (
-        <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden">
+        <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-amber-400" />
-              <span className="text-xs font-bold">Hasil Parsing Mutasi BCA ({previewRows.length} transaksi siap diproses)</span>
+              <span className="text-xs font-bold">Preview Mutasi Terdeteksi ({previewRows.length} transaksi)</span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -388,54 +482,123 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
                 <tr>
                   <th className="p-2.5 w-12">#</th>
                   <th className="p-2.5 w-28">Tanggal</th>
-                  <th className="p-2.5">Keterangan BCA</th>
+                  <th className="p-2.5">Keterangan Transaksi</th>
                   <th className="p-2.5 w-24">Tipe</th>
                   <th className="p-2.5 w-32 text-right">Nominal</th>
-                  <th className="p-2.5 w-60">Auto-Kode GL & Unit</th>
+                  <th className="p-2.5 w-56">Kode GL & Unit</th>
+                  <th className="p-2.5 w-28 text-center">Jabarkan (Top Up)</th>
                   <th className="p-2.5 w-12 text-center">Hapus</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {previewRows.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80">
-                    <td className="p-2.5 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
-                    <td className="p-2.5 font-mono text-slate-700 font-medium">{row.date}</td>
-                    <td className="p-2.5 font-medium text-slate-800">
-                      <div>{row.description}</div>
-                      {row.notes && <div className="text-[10px] text-blue-600 font-semibold">{row.notes}</div>}
-                    </td>
-                    <td className="p-2.5">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        row.mutasiType === 'CR' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {row.mutasiType === 'CR' ? 'Kredit (CR)' : 'Debet (DB)'}
-                      </span>
-                    </td>
-                    <td className="p-2.5 text-right font-mono font-bold text-slate-900">
-                      Rp {row.amount.toLocaleString('id-ID')}
-                    </td>
-                    <td className="p-2.5">
-                      <select
-                        value={row.autoGLCode || '6001'}
-                        onChange={(e) => handleUpdateRowGL(idx, e.target.value)}
-                        className="text-xs border border-slate-200 rounded px-2 py-1 w-full bg-white font-medium text-slate-800"
-                      >
-                        {Object.values(GL_ACCOUNTS).map(acc => (
-                          <option key={acc.code} value={acc.code}>
-                            {acc.code} - {acc.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="p-2.5 text-center">
-                      <button
-                        onClick={() => handleDeletePreviewRow(idx)}
-                        className="text-slate-400 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
+                  <React.Fragment key={idx}>
+                    <tr className="hover:bg-slate-50/80">
+                      <td className="p-2.5 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                      <td className="p-2.5 font-mono text-slate-700 font-medium">{row.date}</td>
+                      <td className="p-2.5 font-medium text-slate-800">
+                        <input
+                          type="text"
+                          value={row.description}
+                          onChange={(e) => handleUpdateRowDesc(idx, e.target.value)}
+                          className="w-full border-b border-transparent hover:border-slate-300 focus:border-blue-500 bg-transparent px-1 py-0.5"
+                        />
+                        {row.notes && <div className="text-[10px] text-blue-600 font-semibold px-1">{row.notes}</div>}
+                      </td>
+                      <td className="p-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row.mutasiType === 'CR' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {row.mutasiType === 'CR' ? 'Kredit (CR)' : 'Debet (DB)'}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-right font-mono font-bold text-slate-900">
+                        Rp {row.amount.toLocaleString('id-ID')}
+                      </td>
+                      <td className="p-2.5">
+                        <select
+                          value={row.autoGLCode || '6001'}
+                          onChange={(e) => handleUpdateRowGL(idx, e.target.value)}
+                          className="text-xs border border-slate-200 rounded px-2 py-1 w-full bg-white font-medium text-slate-800"
+                        >
+                          {Object.values(GL_ACCOUNTS).map(acc => (
+                            <option key={acc.code} value={acc.code}>
+                              {acc.code} - {acc.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <button
+                          onClick={() => handleToggleBreakdown(idx)}
+                          className={`px-2 py-1 rounded text-[11px] font-bold transition-all ${
+                            row.isTopUpBreakdown
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {row.isTopUpBreakdown ? 'Tutup Rincian' : '+ Rincian'}
+                        </button>
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <button
+                          onClick={() => handleDeletePreviewRow(idx)}
+                          className="text-slate-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+
+                    {/* Expandable Top Up Breakdown Form (Image 3 format) */}
+                    {row.isTopUpBreakdown && row.breakdownItems && (
+                      <tr className="bg-amber-50/50">
+                        <td colSpan={8} className="p-3 pl-12 border-l-4 border-amber-400">
+                          <div className="text-xs font-bold text-slate-800 mb-2 flex items-center justify-between">
+                            <span>Rincian Pengeluaran Kas Unit (Total mutasi bank: Rp {row.amount.toLocaleString('id-ID')}):</span>
+                            <button
+                              onClick={() => handleAddBreakdownItem(idx)}
+                              className="text-[11px] text-blue-600 font-bold hover:underline"
+                            >
+                              + Tambah Unit Lain
+                            </button>
+                          </div>
+                          <div className="space-y-1.5">
+                            {row.breakdownItems.map((item, bIdx) => (
+                              <div key={bIdx} className="grid grid-cols-12 gap-2 items-center text-xs">
+                                <select
+                                  value={item.glCode}
+                                  onChange={(e) => handleUpdateBreakdownItem(idx, bIdx, 'glCode', e.target.value)}
+                                  className="col-span-2 border border-slate-200 rounded px-2 py-1 bg-white font-mono font-bold"
+                                >
+                                  {['U', 'ABI', 'WBI', 'RBI', 'VSS', 'DK', 'KPS', 'KPP', 'OTA'].map(u => (
+                                    <option key={u} value={u}>{u} - {GL_ACCOUNTS[u]?.name || u}</option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="text"
+                                  value={item.description}
+                                  onChange={(e) => handleUpdateBreakdownItem(idx, bIdx, 'description', e.target.value)}
+                                  placeholder="Keterangan rincian (e.g. Top Up KK ABI)"
+                                  className="col-span-6 border border-slate-200 rounded px-2 py-1 bg-white"
+                                />
+                                <div className="col-span-4 flex items-center gap-1.5">
+                                  <span className="text-slate-400">Rp</span>
+                                  <input
+                                    type="number"
+                                    value={item.amount || ''}
+                                    onChange={(e) => handleUpdateBreakdownItem(idx, bIdx, 'amount', parseFloat(e.target.value) || 0)}
+                                    placeholder="Nominal"
+                                    className="w-full border border-slate-200 rounded px-2 py-1 bg-white font-mono font-semibold"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -450,12 +613,12 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
         </DialogTitle>
         <DialogContent>
           <p className="text-sm text-slate-600 mb-3">
-            Sistem akan otomatis memasukkan <strong>{previewRows.length} transaksi</strong> ke dalam:
+            Sistem akan otomatis memasukkan <strong>{previewRows.length} transaksi</strong> ke dalam Buku Kas & GL:
           </p>
           <ul className="text-xs space-y-1.5 list-disc list-inside text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <li><strong>Buku Kas Bank / Kas Kecil</strong> dengan No Referensi berurutan (BCA, KB, KK).</li>
-            <li><strong>General Ledger (GL)</strong> terkelompok berdasarkan akun (1001, 1004, 2001, dll).</li>
-            <li><strong>Kas Komisi & Unit Terkait</strong> (KABI, PRBI, WBI, KOMPAS, Vessel, Diakonia, Pembangunan, OTA) otomatis ter-update saldonya.</li>
+            <li><strong>Auto-No Ref berurutan:</strong> BCA260xxx, KB260xxx, KK260xxx.</li>
+            <li><strong>Auto-Format Excel:</strong> Rincian kolom terpisah persis seperti file Excel kas gereja.</li>
+            <li><strong>Auto-Pecah ke Komisi:</strong> Otomatis masuk ke buku kas KABI, PRBI, WBI, KOMPAS, Vessel, Diakonia, Pembangunan, OTA.</li>
           </ul>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
@@ -486,7 +649,7 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
         </DialogTitle>
         <DialogContent>
           <p className="text-xs text-slate-500 mb-2">
-            Anda dapat mem-blok dan copy teks dari mutasi internet banking BCA (KlikBCA) atau dari PDF BCA, lalu paste di bawah ini:
+            Anda dapat mem-blok dan copy teks langsung dari mutasi internet banking BCA (KlikBCA) atau dari PDF BCA, lalu paste di bawah ini:
           </p>
           <textarea
             rows={10}

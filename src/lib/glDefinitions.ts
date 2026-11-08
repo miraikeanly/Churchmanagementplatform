@@ -56,20 +56,27 @@ export interface BankStatementRow {
   autoRefNo?: string;
   autoGLCode?: string;
   notes?: string;
+  isTopUpBreakdown?: boolean;
+  breakdownItems?: Array<{
+    glCode: string;
+    description: string;
+    amount: number;
+  }>;
 }
 
 export interface CashJournalEntry {
   id: string;
   sourceType: 'bank' | 'petty_cash'; // Kas Bank vs Kas Kecil Tante Yanti
   date: string; // YYYY-MM-DD
-  noRef: string; // e.g. BCA260001, KB260001, KK260001
+  noRef: string; // e.g. BCA260001, KB260001, KK260001, i260001
   glCode: string; // e.g. 1001, 1004, OTA, ABI
   description: string;
-  rincian?: string;
-  debet: number; // Uang masuk ke kas
-  kredit: number; // Uang keluar dari kas
-  saldo?: number;
+  rincian?: number | null; // Kolom Rincian di Excel untuk breakdown persembahan/topup
+  debet?: number | null; // Kolom Debet
+  kredit?: number | null; // Kolom Kredit
+  saldo?: number | null; // Kolom Saldo
   targetUnit?: string; // e.g. 'ABI', 'RBI', 'WBI', 'KPS', 'VSS', 'DK', 'KPP', 'OTA', 'U'
+  isHeader?: boolean; // Untuk baris Saldo Awal per bulan
   isAutoClassified?: boolean;
   createdAt: string;
 }
@@ -81,8 +88,14 @@ export function classifyTransaction(desc: string, mutasiType: 'CR' | 'DB', amoun
   glCode: string;
   targetUnit?: string;
   cleanDescription: string;
+  isTopUp?: boolean;
 } {
   const upper = desc.toUpperCase();
+
+  // Top Up detection
+  if (upper.includes('TOP UP KK') || upper.includes('TOPUP KK') || upper.includes('TOP UP KAS') || upper.includes('KK UMUM')) {
+    return { glCode: 'U', targetUnit: 'U', cleanDescription: desc, isTopUp: true };
+  }
 
   // 1. Check Komisi / Unit Specifics
   if (upper.includes('SEKOLAH MINGGU') || upper.includes(' KABI') || upper.includes('UTK ABI') || upper.includes('UNTUK ABI') || upper.includes('PERSEMBAHAN ABI') || upper.includes('KK ABI')) {
@@ -110,12 +123,7 @@ export function classifyTransaction(desc: string, mutasiType: 'CR' | 'DB', amoun
     return { glCode: 'OTA', targetUnit: 'OTA', cleanDescription: desc };
   }
 
-  // 2. Check Top Up Kas Kecil
-  if (upper.includes('TOP UP KK') || upper.includes('TOPUP KK') || upper.includes('KK UMUM')) {
-    return { glCode: 'U', targetUnit: 'U', cleanDescription: desc };
-  }
-
-  // 3. Debet (Pengeluaran Operasional / Biaya)
+  // 2. Debet (Pengeluaran Operasional / Biaya)
   if (mutasiType === 'DB') {
     if (upper.includes('PLN') || upper.includes('LISTRIK')) {
       return { glCode: '2003', cleanDescription: desc };
@@ -138,11 +146,10 @@ export function classifyTransaction(desc: string, mutasiType: 'CR' | 'DB', amoun
     if (upper.includes('MAINBOARD') || upper.includes('SOUND') || upper.includes('STAND') || upper.includes('MIC') || upper.includes('HARDWARE')) {
       return { glCode: '3002', cleanDescription: desc };
     }
-    // Default biaya operasional umum
     return { glCode: '6001', cleanDescription: desc };
   }
 
-  // 4. Kredit (Penerimaan / Pendapatan)
+  // 3. Kredit (Penerimaan / Pendapatan)
   if (mutasiType === 'CR') {
     if (upper.includes('BUNGA DEP') || upper.includes('BUNGA BANK') || upper.includes('BILYET') || upper.includes('JASA GIRO')) {
       return { glCode: '1007', cleanDescription: desc };
@@ -160,7 +167,6 @@ export function classifyTransaction(desc: string, mutasiType: 'CR' | 'DB', amoun
       return { glCode: '1001', cleanDescription: desc };
     }
 
-    // Checking regular recurring names for perpuluhan if not explicitly offering
     const knownTithesDonors = ['GINA JAYA', 'EVA YULIANA', 'SANNY THERESIA', 'VINETA CLAURINA', 'FANY LONTOH', 'LUTY', 'TITIH RIA', 'FITRI ELIZABETH', 'SANTI DEWY', 'ROSNAWI', 'RANDY ARIAWIRA', 'SILVIANY TANSIKA', 'MELIANA', 'LENASARI', 'HERVY', 'ANTIONY HANSEN', 'DJONI', 'BELBEN'];
     for (const donor of knownTithesDonors) {
       if (upper.includes(donor) && !upper.includes('PERSEMBAHAN')) {
@@ -168,7 +174,6 @@ export function classifyTransaction(desc: string, mutasiType: 'CR' | 'DB', amoun
       }
     }
 
-    // Default penerimaan ibadah / umum
     return { glCode: '1001', cleanDescription: desc };
   }
 
