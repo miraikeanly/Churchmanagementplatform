@@ -283,37 +283,33 @@ function LayananCard({ item, featured }: { item: LayananItem; featured?: boolean
 
   return (
     <>
-      <div className={`rounded-2xl border border-white/8 overflow-hidden flex flex-col ${featured ? 'sm:col-span-2' : ''}`}
-        style={{ background: 'rgba(255,255,255,0.025)' }}>
+      <div className={`group bg-white border border-slate-200/80 rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200 ${featured ? 'sm:col-span-2' : ''}`}>
 
-        {/* Accent top bar */}
-        <div className="h-[3px]" style={{ background: `linear-gradient(to right, ${item.accent}, ${item.accent}30)` }} />
+        {/* Slim top accent line */}
+        <div className="h-[2px]" style={{ background: item.accent }} />
 
         <div className="p-6 flex flex-col flex-1">
           {/* Icon + Name row */}
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-              style={{ background: `${item.accent}18` }}>
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-xl flex-shrink-0">
               {item.icon}
             </div>
-            <h3 className="text-white font-bold text-base">{item.name}</h3>
+            <h3 className="text-slate-900 font-bold text-base">{item.name}</h3>
           </div>
 
-          <p className="text-white/50 text-sm leading-relaxed mb-5">{item.description}</p>
+          <p className="text-slate-500 text-sm leading-relaxed mb-5">{item.description}</p>
 
           {/* Sub-items (Pernikahan) */}
           {item.children && (
             <div className={`grid gap-3 mb-5 ${featured ? 'sm:grid-cols-2' : ''}`}>
               {item.children.map(child => (
-                <div key={child.id} className="rounded-xl border border-white/6 p-4"
-                  style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <p className="text-white/80 text-sm font-semibold mb-1">{child.name}</p>
-                  <p className="text-white/38 text-xs leading-relaxed mb-3">{child.description}</p>
+                <div key={child.id} className="rounded-xl border border-slate-200/80 p-4 bg-slate-50">
+                  <p className="text-slate-900 text-sm font-semibold mb-1">{child.name}</p>
+                  <p className="text-slate-400 text-xs leading-relaxed mb-3">{child.description}</p>
                   {child.hasForm && child.formType && (
                     <button
                       onClick={() => setModalType({ type: child.formType!, title: child.name })}
-                      className="text-xs font-bold px-3.5 py-1.5 rounded-full transition-all"
-                      style={{ background: `${item.accent}18`, color: item.accent, border: `1px solid ${item.accent}35` }}
+                      className="text-xs font-bold px-3.5 py-1.5 rounded-full bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all"
                     >
                       Daftar →
                     </button>
@@ -327,18 +323,16 @@ function LayananCard({ item, featured }: { item: LayananItem; featured?: boolean
           <div className="flex-1" />
 
           {/* Action */}
-          <div className="mt-auto pt-3 border-t border-white/6 flex items-center justify-between">
+          <div className="mt-auto pt-3 border-t border-slate-200/80 flex items-center justify-between">
             {item.hasForm && item.formType ? (
               <button
                 onClick={() => setModalType({ type: item.formType!, title: item.name })}
-                className="text-sm font-bold px-5 py-2 rounded-full transition-all"
-                style={{ background: `${item.accent}18`, color: item.accent, border: `1px solid ${item.accent}35` }}
+                className="text-sm font-semibold px-5 py-2 rounded-full bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all"
               >
                 Daftar Sekarang
               </button>
             ) : !item.children ? (
-              <Link to="/lokasi" className="text-sm font-semibold flex items-center gap-1.5 transition-colors"
-                style={{ color: item.accent }}>
+              <Link to="/lokasi" className="inline-flex items-center gap-1.5 text-slate-900 font-semibold text-sm group-hover:gap-2.5 transition-all">
                 Hubungi Kami <ChevronRight size={13} />
               </Link>
             ) : null}
@@ -504,13 +498,11 @@ export default function ServicePage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: '#0a0f1e' }}>
+    <div className="min-h-screen bg-white">
       <PublicNavbar />
 
-      {/* Hero */}
-      <section className="pt-36 pb-14 relative overflow-hidden">
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 0%, #1e1b4b 0%, #0a0f1e 70%)' }} />
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+      {/* Hero — dark strip */}
+      <section className="bg-slate-950 pt-28 pb-14 relative overflow-hidden">
         <div className="max-w-5xl mx-auto px-6 text-center relative z-10">
           <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
             className="font-cursive text-3xl sm:text-4xl text-blue-400 font-normal mb-1 drop-shadow-sm px-2 inline-block"
@@ -518,107 +510,109 @@ export default function ServicePage() {
             Program Ibadah
           </motion.p>
           <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.06 }}
-            className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">Layanan &amp; Ibadah</motion.h1>
+            className="text-4xl md:text-5xl font-display font-bold text-white mb-4 tracking-tight">Layanan &amp; Ibadah</motion.h1>
           <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.12 }}
-            className="text-white/35 max-w-md mx-auto text-sm leading-relaxed">
+            className="text-slate-400 max-w-md mx-auto text-sm leading-relaxed">
             Temukan komunitas ibadah yang pas buat kamu dan keluarga.
           </motion.p>
         </div>
       </section>
 
-      {/* Sticky tabs */}
-      <div id="service-tabs" className="sticky top-16 z-40 border-b border-white/6" style={{ background: 'rgba(10,15,30,0.94)', backdropFilter: 'blur(16px)' }}>
-        <div className="max-w-5xl mx-auto px-6 flex overflow-x-auto">
-          {TABS.map(t => {
-            const Icon = t.icon;
-            const active = activeTab === t.id;
-            return (
-              <button key={t.id} onClick={() => handleTab(t.id)}
-                className={`relative flex-shrink-0 flex-1 min-w-[90px] py-3.5 text-center transition-colors duration-200 ${active ? 'text-white' : 'text-white/45 hover:text-white/70'}`}>
-                <div className="flex items-center justify-center gap-1.5 mb-0.5">
+      {/* Sticky pill tabs — white bg */}
+      <div id="service-tabs" className="sticky top-16 z-40 bg-white border-b border-slate-200/80 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-2.5 flex justify-center">
+          <div className="inline-flex bg-slate-100 rounded-full p-1 gap-1 overflow-x-auto max-w-full">
+            {TABS.map(t => {
+              const Icon = t.icon;
+              const active = activeTab === t.id;
+              return (
+                <button key={t.id} onClick={() => handleTab(t.id)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
+                    active
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}>
                   <Icon size={14} className={active ? t.color : 'opacity-60'} />
-                  <span className="text-sm font-bold">{t.label}</span>
-                </div>
-                <span className="block text-[10px] opacity-45 hidden sm:block">{t.sub}</span>
-                {active && (
-                  <motion.div layoutId="svc-tab" className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-blue-400" />
-                )}
-              </button>
-            );
-          })}
+                  <span>{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-5xl mx-auto px-6 py-12">
-        <AnimatePresence mode="wait">
+      {/* Content — dark sections for ministry panels (keep the aesthetic), light for layanan */}
+      <div className="bg-slate-950">
+        <div className="max-w-5xl mx-auto px-6 py-12">
+          <AnimatePresence mode="wait">
 
-          {activeTab === 'adult' && (
-            <motion.div key="adult" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-              className="flex flex-col md:flex-row gap-5 md:min-h-[520px]">
-              <div className="md:w-44 flex-shrink-0 md:border-r border-white/6 md:pr-3 md:space-y-0.5 md:pt-1 flex md:block gap-2 overflow-x-auto pb-2 md:pb-0 -mx-1 px-1 md:mx-0 md:px-0">
-                {ADULT.map(m => {
-                  const active = selected?.id === m.id;
-                  return (
-                    <button key={m.id} onClick={() => setSelected(m)}
-                      className={`flex-shrink-0 md:w-full whitespace-nowrap text-left px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2.5 ${active ? 'text-white bg-white/10' : 'text-white/45 bg-white/[0.03] md:bg-transparent hover:text-white/70 hover:bg-white/[0.05]'}`}>
-                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-200" style={{
-                        backgroundColor: active ? m.accent : 'transparent',
-                        boxShadow: active ? `0 0 5px ${m.accent}` : 'none',
-                      }} />
-                      {m.name}
-                    </button>
-                  );
-                })}
-              </div>
-              <AnimatePresence mode="wait">
-                {selected && <MinistryPanel key={selected.id} m={selected} />}
-              </AnimatePresence>
-            </motion.div>
-          )}
+            {activeTab === 'adult' && (
+              <motion.div key="adult" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+                className="flex flex-col md:flex-row gap-5 md:min-h-[520px]">
+                <div className="md:w-44 flex-shrink-0 md:border-r border-white/6 md:pr-3 md:space-y-0.5 md:pt-1 flex md:block gap-2 overflow-x-auto pb-2 md:pb-0 -mx-1 px-1 md:mx-0 md:px-0">
+                  {ADULT.map(m => {
+                    const active = selected?.id === m.id;
+                    return (
+                      <button key={m.id} onClick={() => setSelected(m)}
+                        className={`flex-shrink-0 md:w-full whitespace-nowrap text-left px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2.5 ${active ? 'text-white bg-white/10' : 'text-white/45 bg-white/[0.03] md:bg-transparent hover:text-white/70 hover:bg-white/[0.05]'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-200" style={{
+                          backgroundColor: active ? m.accent : 'transparent',
+                          boxShadow: active ? `0 0 5px ${m.accent}` : 'none',
+                        }} />
+                        {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <AnimatePresence mode="wait">
+                  {selected && <MinistryPanel key={selected.id} m={selected} />}
+                </AnimatePresence>
+              </motion.div>
+            )}
 
-          {activeTab === 'nxtgen' && (
-            <motion.div key="nxtgen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-6">
-              {NXT_GEN.map(m => <ParallaxCard key={m.id} m={m} />)}
-            </motion.div>
-          )}
+            {activeTab === 'nxtgen' && (
+              <motion.div key="nxtgen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-6">
+                {NXT_GEN.map(m => <ParallaxCard key={m.id} m={m} />)}
+              </motion.div>
+            )}
 
-          {activeTab === 'kids' && (
-            <motion.div key="kids" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-6">
-              {KIDS.map(m => <KidsCard key={m.id} m={m} />)}
-            </motion.div>
-          )}
+            {activeTab === 'kids' && (
+              <motion.div key="kids" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-6">
+                {KIDS.map(m => <KidsCard key={m.id} m={m} />)}
+              </motion.div>
+            )}
 
-          {activeTab === 'layanan' && (
-            <motion.div key="layanan" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <p className="text-white/25 text-xs font-bold uppercase tracking-widest mb-6">Sakramen &amp; Layanan Khusus</p>
-              {/* 3-column grid — Pernikahan spans 2 cols on sm+ */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {LAYANAN.map(item => (
-                  <LayananCard key={item.id} item={item} featured={item.id === 'pernikahan'} />
-                ))}
-              </div>
-              <div className="mt-8 rounded-2xl border border-white/8 bg-white/[0.02] p-6 text-center">
-                <p className="text-white/35 text-sm">Butuh bantuan atau informasi lebih lanjut?</p>
-                <Link to="/lokasi" className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-sm font-semibold mt-2 transition-colors">
-                  Hubungi kami langsung <ChevronRight size={13} />
-                </Link>
-              </div>
-            </motion.div>
-          )}
+            {activeTab === 'layanan' && (
+              <motion.div key="layanan" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                <p className="text-white/25 text-xs font-bold uppercase tracking-widest mb-6">Sakramen &amp; Layanan Khusus</p>
+                {/* 3-column grid — Pernikahan spans 2 cols on sm+ */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {LAYANAN.map(item => (
+                    <LayananCard key={item.id} item={item} featured={item.id === 'pernikahan'} />
+                  ))}
+                </div>
+                <div className="mt-8 rounded-2xl border border-slate-200/80 bg-white p-6 text-center">
+                  <p className="text-slate-500 text-sm">Butuh bantuan atau informasi lebih lanjut?</p>
+                  <Link to="/lokasi" className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-700 text-sm font-semibold mt-2 transition-colors">
+                    Hubungi kami langsung <ChevronRight size={13} />
+                  </Link>
+                </div>
+              </motion.div>
+            )}
 
-        </AnimatePresence>
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* CTA */}
-      <section className="border-t border-white/5 py-16">
+      <section className="bg-slate-950 border-t border-white/5 py-16">
         <div className="max-w-2xl mx-auto px-6 text-center">
           <p className="text-white/22 text-[10px] font-bold uppercase tracking-widest mb-3">Ada yang ingin ditanyakan?</p>
-          <h3 className="text-2xl font-bold text-white mb-3">Kami Siap Menyambut Kamu</h3>
-          <p className="text-white/30 text-sm mb-7 max-w-sm mx-auto leading-relaxed">
+          <h3 className="text-2xl font-display font-bold text-white mb-3">Kami Siap Menyambut Kamu</h3>
+          <p className="text-slate-400 text-sm mb-7 max-w-sm mx-auto leading-relaxed">
             Masih ada pertanyaan soal program ibadah kami? Datang langsung atau hubungi kami.
           </p>
-          <Link to="/lokasi" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-7 py-3.5 rounded-full transition-all shadow-lg shadow-blue-900/40">
+          <Link to="/lokasi" className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-semibold text-sm px-7 py-3.5 rounded-full active:scale-95 transition-all shadow-sm">
             Temukan Lokasi &amp; Kontak <ChevronRight size={14} />
           </Link>
         </div>

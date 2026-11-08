@@ -307,6 +307,39 @@ export default async function handler(req, res) {
       }
     }
 
+    // Buku Kas & GL Journal System (Multi-source: Kas Bank & Kas Kecil)
+    if (resource === 'finance' && a === 'journal') {
+      if (m === 'GET') {
+        const entries = (await byPrefix('cash_journal:')).filter((x) => x && x.id)
+          .sort((x, y) => (x.date || '').localeCompare(y.date || '') || (x.noRef || '').localeCompare(y.noRef || ''));
+        return sendJson(res, 200, { success: true, entries });
+      }
+      if (m === 'POST') {
+        // Bulk import or single entry
+        const { entries, entry } = body;
+        if (entries && Array.isArray(entries)) {
+          const saved = [];
+          for (const item of entries) {
+            const id = item.id || uid('cj');
+            const newEntry = { ...item, id, createdAt: item.createdAt || now(), createdBy: user.id };
+            await set(`cash_journal:${id}`, newEntry);
+            saved.push(newEntry);
+          }
+          return sendJson(res, 200, { success: true, count: saved.length, entries: saved });
+        } else if (entry) {
+          const id = entry.id || uid('cj');
+          const newEntry = { ...entry, id, createdAt: now(), createdBy: user.id };
+          await set(`cash_journal:${id}`, newEntry);
+          return sendJson(res, 200, { success: true, entry: newEntry });
+        }
+        return sendError(res, 400, 'Data jurnal tidak valid');
+      }
+      if (m === 'DELETE' && b) {
+        await del(`cash_journal:${b}`);
+        return sendJson(res, 200, { success: true });
+      }
+    }
+
     // Admin: Manage Giving Categories
     if (resource === 'giving' && a === 'categories') {
       if (m === 'POST' || m === 'PUT') {

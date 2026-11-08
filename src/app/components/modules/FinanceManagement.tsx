@@ -5,7 +5,10 @@ import { Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions } 
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Alert } from '@mui/material';
 import { Card, CardContent } from '../ui/card';
 import ModernDatePicker from '../common/ModernDatePicker';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Heart, Settings, Check, X, Trash2, Edit2, RefreshCw } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, Heart, Settings, Check, X, Trash2, Edit2, RefreshCw, Building2, Wallet, Layers } from 'lucide-react';
+import CashStatementImporter from './CashStatementImporter';
+import GeneralLedgerViewer from './GeneralLedgerViewer';
+import { CashJournalEntry } from '../../../lib/glDefinitions';
 
 const API_URL = `${apiBase()}/api/content`;
 
@@ -52,7 +55,11 @@ const DEFAULT_CATEGORIES: GivingCategory[] = [
 
 export default function FinanceManagement() {
   const { accessToken, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'transactions' | 'giving' | 'categories'>('transactions');
+  const [activeTab, setActiveTab] = useState<'bca_kas' | 'kas_kecil' | 'gl' | 'transactions' | 'giving' | 'categories'>('bca_kas');
+
+  // GL & Cash Journal State
+  const [journalEntries, setJournalEntries] = useState<CashJournalEntry[]>([]);
+  const [loadingJournal, setLoadingJournal] = useState(false);
 
   // Transactions State
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -86,7 +93,67 @@ export default function FinanceManagement() {
   useEffect(() => {
     loadTransactions();
     loadGivingData();
+    loadJournalEntries();
   }, []);
+
+  const loadJournalEntries = async () => {
+    try {
+      setLoadingJournal(true);
+      const res = await fetch(`${API_URL}/finance/journal`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.entries)) {
+        setJournalEntries(data.entries);
+      }
+    } catch (err: any) {
+      console.error('Load journal error:', err);
+    } finally {
+      setLoadingJournal(false);
+    }
+  };
+
+  const handleImportJournalEntries = async (newEntries: CashJournalEntry[]) => {
+    try {
+      const res = await fetch(`${API_URL}/finance/journal`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ entries: newEntries })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setJournalEntries(prev => [...prev, ...newEntries]);
+        setSuccessMsg(`Berhasil menginput ${newEntries.length} transaksi ke GL & Buku Kas!`);
+        setTimeout(() => setSuccessMsg(''), 4000);
+      }
+    } catch (err: any) {
+      console.error('Save journal entries error:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteJournalEntry = async (id: string) => {
+    if (!canEdit) return;
+    if (!confirm('Yakin ingin menghapus transaksi jurnal ini?')) return;
+    try {
+      const res = await fetch(`${API_URL}/finance/journal/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setJournalEntries(prev => prev.filter(e => e.id !== id));
+        setSuccessMsg('Transaksi berhasil dihapus');
+        setTimeout(() => setSuccessMsg(''), 3000);
+      }
+    } catch (err: any) {
+      console.error('Delete journal error:', err);
+      setError(err.message);
+    }
+  };
 
   const loadTransactions = async () => {
     try {
@@ -330,6 +397,7 @@ export default function FinanceManagement() {
             onClick={() => {
               loadTransactions();
               loadGivingData();
+              loadJournalEntries();
             }}
           >
             Refresh
@@ -338,29 +406,65 @@ export default function FinanceManagement() {
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('bca_kas')}
+          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+            activeTab === 'bca_kas'
+              ? 'border-blue-600 text-blue-600 font-bold'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Building2 size={16} />
+          Kas Bank BCA (Auto-RK)
+        </button>
+
+        <button
+          onClick={() => setActiveTab('kas_kecil')}
+          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+            activeTab === 'kas_kecil'
+              ? 'border-blue-600 text-blue-600 font-bold'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Wallet size={16} />
+          Kas Kecil (Tante Yanti)
+        </button>
+
+        <button
+          onClick={() => setActiveTab('gl')}
+          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+            activeTab === 'gl'
+              ? 'border-blue-600 text-blue-600 font-bold'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Layers size={16} />
+          General Ledger & Kas Komisi
+        </button>
+
         <button
           onClick={() => setActiveTab('transactions')}
-          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
             activeTab === 'transactions'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-blue-600 text-blue-600 font-bold'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
           <DollarSign size={16} />
-          Buku Kas Transaksi
+          Input Manual Umum
         </button>
 
         <button
           onClick={() => setActiveTab('giving')}
-          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 transition-all relative ${
+          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all relative ${
             activeTab === 'giving'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-blue-600 text-blue-600 font-bold'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
           <Heart size={16} />
-          Persembahan Masuk Online
+          Persembahan Online
           {pendingSubmissionsCount > 0 && (
             <span className="ml-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500 text-white animate-pulse">
               {pendingSubmissionsCount} baru
@@ -370,9 +474,9 @@ export default function FinanceManagement() {
 
         <button
           onClick={() => setActiveTab('categories')}
-          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3 px-5 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
             activeTab === 'categories'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-blue-600 text-blue-600 font-bold'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
@@ -388,6 +492,54 @@ export default function FinanceManagement() {
         <Alert severity="info">
           Anda hanya memiliki akses <strong>view-only</strong>. Hubungi Super Admin untuk mendapatkan akses edit.
         </Alert>
+      )}
+
+      {/* ── TAB: KAS BANK BCA (AUTO RK & IMPORT) ── */}
+      {activeTab === 'bca_kas' && (
+        <div className="space-y-6">
+          <CashStatementImporter
+            sourceType="bank"
+            existingEntries={journalEntries}
+            canEdit={canEdit}
+            onImportComplete={handleImportJournalEntries}
+          />
+          <GeneralLedgerViewer
+            entries={journalEntries}
+            sourceFilter="bank"
+            canEdit={canEdit}
+            onDeleteEntry={handleDeleteJournalEntry}
+          />
+        </div>
+      )}
+
+      {/* ── TAB: KAS KECIL (TANTE YANTI) ── */}
+      {activeTab === 'kas_kecil' && (
+        <div className="space-y-6">
+          <CashStatementImporter
+            sourceType="petty_cash"
+            existingEntries={journalEntries}
+            canEdit={canEdit}
+            onImportComplete={handleImportJournalEntries}
+          />
+          <GeneralLedgerViewer
+            entries={journalEntries}
+            sourceFilter="petty_cash"
+            canEdit={canEdit}
+            onDeleteEntry={handleDeleteJournalEntry}
+          />
+        </div>
+      )}
+
+      {/* ── TAB: GENERAL LEDGER & PECAHAN KOMISI LENGKAP ── */}
+      {activeTab === 'gl' && (
+        <div className="space-y-6">
+          <GeneralLedgerViewer
+            entries={journalEntries}
+            sourceFilter="all"
+            canEdit={canEdit}
+            onDeleteEntry={handleDeleteJournalEntry}
+          />
+        </div>
       )}
 
       {/* ── TAB 1: TRANSAKSI & BUKU KAS ── */}
