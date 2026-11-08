@@ -1,10 +1,16 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import * as pdfjsLib from 'pdfjs-dist';
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { UploadCloud, CheckCircle2, AlertCircle, Sparkles, Building2, Wallet, Plus, Trash2, Clipboard, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { GL_ACCOUNTS, BankStatementRow, CashJournalEntry, classifyTransaction } from '../../../lib/glDefinitions';
 import { parseBcaStatementText, parseBcaCsvRows } from '../../../lib/bcaParser';
 import { apiBase } from '../../../lib/api';
+
+// Set up worker for client-side PDF.js rendering
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 interface Props {
   sourceType: 'bank' | 'petty_cash';
@@ -76,40 +82,47 @@ export default function CashStatementImporter({ sourceType, existingEntries, can
         }
         setIsParsing(false);
       } else if (fileName.endsWith('.pdf')) {
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const dataUrl = reader.result as string;
-            const base64Data = dataUrl.split(',')[1];
+        // Direct Client-Side PDF Parsing using pdfjs-dist (100% immune to server node worker issues)
+        try {
+          const arrayBuffer = await uploadedFile.arrayBuffer();
+          const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+          const pdfDoc = await loadingTask.promise;
+          let fullText = '';
 
-            const res = await fetch(`${apiBase()}/api/content/finance/parse-pdf`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ base64Data, year: selectedYear })
-            });
-
-            const resJson = await res.json();
-            if (resJson.success && resJson.text) {
-              const parsed = parseBcaStatementText(resJson.text, selectedYear);
-              if (parsed.length > 0) {
-                setPreviewRows(parsed);
-                setStatusMsg({ type: 'success', text: `Berhasil mengekstrak ${parsed.length} transaksi dari PDF BCA!` });
+          for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+            const page = await pdfDoc.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            
+            // Reconstruct text line by line using y-coordinates
+            let lastY: number | null = null;
+            let pageText = '';
+            for (const item of textContent.items as any[]) {
+              if (lastY === null || Math.abs(item.transform[5] - lastY) > 5) {
+                pageText += '\n' + item.str;
+                lastY = item.transform[5];
               } else {
-                setStatusMsg({
-                  type: 'error',
-                  text: 'PDF terbaca tapi tidak ada mutasi yang cocok. Anda dapat mem-paste teksnya langsung lewat "Paste Teks Mutasi".'
-                });
+                pageText += ' ' + item.str;
               }
-            } else {
-              setStatusMsg({ type: 'error', text: resJson.error || 'Gagal membaca isi PDF.' });
             }
-          } catch (err: any) {
-            setStatusMsg({ type: 'error', text: 'Gagal memproses file PDF: ' + err.message });
-          } finally {
-            setIsParsing(false);
+            fullText += '\n' + pageText;
           }
-        };
-        reader.readAsDataURL(uploadedFile);
+
+          const parsed = parseBcaStatementText(fullText, selectedYear);
+          if (parsed.length > 0) {
+            setPreviewRows(parsed);
+            setStatusMsg({ type: 'success', text: `Berhasil mengekstrak ${parsed.length} transaksi dari PDF BCA (${pdfDoc.numPages} halaman)!` });
+          } else {
+            setStatusMsg({
+              type: 'error',
+              text: 'PDF terbaca tapi tidak ada mutasi yang cocok. Anda dapat mem-paste teksnya langsung lewat tombol "Paste Teks Mutasi".'
+            });
+          }
+        } catch (pdfClientErr: any) {
+          console.error('Client PDF parse error:', pdfClientErr);
+          setStatusMsg({ type: 'error', text: 'Gagal membaca PDF: ' + (pdfClientErr.message || String(pdfClientErr)) });
+        } finally {
+          setIsParsing(false);
+        }
       } else {
         setStatusMsg({ type: 'error', text: 'Format tidak didukung. Harap upload .xlsx, .xls, .csv, atau .pdf' });
         setIsParsing(false);
