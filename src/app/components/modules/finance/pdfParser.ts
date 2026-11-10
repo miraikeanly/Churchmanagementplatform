@@ -16,14 +16,34 @@ export function parseBcaPdfText(text: string, defaultYear: number = new Date().g
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Skip summary footer lines immediately
+    // Filter out page break headers, footers and notice boilerplate immediately
     if (
       line.startsWith('SALDO AWAL   :') ||
       line.startsWith('MUTASI CR   :') ||
       line.startsWith('MUTASI DB   :') ||
       line.startsWith('SALDO AKHIR   :') ||
       line.includes('Bersambung ke halaman') ||
-      line.includes('REKENING TAHAPAN')
+      line.includes('REKENING TAHAPAN') ||
+      line.includes('K C P D U T A') ||
+      line.includes('GEREJA BETHEL INDONESIA') ||
+      line.includes('PEJAGALAN') ||
+      line.includes('PENJARINGAN RT') ||
+      line.includes('JL I NO 35') ||
+      line.includes('JAKARTA 14450') ||
+      line.includes('INDONESIA') ||
+      line.includes('NO. REKENING') ||
+      line.includes('HALAMAN   :') ||
+      line.includes('PERIODE   :') ||
+      line.includes('MATA UANG') ||
+      line.includes('C A T A T A N') ||
+      line.includes('Apabila nasabah') ||
+      line.includes('Rekening ini sampai') ||
+      line.includes('telah menyetujui') ||
+      line.includes('Rekening ini.') ||
+      line.includes('BCA berhak setiap') ||
+      line.includes('Laporan Mutasi') ||
+      line.includes('TANGGAL   KETERANGAN') ||
+      /^\d+\s+\/\s+\d+$/.test(line)
     ) {
       continue;
     }
@@ -45,13 +65,7 @@ export function parseBcaPdfText(text: string, defaultYear: number = new Date().g
 
   for (const entry of entries) {
     const combinedDesc = entry.lines.join(' ');
-    if (
-      combinedDesc.includes('SALDO AWAL') ||
-      combinedDesc.includes('MUTASI CR') ||
-      combinedDesc.includes('MUTASI DB') ||
-      combinedDesc.includes('SALDO AKHIR') ||
-      combinedDesc.includes('KETERANGAN')
-    ) {
+    if (combinedDesc.includes('SALDO AWAL')) {
       continue;
     }
 
@@ -97,7 +111,7 @@ export function parseBcaPdfText(text: string, defaultYear: number = new Date().g
       const glCode = classifyTransaction(cleanDesc || combinedDesc, isDb ? 'DB' : 'CR');
       const isTopUp = cleanDesc.toUpperCase().includes('TOP UP');
 
-      // If Top Up, provide standard default breakdown sub-items
+      // Top Up default breakdown sub-items
       const breakdownItems = isTopUp ? [
         { id: `bk_${Date.now()}_1`, reff: 'U', keterangan: 'Top Up KK Umum', nominal: 0 },
         { id: `bk_${Date.now()}_2`, reff: 'ABI', keterangan: 'Top Up KK ABI', nominal: 0 },
