@@ -803,7 +803,7 @@ export default function SuperAdminDashboard() {
           {activeTab === 'komsel'           && <div className="overflow-y-auto"><div className="p-4 md:p-6"><KomselManagement /></div></div>}
           {(activeTab === 'keuangan' || activeTab === 'kasBank' || activeTab === 'generalLedger' || activeTab === 'pattyCash' || activeTab === 'kasKecil' || activeTab === 'laporanKeuangan') && (
             <div className="overflow-y-auto">
-              <div className="p-4 md:p-6">
+              <div className="p-2 sm:p-4 md:p-6">
                 <FinanceManagement subTab={activeTab === 'keuangan' ? 'kasBank' : activeTab} />
               </div>
             </div>

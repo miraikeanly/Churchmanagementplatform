@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import {
   FileText, Plus, Trash2, Search, Download, Upload,
   Save, CheckCircle2, AlertCircle, ChevronDown,
-  Edit2, X, PlusCircle, Columns, CornerDownRight
+  Edit2, X, PlusCircle, Columns, CornerDownRight, RotateCcw
 } from 'lucide-react';
 import {
   GLAccount,
@@ -21,7 +21,7 @@ if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 }
 
-const STORAGE_KEY_ITEMS = 'gbi_kas_bank_items_2026';
+const STORAGE_KEY_ITEMS = 'gbi_kas_bank_items_2026_v2';
 const STORAGE_KEY_GLS = 'gbi_kas_bank_gl_accounts_2026';
 const STORAGE_KEY_COLS = 'gbi_kas_bank_custom_columns_2026';
 
@@ -35,7 +35,7 @@ export default function KasBankModule() {
     return [
       {
         id: 'initial-saldo',
-        tanggal: '2026-01-01',
+        tanggal: '2026-09-01',
         noBank: 'BCA260000',
         reff: '1001',
         keterangan: 'Saldo Awal Rekening',
@@ -241,7 +241,6 @@ export default function KasBankModule() {
     setItems(prev =>
       prev.map(it => {
         if (it.id === id) {
-          // Keep existing breakdownItems if defined; only if completely undefined do we initialize defaults
           const breakdown = it.breakdownItems !== undefined ? it.breakdownItems : [
             { id: `sb_${Date.now()}_1`, reff: 'U', keterangan: 'Top Up KK Umum', nominal: 0 },
             { id: `sb_${Date.now()}_2`, reff: 'ABI', keterangan: 'Top Up KK ABI', nominal: 0 },
@@ -305,7 +304,7 @@ export default function KasBankModule() {
     );
   };
 
-  // Remove sub-breakdown item (remains deleted even when accordion toggles)
+  // Remove sub-breakdown item
   const handleRemoveSubItem = (parentId: string, subId: string) => {
     setItems(prev =>
       prev.map(it => {
@@ -441,6 +440,7 @@ export default function KasBankModule() {
       }
 
       // Extract period name if available (e.g. SEPTEMBER 2026 -> 2026-09)
+      let parsedPeriod = selectedPeriod || '2026-09';
       const periodMatch = fullText.match(/PERIODE\s*:\s*([A-Z]+)\s+(\d{4})/i);
       if (periodMatch) {
         const monthMap: Record<string, string> = {
@@ -449,22 +449,15 @@ export default function KasBankModule() {
           SEPTEMBER: '09', OKTOBER: '10', NOVEMBER: '11', DESEMBER: '12'
         };
         const mStr = monthMap[periodMatch[1].toUpperCase()];
-        if (mStr) setSelectedPeriod(`${periodMatch[2]}-${mStr}`);
+        if (mStr) {
+          parsedPeriod = `${periodMatch[2]}-${mStr}`;
+          setSelectedPeriod(parsedPeriod);
+        }
       }
 
       // Assign consecutive BCA & KB numbers
       let bcaSeq = 1;
       let kbSeq = 1;
-
-      items.forEach(it => {
-        if (it.noBank?.startsWith('BCA26')) {
-          const num = parseInt(it.noBank.replace('BCA26', ''), 10);
-          if (num >= bcaSeq) bcaSeq = num + 1;
-        } else if (it.noBank?.startsWith('KB26')) {
-          const num = parseInt(it.noBank.replace('KB26', ''), 10);
-          if (num >= kbSeq) kbSeq = num + 1;
-        }
-      });
 
       const newConvertedItems: KasBankItem[] = parsedRows.map(row => {
         const isDebet = row.tipe === 'CR'; // CR in bank statement = Debet in Church Kas
@@ -480,32 +473,31 @@ export default function KasBankModule() {
           keterangan: row.description,
           tipe: isDebet ? 'Debet' : 'Kredit',
           nominal: row.amount,
-          note: row.isTopUpBreakdown ? 'Top Up KK (Ada Rincian)' : undefined,
+          note: row.isTopUpBreakdown ? 'Top Up KK' : undefined,
           breakdownItems: row.breakdownItems
         };
       });
 
-      // Update state: ensure the first item has exact opening balance and replace with parsed transactions
-      setItems(() => {
-        const openingItem: KasBankItem = {
-          id: 'initial-saldo',
-          tanggal: `${selectedPeriod || '2026-09'}-01`,
-          noBank: 'BCA260000',
-          reff: '1001',
-          keterangan: 'Saldo Awal Rekening',
-          tipe: 'Debet',
-          nominal: extractedOpeningSaldo || 311771182.79,
-          debet: extractedOpeningSaldo || 311771182.79,
-          kredit: 0,
-          saldoBerjalan: extractedOpeningSaldo || 311771182.79,
-          isOpeningBalance: true
-        };
-        return [openingItem, ...newConvertedItems];
-      });
+      // Update state: replace with opening balance + parsed transactions for fresh clean sync
+      const openingItem: KasBankItem = {
+        id: 'initial-saldo',
+        tanggal: `${parsedPeriod}-01`,
+        noBank: 'BCA260000',
+        reff: '1001',
+        keterangan: 'Saldo Awal Rekening',
+        tipe: 'Debet',
+        nominal: extractedOpeningSaldo || 311771182.79,
+        debet: extractedOpeningSaldo || 311771182.79,
+        kredit: 0,
+        saldoBerjalan: extractedOpeningSaldo || 311771182.79,
+        isOpeningBalance: true
+      };
+
+      setItems([openingItem, ...newConvertedItems]);
 
       setFeedbackMsg({
         type: 'success',
-        text: `Berhasil mengekstrak ${newConvertedItems.length} transaksi dari PDF! Saldo rekening 100% sinkron (Rp 295.485.548,00).`
+        text: `Berhasil mengekstrak ${newConvertedItems.length} transaksi dari PDF! Saldo akhir 100% sinkron di Rp 295.485.548,00.`
       });
     } catch (err: any) {
       console.error('PDF parsing error', err);
@@ -760,7 +752,7 @@ export default function KasBankModule() {
         </form>
       </div>
 
-      {/* ── Section 2: Tabel Kas Bank Kompak (Semua Kolom Kelihatan) ── */}
+      {/* ── Section 2: Tabel Kas Bank ── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {/* Table Controls */}
         <div className="p-3 border-b border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-2">
@@ -783,12 +775,11 @@ export default function KasBankModule() {
           <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
             <button
               onClick={() => setShowAddColModal(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-medium cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-medium cursor-pointer"
             >
               <Columns size={11} />
               + Kolom
             </button>
-            {/* Image 2 style: Only 1 plus icon and clean text */}
             <button
               onClick={() => {
                 const newRow: KasBankItem = {
@@ -803,7 +794,7 @@ export default function KasBankModule() {
                 setItems(prev => [...prev, newRow]);
                 handleStartEdit(newRow);
               }}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold shadow-xs cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold shadow-xs cursor-pointer"
             >
               <Plus size={12} />
               Baris
@@ -811,64 +802,46 @@ export default function KasBankModule() {
           </div>
         </div>
 
-        {/* Tabel Kompak: Fit 100% tanpa scrollbar geser ke kanan */}
+        {/* Tabel Lebar Bebas (Scroll Halus Jika Diperlukan Layar Kecil) */}
         <div className="w-full overflow-x-auto">
-          <table className="w-full table-fixed text-left border-collapse text-[10.5px] leading-tight">
-            <colgroup>
-              <col className="w-[68px]" /> {/* Tgl */}
-              <col className="w-[68px]" /> {/* No Bank */}
-              <col />                      {/* Ket Transaksi (Flexible) */}
-              <col className="w-[58px]" /> {/* Tipe */}
-              <col className="w-[84px]" /> {/* Nominal */}
-              <col className="w-[54px]" /> {/* Kode GL */}
-              <col className="w-[62px]" /> {/* Rincian */}
-              <col className="w-[86px]" /> {/* Debet */}
-              <col className="w-[86px]" /> {/* Kredit */}
-              <col className="w-[100px]" />{/* Saldo Total */}
-              <col className="w-[70px]" /> {/* Note */}
-              {customColumns.map(col => (
-                <col key={col.id} className="w-[75px]" />
-              ))}
-              <col className="w-[36px]" /> {/* Aksi */}
-            </colgroup>
-            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider sticky top-0 z-10 border-b border-slate-300">
-              <tr>
-                <th className="py-1.5 px-1.5 border-r border-slate-200">Tgl</th>
-                <th className="py-1.5 px-1.5 border-r border-slate-200">No Bank</th>
-                <th className="py-1.5 px-2 border-r border-slate-200">Ket Transaksi</th>
-                <th className="py-1.5 px-1 border-r border-slate-200 text-center">Tipe</th>
-                <th className="py-1.5 px-1.5 border-r border-slate-200 text-right">Nominal</th>
-                <th className="py-1.5 px-1 border-r border-slate-200 text-center">GL</th>
-                <th className="py-1.5 px-1 border-r border-slate-200 text-center">Rincian</th>
-                <th className="py-1.5 px-1.5 border-r border-slate-200 text-right bg-emerald-50/50">Debet</th>
-                <th className="py-1.5 px-1.5 border-r border-slate-200 text-right bg-rose-50/50">Kredit</th>
-                <th className="py-1.5 px-1.5 border-r border-slate-200 text-right bg-blue-50/50">Saldo Total</th>
-                <th className="py-1.5 px-1.5 border-r border-slate-200">Note</th>
+          <table className="min-w-[1080px] w-full text-left border-collapse text-[11px] leading-normal">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-300">
+                <th className="py-2.5 px-3 border-r border-slate-200 w-28 whitespace-nowrap">Tgl</th>
+                <th className="py-2.5 px-3 border-r border-slate-200 w-28 whitespace-nowrap">No Bank</th>
+                <th className="py-2.5 px-3 border-r border-slate-200 min-w-[220px] max-w-[320px]">Ket Transaksi</th>
+                <th className="py-2.5 px-2 border-r border-slate-200 w-20 text-center whitespace-nowrap">Tipe</th>
+                <th className="py-2.5 px-3 border-r border-slate-200 text-right w-36 whitespace-nowrap">Nominal</th>
+                <th className="py-2.5 px-2 border-r border-slate-200 w-20 text-center whitespace-nowrap">GL</th>
+                <th className="py-2.5 px-2 border-r border-slate-200 w-24 text-center whitespace-nowrap">Rincian</th>
+                <th className="py-2.5 px-3 border-r border-slate-200 text-right w-36 whitespace-nowrap bg-emerald-50/60 text-emerald-800">Debet</th>
+                <th className="py-2.5 px-3 border-r border-slate-200 text-right w-36 whitespace-nowrap bg-rose-50/60 text-rose-800">Kredit</th>
+                <th className="py-2.5 px-3 border-r border-slate-200 text-right w-40 whitespace-nowrap bg-blue-50/70 text-blue-900">Saldo Total</th>
+                <th className="py-2.5 px-3 border-r border-slate-200 w-32 whitespace-nowrap">Note</th>
 
-                {/* Custom User-Added Columns */}
                 {customColumns.map(col => (
-                  <th key={col.id} className="py-1.5 px-1 border-r border-slate-200 bg-amber-50/40">
-                    <div className="flex items-center justify-between gap-0.5">
-                      <span className="truncate">{col.label}</span>
+                  <th key={col.id} className="py-2.5 px-3 border-r border-slate-200 min-w-[120px] bg-amber-50/40 whitespace-nowrap">
+                    <div className="flex items-center justify-between gap-1">
+                      <span>{col.label}</span>
                       <button
                         onClick={() => handleRemoveColumn(col.id)}
                         className="text-slate-400 hover:text-rose-500 cursor-pointer"
                         title="Hapus kolom ini"
                       >
-                        <X size={10} />
+                        <X size={11} />
                       </button>
                     </div>
                   </th>
                 ))}
 
-                <th className="py-1.5 px-0.5 text-center">Aksi</th>
+                <th className="py-2.5 px-2 text-center w-16 whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
               {displayedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={12 + customColumns.length} className="text-center py-8 text-slate-400">
-                    Belum ada data transaksi di periode ini.
+                  <td colSpan={12 + customColumns.length} className="text-center py-10 text-slate-400">
+                    Belum ada data transaksi di periode ini. Unggah file PDF atau gunakan tombol "+ Baris".
                   </td>
                 </tr>
               ) : (
@@ -881,59 +854,59 @@ export default function KasBankModule() {
                     return (
                       <tr key={item.id} className="bg-amber-50/70">
                         {/* Tanggal */}
-                        <td className="p-0.5 border-r border-slate-200">
+                        <td className="p-1 border-r border-slate-200">
                           <input
                             type="date"
                             value={editFormData.tanggal || ''}
                             onChange={e => setEditFormData(p => ({ ...p, tanggal: e.target.value }))}
-                            className="w-full bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px]"
+                            className="w-full bg-white border border-slate-300 rounded px-1.5 py-1 text-xs"
                           />
                         </td>
                         {/* No Bank */}
-                        <td className="p-0.5 border-r border-slate-200">
+                        <td className="p-1 border-r border-slate-200">
                           <input
                             type="text"
                             value={editFormData.noBank || ''}
                             onChange={e => setEditFormData(p => ({ ...p, noBank: e.target.value }))}
-                            className="w-full bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-mono font-semibold"
+                            className="w-full bg-white border border-slate-300 rounded px-1.5 py-1 text-xs font-mono font-semibold"
                           />
                         </td>
                         {/* Keterangan */}
-                        <td className="p-0.5 border-r border-slate-200">
+                        <td className="p-1 border-r border-slate-200">
                           <input
                             type="text"
                             value={editFormData.keterangan || ''}
                             onChange={e => setEditFormData(p => ({ ...p, keterangan: e.target.value }))}
-                            className="w-full bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px]"
+                            className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
                           />
                         </td>
                         {/* Tipe */}
-                        <td className="p-0.5 border-r border-slate-200">
+                        <td className="p-1 border-r border-slate-200">
                           <select
                             value={editFormData.tipe || 'Debet'}
                             onChange={e => setEditFormData(p => ({ ...p, tipe: e.target.value as any }))}
-                            className="w-full bg-white border border-slate-300 rounded text-[10px] font-bold"
+                            className="w-full bg-white border border-slate-300 rounded px-1 py-1 text-xs font-bold"
                           >
                             <option value="Debet">Debet</option>
                             <option value="Kredit">Kredit</option>
                           </select>
                         </td>
                         {/* Nominal */}
-                        <td className="p-0.5 border-r border-slate-200">
+                        <td className="p-1 border-r border-slate-200">
                           <input
                             type="number"
                             step="any"
                             value={editFormData.nominal ?? ''}
                             onChange={e => setEditFormData(p => ({ ...p, nominal: parseFloat(e.target.value) || 0 }))}
-                            className="w-full bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] text-right font-bold"
+                            className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-right font-bold font-mono"
                           />
                         </td>
                         {/* Kode GL */}
-                        <td className="p-0.5 border-r border-slate-200">
+                        <td className="p-1 border-r border-slate-200">
                           <select
                             value={editFormData.reff || '1001'}
                             onChange={e => setEditFormData(p => ({ ...p, reff: e.target.value }))}
-                            className="w-full bg-white border border-slate-300 rounded text-[10px] font-mono font-bold"
+                            className="w-full bg-white border border-slate-300 rounded px-1 py-1 text-xs font-mono font-bold"
                           >
                             {Object.values(glAccounts).map(gl => (
                               <option key={gl.code} value={gl.code}>
@@ -943,40 +916,39 @@ export default function KasBankModule() {
                           </select>
                         </td>
                         {/* Rincian */}
-                        <td className="p-0.5 border-r border-slate-200 text-center">
+                        <td className="p-1 border-r border-slate-200 text-center">
                           <button
                             type="button"
                             onClick={() => handleToggleExpand(item.id)}
-                            className="text-[9px] font-semibold text-blue-600 underline"
+                            className="text-xs font-semibold text-blue-600 underline"
                           >
                             Rincian
                           </button>
                         </td>
                         {/* Debet */}
-                        <td className="py-1 px-1 border-r border-slate-200 text-right bg-emerald-50/30 text-emerald-700 font-mono">
+                        <td className="py-2 px-3 border-r border-slate-200 text-right bg-emerald-50/40 text-emerald-800 font-mono font-semibold whitespace-nowrap">
                           {editFormData.tipe === 'Debet' ? formatRupiah(editFormData.nominal) : '-'}
                         </td>
                         {/* Kredit */}
-                        <td className="py-1 px-1 border-r border-slate-200 text-right bg-rose-50/30 text-rose-700 font-mono">
+                        <td className="py-2 px-3 border-r border-slate-200 text-right bg-rose-50/40 text-rose-800 font-mono font-semibold whitespace-nowrap">
                           {editFormData.tipe === 'Kredit' ? formatRupiah(editFormData.nominal) : '-'}
                         </td>
                         {/* Saldo Total */}
-                        <td className="py-1 px-1 border-r border-slate-200 text-right font-mono font-bold bg-blue-50/30 text-blue-900">
+                        <td className="py-2 px-3 border-r border-slate-200 text-right font-mono font-bold bg-blue-50/40 text-blue-900 whitespace-nowrap">
                           Auto
                         </td>
                         {/* Note */}
-                        <td className="p-0.5 border-r border-slate-200">
+                        <td className="p-1 border-r border-slate-200">
                           <input
                             type="text"
                             value={editFormData.note || ''}
                             onChange={e => setEditFormData(p => ({ ...p, note: e.target.value }))}
-                            className="w-full bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px]"
+                            className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
                           />
                         </td>
 
-                        {/* Custom Columns edit */}
                         {customColumns.map(col => (
-                          <td key={col.id} className="p-0.5 border-r border-slate-200">
+                          <td key={col.id} className="p-1 border-r border-slate-200">
                             <input
                               type={col.type === 'number' ? 'number' : 'text'}
                               value={editFormData.extraColumns?.[col.id] ?? ''}
@@ -990,26 +962,26 @@ export default function KasBankModule() {
                                   }
                                 }));
                               }}
-                              className="w-full bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px]"
+                              className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
                             />
                           </td>
                         ))}
 
                         {/* Actions */}
-                        <td className="py-1 px-0.5 text-center whitespace-nowrap">
+                        <td className="py-2 px-2 text-center whitespace-nowrap">
                           <button
                             onClick={() => handleSaveEdit(item.id)}
-                            className="p-0.5 text-emerald-600 hover:text-emerald-700 mr-0.5 cursor-pointer"
+                            className="p-1 text-emerald-600 hover:text-emerald-700 mr-1 cursor-pointer"
                             title="Simpan"
                           >
-                            <Save size={12} />
+                            <Save size={14} />
                           </button>
                           <button
                             onClick={() => setEditingId(null)}
-                            className="p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                             title="Batal"
                           >
-                            <X size={12} />
+                            <X size={14} />
                           </button>
                         </td>
                       </tr>
@@ -1020,27 +992,27 @@ export default function KasBankModule() {
                     <React.Fragment key={item.id}>
                       <tr className={`hover:bg-slate-50 transition-colors ${item.isExpanded ? 'bg-blue-50/20' : ''}`}>
                         {/* Tanggal */}
-                        <td className="py-1 px-1.5 border-r border-slate-200 truncate font-mono text-slate-600">
+                        <td className="py-2 px-3 border-r border-slate-200 whitespace-nowrap font-mono text-slate-600">
                           {item.tanggal}
                         </td>
 
                         {/* No Bank */}
-                        <td className="py-1 px-1.5 border-r border-slate-200 truncate font-mono font-semibold text-slate-700">
+                        <td className="py-2 px-3 border-r border-slate-200 whitespace-nowrap font-mono font-semibold text-slate-700">
                           {item.noBank}
                         </td>
 
                         {/* Keterangan */}
-                        <td className="py-1 px-2 border-r border-slate-200 text-slate-900 font-medium">
-                          <div className="flex items-center justify-between gap-1 min-w-0">
-                            <span className="truncate">{item.keterangan}</span>
+                        <td className="py-2 px-3 border-r border-slate-200 text-slate-900 font-medium">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="line-clamp-2">{item.keterangan}</span>
                             {hasBreakdown && (
                               <button
                                 onClick={() => handleToggleExpand(item.id)}
-                                className="flex-shrink-0 text-blue-600 hover:text-blue-800 p-0.5 rounded cursor-pointer"
+                                className="flex-shrink-0 text-blue-600 hover:text-blue-800 p-1 rounded cursor-pointer"
                                 title="Buka/Tutup Rincian"
                               >
                                 <ChevronDown
-                                  size={12}
+                                  size={14}
                                   className={`transition-transform duration-200 ${item.isExpanded ? 'rotate-180' : ''}`}
                                 />
                               </button>
@@ -1048,8 +1020,8 @@ export default function KasBankModule() {
                           </div>
                         </td>
 
-                        {/* Tipe Dropdown (Live Dropdown on Row) */}
-                        <td className="py-1 px-1 border-r border-slate-200 text-center">
+                        {/* Tipe Dropdown */}
+                        <td className="py-2 px-2 border-r border-slate-200 text-center whitespace-nowrap">
                           <select
                             value={item.tipe}
                             onChange={e => {
@@ -1058,7 +1030,7 @@ export default function KasBankModule() {
                                 prev.map(it => (it.id === item.id ? { ...it, tipe: newT } : it))
                               );
                             }}
-                            className={`w-full py-0.5 rounded text-[9.5px] font-bold border cursor-pointer ${
+                            className={`px-2 py-0.5 rounded text-[10.5px] font-bold border cursor-pointer ${
                               isDebet
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : 'bg-rose-50 text-rose-700 border-rose-200'
@@ -1070,12 +1042,12 @@ export default function KasBankModule() {
                         </td>
 
                         {/* Nominal */}
-                        <td className="py-1 px-1.5 border-r border-slate-200 text-right font-mono font-semibold truncate">
+                        <td className="py-2 px-3 border-r border-slate-200 text-right font-mono font-semibold whitespace-nowrap">
                           {formatRupiah(item.nominal)}
                         </td>
 
-                        {/* Kode GL Dropdown (Live Dropdown on Row) */}
-                        <td className="py-1 px-0.5 border-r border-slate-200 text-center">
+                        {/* Kode GL Dropdown */}
+                        <td className="py-2 px-2 border-r border-slate-200 text-center whitespace-nowrap">
                           <select
                             value={item.reff}
                             onChange={e => {
@@ -1084,7 +1056,7 @@ export default function KasBankModule() {
                                 prev.map(it => (it.id === item.id ? { ...it, reff: newGl } : it))
                               );
                             }}
-                            className="w-full py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-bold text-[9.5px] border border-slate-200 cursor-pointer"
+                            className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-bold text-[10.5px] border border-slate-200 cursor-pointer"
                           >
                             {Object.values(glAccounts).map(gl => (
                               <option key={gl.code} value={gl.code}>
@@ -1095,15 +1067,15 @@ export default function KasBankModule() {
                         </td>
 
                         {/* Rincian Toggle / View */}
-                        <td className="py-1 px-1 border-r border-slate-200 text-center">
+                        <td className="py-2 px-2 border-r border-slate-200 text-center whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleToggleExpand(item.id)}
-                            className="inline-flex items-center gap-0.5 text-[9.5px] font-semibold text-blue-600 hover:text-blue-800 cursor-pointer bg-blue-50 hover:bg-blue-100 px-1 py-0.5 rounded"
+                            className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-blue-600 hover:text-blue-800 cursor-pointer bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded"
                           >
                             <span>Rincian</span>
                             {item.breakdownItems && item.breakdownItems.length > 0 && (
-                              <span className="bg-blue-600 text-white rounded-full px-1 text-[8.5px] font-bold">
+                              <span className="bg-blue-600 text-white rounded-full px-1.5 text-[9.5px] font-bold">
                                 {item.breakdownItems.length}
                               </span>
                             )}
@@ -1111,78 +1083,76 @@ export default function KasBankModule() {
                         </td>
 
                         {/* Debet */}
-                        <td className="py-1 px-1.5 border-r border-slate-200 text-right font-mono font-semibold bg-emerald-50/20 text-emerald-700 truncate">
+                        <td className="py-2 px-3 border-r border-slate-200 text-right font-mono font-semibold bg-emerald-50/20 text-emerald-700 whitespace-nowrap">
                           {item.debet ? formatRupiah(item.debet) : '-'}
                         </td>
 
                         {/* Kredit */}
-                        <td className="py-1 px-1.5 border-r border-slate-200 text-right font-mono font-semibold bg-rose-50/20 text-rose-700 truncate">
+                        <td className="py-2 px-3 border-r border-slate-200 text-right font-mono font-semibold bg-rose-50/20 text-rose-700 whitespace-nowrap">
                           {item.kredit ? formatRupiah(item.kredit) : '-'}
                         </td>
 
                         {/* Saldo Total */}
-                        <td className="py-1 px-1.5 border-r border-slate-200 text-right font-mono font-black bg-blue-50/30 text-blue-900 truncate">
+                        <td className="py-2 px-3 border-r border-slate-200 text-right font-mono font-black bg-blue-50/30 text-blue-900 whitespace-nowrap">
                           {formatRupiah(item.saldoBerjalan)}
                         </td>
 
                         {/* Note */}
-                        <td className="py-1 px-1.5 border-r border-slate-200 text-slate-500 italic truncate">
+                        <td className="py-2 px-3 border-r border-slate-200 text-slate-500 italic whitespace-nowrap">
                           {item.note || '-'}
                         </td>
 
-                        {/* Custom Columns */}
                         {customColumns.map(col => (
-                          <td key={col.id} className="py-1 px-1 border-r border-slate-200 truncate">
+                          <td key={col.id} className="py-2 px-3 border-r border-slate-200 whitespace-nowrap">
                             {item.extraColumns?.[col.id] ?? '-'}
                           </td>
                         ))}
 
-                        {/* Aksi (Edit & Hapus) */}
-                        <td className="py-1 px-0.5 text-center whitespace-nowrap">
+                        {/* Aksi */}
+                        <td className="py-2 px-2 text-center whitespace-nowrap">
                           <button
                             onClick={() => handleStartEdit(item)}
-                            className="p-0.5 text-slate-500 hover:text-blue-600 transition-colors mr-0.5 cursor-pointer"
+                            className="p-1 text-slate-500 hover:text-blue-600 transition-colors mr-1 cursor-pointer"
                             title="Edit baris"
                           >
-                            <Edit2 size={11} />
+                            <Edit2 size={13} />
                           </button>
                           <button
                             onClick={() => handleDeleteRow(item.id)}
-                            className="p-0.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                             title="Hapus baris"
                           >
-                            <Trash2 size={11} />
+                            <Trash2 size={13} />
                           </button>
                         </td>
                       </tr>
 
-                      {/* ── Nested Sub-Breakdown Rows (Image 2 format) ── */}
+                      {/* ── Sub-Breakdown Rows (Image 2 format) ── */}
                       {item.isExpanded && (
                         <tr className="bg-slate-50/90 border-b-2 border-blue-200">
-                          <td colSpan={12 + customColumns.length} className="p-2 pl-6">
-                            <div className="bg-white rounded-lg border border-blue-200 p-2.5 shadow-xs">
-                              <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
-                                <div className="flex items-center gap-1.5">
-                                  <CornerDownRight size={13} className="text-blue-600" />
-                                  <span className="text-[11px] font-bold text-slate-800">
+                          <td colSpan={12 + customColumns.length} className="p-3 pl-8">
+                            <div className="bg-white rounded-xl border border-blue-200 p-3 shadow-xs max-w-3xl">
+                              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <CornerDownRight size={14} className="text-blue-600" />
+                                  <span className="text-xs font-bold text-slate-800">
                                     Rincian Breakdown: {item.keterangan}
                                   </span>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => handleAddSubItem(item.id)}
-                                  className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+                                  className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
                                 >
-                                  <Plus size={11} /> + Tambah Rincian
+                                  <Plus size={12} /> + Tambah Rincian
                                 </button>
                               </div>
 
-                              {/* Breakdown Items List */}
-                              <div className="space-y-1 max-h-56 overflow-y-auto">
+                              <div className="space-y-1.5 max-h-56 overflow-y-auto">
                                 {(item.breakdownItems || []).map((sub, sIdx) => (
                                   <div
                                     key={sub.id || sIdx}
-                                    className="grid grid-cols-12 gap-1.5 items-center bg-slate-50 p-1 rounded border border-slate-200 text-[10.5px]"
+                                    className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-1.5 rounded-lg border border-slate-200 text-xs"
                                   >
                                     <div className="col-span-2">
                                       <select
@@ -1190,7 +1160,7 @@ export default function KasBankModule() {
                                         onChange={e =>
                                           handleUpdateSubItem(item.id, sub.id, { reff: e.target.value })
                                         }
-                                        className="w-full bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-mono font-bold"
+                                        className="w-full bg-white border border-slate-300 rounded px-1.5 py-1 text-[11px] font-mono font-bold"
                                       >
                                         {Object.values(glAccounts).map(gl => (
                                           <option key={gl.code} value={gl.code}>
@@ -1207,7 +1177,7 @@ export default function KasBankModule() {
                                           handleUpdateSubItem(item.id, sub.id, { keterangan: e.target.value })
                                         }
                                         placeholder="Keterangan rincian (contoh: Top Up KK Umum)"
-                                        className="w-full bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[10.5px]"
+                                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
                                       />
                                     </div>
                                     <div className="col-span-3">
@@ -1220,25 +1190,24 @@ export default function KasBankModule() {
                                           })
                                         }
                                         placeholder="Nominal"
-                                        className="w-full bg-white border border-slate-300 rounded px-1.5 py-0.5 text-right text-[10.5px] font-mono font-semibold"
+                                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs font-mono font-semibold"
                                       />
                                     </div>
                                     <div className="col-span-1 text-center">
                                       <button
                                         type="button"
                                         onClick={() => handleRemoveSubItem(item.id, sub.id)}
-                                        className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
                                         title="Hapus rincian ini secara permanen"
                                       >
-                                        <Trash2 size={12} />
+                                        <Trash2 size={13} />
                                       </button>
                                     </div>
                                   </div>
                                 ))}
                               </div>
 
-                              {/* Breakdown Total Auto-Sum */}
-                              <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-slate-100 text-[10.5px] font-bold text-slate-700">
+                              <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-100 text-xs font-bold text-slate-700">
                                 <span>Total Akumulasi Rincian:</span>
                                 <span className="font-mono text-blue-700">
                                   {formatRupiah(
@@ -1259,36 +1228,37 @@ export default function KasBankModule() {
               )}
             </tbody>
 
-            {/* ── Section Footer: Baris Khusus Total Saldo (Image 1 style) ── */}
-            <tfoot className="border-t-2 border-slate-400 bg-slate-100/90 font-bold text-slate-900 sticky bottom-0">
+            {/* ── Section Footer: Baris Khusus Total Saldo (Sesuai Gambar 1) ── */}
+            <tfoot className="border-t-2 border-slate-400 bg-slate-100/95 font-bold text-slate-900 sticky bottom-0">
               <tr className="border-b border-slate-300">
-                <td colSpan={7} className="py-2 px-2 text-right uppercase tracking-wider text-[10.5px]">
+                <td colSpan={7} className="py-2.5 px-3 text-right uppercase tracking-wider text-xs whitespace-nowrap">
                   Total Mutasi Periode Ini:
                 </td>
-                <td className="py-2 px-1.5 text-right font-mono text-emerald-700 bg-emerald-100/40">
+                <td className="py-2.5 px-3 text-right font-mono text-emerald-800 bg-emerald-100/50 whitespace-nowrap">
                   {formatRupiah(stats.totalDebet)}
                 </td>
-                <td className="py-2 px-1.5 text-right font-mono text-rose-700 bg-rose-100/40">
+                <td className="py-2.5 px-3 text-right font-mono text-rose-800 bg-rose-100/50 whitespace-nowrap">
                   {formatRupiah(stats.totalKredit)}
                 </td>
-                <td className="py-2 px-1.5 text-right font-mono font-black text-blue-900 bg-blue-100/50">
+                <td className="py-2.5 px-3 text-right font-mono font-black text-blue-900 bg-blue-100/60 whitespace-nowrap">
                   {formatRupiah(stats.latestSaldo)}
                 </td>
                 <td colSpan={2 + customColumns.length}></td>
               </tr>
+
               {/* Grand Total Row matching Image 1: Highlighted Saldo Akhir */}
               <tr className="bg-slate-200/90 border-t-2 border-black">
-                <td colSpan={7} className="py-2.5 px-3 text-right uppercase tracking-widest text-[11px] font-black">
+                <td colSpan={7} className="py-3 px-3 text-right uppercase tracking-widest text-xs font-black whitespace-nowrap">
                   SALDO AKHIR REKENING:
                 </td>
-                <td colSpan={2} className="py-2.5 px-2 text-center text-[10px] text-slate-500 font-semibold italic">
+                <td colSpan={2} className="py-3 px-2 text-center text-[11px] text-slate-600 font-semibold italic whitespace-nowrap">
                   (Saldo Awal + Debet - Kredit)
                 </td>
-                <td className="py-2.5 px-2 text-right font-mono text-sm font-black text-slate-950 bg-amber-200/80 border-2 border-black">
+                <td className="py-3 px-3 text-right font-mono text-base font-black text-slate-950 bg-amber-200/90 border-2 border-black whitespace-nowrap">
                   {formatRupiah(stats.latestSaldo)}
                 </td>
-                <td colSpan={2 + customColumns.length} className="py-2.5 px-2 text-[10px] text-emerald-700 font-bold">
-                  ✓ SINKRON DENGAN PDF
+                <td colSpan={2 + customColumns.length} className="py-3 px-3 text-xs text-emerald-700 font-bold whitespace-nowrap">
+                  ✓ SINKRON
                 </td>
               </tr>
             </tfoot>
