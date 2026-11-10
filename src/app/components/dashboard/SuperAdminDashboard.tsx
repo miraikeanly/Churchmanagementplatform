@@ -29,8 +29,8 @@ import gbiLogo from '../../../imports/pngegg__1_-1.png';
 import {
   LayoutDashboard, Users, ClipboardCheck, CalendarCheck, Group,
   Wallet, Package, HandHelping, Megaphone, ShieldCheck, Menu, X,
-  LogOut, ChevronRight, Cake, Gift, Images, UserRound, Activity,
-  HeartHandshake, Heart, Phone, MessageSquare
+  LogOut, ChevronRight, ChevronDown, Cake, Gift, Images, UserRound, Activity,
+  HeartHandshake, Heart, Phone, MessageSquare, Building2, BookOpen, Layers, Coins, FileText
 } from 'lucide-react';
 
 
@@ -172,6 +172,24 @@ export default function SuperAdminDashboard() {
   const isSuperAdmin = user?.role === 'super_admin';
   const permissions = user?.permissions || {};
 
+  const isKeuanganActive = ['keuangan', 'kasBank', 'generalLedger', 'pattyCash', 'kasKecil', 'laporanKeuangan'].includes(activeTab);
+  const [keuanganMenuOpen, setKeuanganMenuOpen] = useState(true);
+
+  // Auto-expand keuangan sub-items if active tab is in keuangan family
+  useEffect(() => {
+    if (isKeuanganActive) {
+      setKeuanganMenuOpen(true);
+    }
+  }, [isKeuanganActive]);
+
+  const subKeuanganItems = [
+    { label: 'Kas Bank',          key: 'kasBank',          icon: Building2 },
+    { label: 'General Ledger',    key: 'generalLedger',    icon: BookOpen },
+    { label: 'Patty Cash',        key: 'pattyCash',        icon: Coins },
+    { label: 'Kas Kecil',         key: 'kasKecil',         icon: Layers },
+    { label: 'Laporan Keuangan',  key: 'laporanKeuangan',  icon: FileText },
+  ];
+
   const navItems = [
     { label: 'Dashboard',         key: 'dashboard',        visible: true },
     { label: 'User Management',   key: 'userManagement',   visible: isSuperAdmin },
@@ -180,7 +198,7 @@ export default function SuperAdminDashboard() {
     { label: 'Data Jemaat',       key: 'jemaat',           visible: isSuperAdmin || Boolean(permissions.viewJemaat || permissions.editJemaat) },
     { label: 'Absensi',           key: 'absensi',          visible: isSuperAdmin || Boolean(permissions.viewAbsensi || permissions.viewAbsen || permissions.editAbsensi || permissions.editAbsen || permissions.manageAbsensi) },
     { label: 'Komsel',            key: 'komsel',           visible: isSuperAdmin || Boolean(permissions.viewKomsel || permissions.editKomsel) },
-    { label: 'Keuangan',          key: 'keuangan',         visible: isSuperAdmin || Boolean(permissions.viewKeuangan || permissions.editKeuangan) },
+    { label: 'Keuangan',          key: 'keuangan',         visible: isSuperAdmin || Boolean(permissions.viewKeuangan || permissions.editKeuangan), isDropdown: true },
     { label: 'Inventaris',        key: 'inventaris',       visible: isSuperAdmin || Boolean(permissions.viewInventaris || permissions.editInventaris) },
     { label: 'Pelayan',           key: 'pelayan',          visible: isSuperAdmin || Boolean(permissions.viewPelayan || permissions.editPelayan) },
     { label: 'Pengumuman',        key: 'pengumuman',       visible: isSuperAdmin || Boolean(permissions.viewPengumuman || permissions.editPengumuman) },
@@ -191,11 +209,17 @@ export default function SuperAdminDashboard() {
     { label: 'Pendaftaran',       key: 'registrasi',       visible: isSuperAdmin || Boolean(permissions.viewPendaftaran || permissions.editPendaftaran || permissions.viewRegistrasi || permissions.editRegistrasi) },
   ].filter(t => t.visible);
 
-  const currentLabel = navItems.find(n => n.key === activeTab)?.label ?? 'Dashboard';
+  const getActiveLabel = () => {
+    const subMatch = subKeuanganItems.find(s => s.key === activeTab);
+    if (subMatch) return `Keuangan > ${subMatch.label}`;
+    return navItems.find(n => n.key === activeTab)?.label ?? 'Dashboard';
+  };
+  const currentLabel = getActiveLabel();
 
   // Guard: if user lands on an unpermitted tab, redirect to dashboard
   useEffect(() => {
-    if (navItems.length > 0 && !navItems.some(n => n.key === activeTab)) {
+    const validKeys = [...navItems.map(n => n.key), ...subKeuanganItems.map(s => s.key)];
+    if (validKeys.length > 0 && !validKeys.includes(activeTab)) {
       setActiveTab('dashboard');
     }
   }, [activeTab, navItems]);
@@ -301,6 +325,70 @@ export default function SuperAdminDashboard() {
           {navItems.map(item => {
             const Icon = NAV_ICONS[item.key] ?? LayoutDashboard;
             const active = activeTab === item.key;
+            const isKeu = item.key === 'keuangan';
+
+            if (isKeu) {
+              return (
+                <div key="keuangan-group" className="space-y-0.5">
+                  <button
+                    onClick={() => {
+                      if (!sidebarOpen && !mobileDrawerOpen) {
+                        setSidebarOpen(true);
+                        setKeuanganMenuOpen(true);
+                        return;
+                      }
+                      setKeuanganMenuOpen(prev => !prev);
+                      if (!isKeuanganActive) {
+                        setActiveTab('kasBank');
+                      }
+                    }}
+                    title={(!sidebarOpen && !mobileDrawerOpen) ? 'Keuangan' : undefined}
+                    className={`w-full flex items-center gap-3 px-3 py-3 min-h-[46px] rounded-xl text-sm font-medium transition-all duration-150 group active:scale-[0.98]
+                      ${isKeuanganActive ? 'bg-white/15 text-white shadow-xs' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
+                  >
+                    <Icon size={18} className="flex-shrink-0" />
+                    {(sidebarOpen || mobileDrawerOpen) && (
+                      <>
+                        <span className="flex-1 text-left truncate">Keuangan</span>
+                        <ChevronDown
+                          size={15}
+                          className={`opacity-70 transition-transform duration-200 ${keuanganMenuOpen ? 'rotate-180' : ''}`}
+                        />
+                      </>
+                    )}
+                  </button>
+
+                  {/* Sub-menu nested items */}
+                  {keuanganMenuOpen && (sidebarOpen || mobileDrawerOpen) && (
+                    <div className="pl-3 pr-1 py-1 space-y-1 border-l-2 border-white/20 ml-4 my-1">
+                      {subKeuanganItems.map(sub => {
+                        const SubIcon = sub.icon;
+                        const isSubActive = activeTab === sub.key;
+                        return (
+                          <button
+                            key={sub.key}
+                            onClick={() => {
+                              setActiveTab(sub.key);
+                              setMobileDrawerOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 min-h-[38px] rounded-lg text-xs font-semibold transition-all duration-150 active:scale-[0.98]
+                              ${isSubActive
+                                ? 'bg-white text-blue-900 shadow-sm font-bold'
+                                : 'text-white/75 hover:bg-white/10 hover:text-white'
+                              }`}
+                          >
+                            <span className={`text-[10px] ${isSubActive ? 'text-blue-900' : 'text-white/50'}`}>&gt;</span>
+                            <SubIcon size={14} className="flex-shrink-0 opacity-80" />
+                            <span className="truncate">{sub.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <button
                 key={item.key}
@@ -713,7 +801,13 @@ export default function SuperAdminDashboard() {
 
           {activeTab === 'absensi'          && <div className="overflow-y-auto"><div className="p-4 md:p-6"><AttendanceManagement /></div></div>}
           {activeTab === 'komsel'           && <div className="overflow-y-auto"><div className="p-4 md:p-6"><KomselManagement /></div></div>}
-          {activeTab === 'keuangan'         && <div className="overflow-y-auto"><div className="p-4 md:p-6"><FinanceManagement /></div></div>}
+          {(activeTab === 'keuangan' || activeTab === 'kasBank' || activeTab === 'generalLedger' || activeTab === 'pattyCash' || activeTab === 'kasKecil' || activeTab === 'laporanKeuangan') && (
+            <div className="overflow-y-auto">
+              <div className="p-4 md:p-6">
+                <FinanceManagement subTab={activeTab === 'keuangan' ? 'kasBank' : activeTab} />
+              </div>
+            </div>
+          )}
           {activeTab === 'inventaris'       && <div className="overflow-y-auto"><div className="p-4 md:p-6"><InventoryManagement /></div></div>}
           {activeTab === 'pelayan'          && <PelayanManagement />}
           {activeTab === 'pengumuman'       && <div className="overflow-y-auto"><div className="p-4 md:p-6"><AnnouncementManagement /></div></div>}
