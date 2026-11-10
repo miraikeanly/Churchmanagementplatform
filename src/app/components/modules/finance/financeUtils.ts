@@ -40,6 +40,13 @@ export const INITIAL_GL_ACCOUNTS: Record<string, GLAccount> = {
   'U':   { code: 'U',   name: 'Kas Kecil Umum (Tante Yanti)', type: 'unit', unitCategory: 'umum', description: 'Petty cash operasional harian gereja' }
 };
 
+export interface BreakdownSubItem {
+  id: string;
+  reff: string; // GL code (e.g. U, ABI, WBI, RBI, VSS)
+  keterangan: string; // e.g. Top Up KK Umum AGS 2026
+  nominal: number;
+}
+
 export interface BankStatementRow {
   date: string; // YYYY-MM-DD
   rawDate?: string;
@@ -50,6 +57,7 @@ export interface BankStatementRow {
   glCode?: string;
   notes?: string;
   isTopUpBreakdown?: boolean;
+  breakdownItems?: BreakdownSubItem[];
 }
 
 export interface KasBankItem {
@@ -60,12 +68,14 @@ export interface KasBankItem {
   keterangan: string; // e.g. Perpuluhan Gina Jaya
   tipe: 'Debet' | 'Kredit'; // Debet: Masuk (CR), Kredit: Keluar (DB)
   nominal: number; // Raw amount
-  rincian?: number; // Optional sub-detail amount (e.g. in multi-item transfers)
-  debet?: number; // Calculated/explicit debet
-  kredit?: number; // Calculated/explicit kredit
+  rincian?: number; // Optional sub-detail amount
+  debet?: number; // Calculated debet
+  kredit?: number; // Calculated kredit
   saldoBerjalan?: number; // Running total balance
   note?: string; // Optional user note
   isOpeningBalance?: boolean;
+  breakdownItems?: BreakdownSubItem[];
+  isExpanded?: boolean;
   extraColumns?: Record<string, string | number>;
 }
 
@@ -90,7 +100,7 @@ export function formatRupiah(val: number | null | undefined): string {
  */
 export function classifyTransaction(desc: string, tipe: 'CR' | 'DB' | 'Debet' | 'Kredit'): string {
   const upper = desc.toUpperCase();
-  const isCredit = tipe === 'CR' || tipe === 'Debet'; // Uang Masuk
+  const isCredit = tipe === 'CR' || tipe === 'Debet';
 
   if (upper.includes('TOP UP KK') || upper.includes('TOP UP')) {
     return 'U';
@@ -121,7 +131,6 @@ export function classifyTransaction(desc: string, tipe: 'CR' | 'DB' | 'Debet' | 
   }
 
   if (!isCredit) {
-    // Pengeluaran / Kredit di Buku Kas
     if (upper.includes('PLN') || upper.includes('LISTRIK')) return '2003';
     if (upper.includes('TELKOM') || upper.includes('BIZNET') || upper.includes('WIFI') || upper.includes('TELEPON')) return '2004';
     if (upper.includes('PAM JAYA') || upper.includes('PAM ') || upper.includes('AIR PAM')) return '2005';
@@ -131,7 +140,6 @@ export function classifyTransaction(desc: string, tipe: 'CR' | 'DB' | 'Debet' | 
     if (upper.includes('SOUND') || upper.includes('STAND') || upper.includes('MIC') || upper.includes('HARDWARE')) return '3002';
     return '6001';
   } else {
-    // Penerimaan / Debet di Buku Kas
     if (upper.includes('BUNGA DEP') || upper.includes('BUNGA BANK') || upper.includes('BILYET') || upper.includes('JASA GIRO')) return '1007';
     if (upper.includes('PERPULUHAN') || upper.includes('PERSEPULUHAN') || upper.includes('GNA220425') || upper.includes('TPB826')) return '1004';
     if (upper.includes('UCAPAN SYUKUR') || upper.includes('SYUKUR')) return '1005';
