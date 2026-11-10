@@ -307,67 +307,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // Buku Kas & GL Journal System (Multi-source: Kas Bank & Kas Kecil)
-    if (resource === 'finance' && a === 'journal') {
-      if (m === 'GET') {
-        const entries = (await byPrefix('cash_journal:')).filter((x) => x && x.id)
-          .sort((x, y) => (x.date || '').localeCompare(y.date || '') || (x.noRef || '').localeCompare(y.noRef || ''));
-        return sendJson(res, 200, { success: true, entries });
-      }
-      if (m === 'POST') {
-        // Bulk import or single entry
-        const { entries, entry } = body;
-        if (entries && Array.isArray(entries)) {
-          const saved = [];
-          for (const item of entries) {
-            const id = item.id || uid('cj');
-            const newEntry = { ...item, id, createdAt: item.createdAt || now(), createdBy: user.id };
-            await set(`cash_journal:${id}`, newEntry);
-            saved.push(newEntry);
-          }
-          return sendJson(res, 200, { success: true, count: saved.length, entries: saved });
-        } else if (entry) {
-          const id = entry.id || uid('cj');
-          const newEntry = { ...entry, id, createdAt: now(), createdBy: user.id };
-          await set(`cash_journal:${id}`, newEntry);
-          return sendJson(res, 200, { success: true, entry: newEntry });
-        }
-        return sendError(res, 400, 'Data jurnal tidak valid');
-      }
-      if (m === 'DELETE' && b) {
-        await del(`cash_journal:${b}`);
-        return sendJson(res, 200, { success: true });
-      }
-    }
-
-    // Parse BCA PDF file via pdf-parse v2 (with Node server polyfills)
-    if (resource === 'finance' && a === 'parse-pdf') {
-      if (m === 'POST') {
-        const { base64Data, year } = body;
-        if (!base64Data) {
-          return sendError(res, 400, 'base64Data PDF diperlukan');
-        }
-        try {
-          if (typeof globalThis.DOMMatrix === 'undefined') {
-            globalThis.DOMMatrix = class DOMMatrix {
-              constructor() { this.a=1; this.b=0; this.c=0; this.d=1; this.e=0; this.f=0; }
-            };
-          }
-          if (typeof globalThis.Path2D === 'undefined') {
-            globalThis.Path2D = class Path2D {};
-          }
-          const { PDFParse } = await import('pdf-parse');
-          const pdfBuffer = Buffer.from(base64Data, 'base64');
-          const parser = new PDFParse({ data: pdfBuffer });
-          const resText = await parser.getText();
-          return sendJson(res, 200, { success: true, text: resText.text || '' });
-        } catch (pdfErr) {
-          console.error('PDF parsing error:', pdfErr);
-          return sendError(res, 500, 'Gagal membaca isi file PDF: ' + (pdfErr.message || String(pdfErr)));
-        }
-      }
-    }
-
     // Admin: Manage Giving Categories
     if (resource === 'giving' && a === 'categories') {
       if (m === 'POST' || m === 'PUT') {
