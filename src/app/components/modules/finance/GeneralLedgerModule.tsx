@@ -148,6 +148,12 @@ export default function GeneralLedgerModule() {
     note: ''
   });
 
+  // ── Reset Modal State (PIN: 0000) ──
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetPeriodTarget, setResetPeriodTarget] = useState('ALL');
+  const [resetPinInput, setResetPinInput] = useState('');
+  const [resetError, setResetError] = useState<string | null>(null);
+
   useEffect(() => {
     if (selectedCode) {
       setNewRowData(prev => ({ ...prev, reff: selectedCode }));
@@ -267,6 +273,62 @@ export default function GeneralLedgerModule() {
       setSyncFeedback('Baris transaksi berhasil dihapus!');
       setTimeout(() => setSyncFeedback(null), 3000);
     }
+  };
+
+  // ── Handler Reset Data dengan PIN 0000 ──
+  const handleExecuteReset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (resetPinInput !== '0000') {
+      setResetError('PIN salah! Masukkan PIN 0000 untuk konfirmasi reset.');
+      return;
+    }
+
+    if (resetPeriodTarget === 'ALL') {
+      const defaultOpening: KasBankItem = {
+        id: 'initial-saldo',
+        tanggal: '2026-09-01',
+        noBank: 'BCA260000',
+        reff: '1001',
+        keterangan: 'Saldo Awal Rekening',
+        tipe: 'Debet',
+        nominal: 311771182.79,
+        debet: 311771182.79,
+        kredit: 0,
+        saldoBerjalan: 311771182.79,
+        isOpeningBalance: true
+      };
+      saveItems([defaultOpening]);
+      setSyncFeedback('Seluruh data transaksi berhasil di-reset!');
+    } else {
+      const kept = items.filter(it => {
+        if (it.isOpeningBalance && it.id.includes(resetPeriodTarget)) return false;
+        if (!it.isOpeningBalance && it.tanggal.startsWith(resetPeriodTarget)) return false;
+        return true;
+      });
+      if (kept.length === 0) {
+        saveItems([{
+          id: 'initial-saldo',
+          tanggal: '2026-09-01',
+          noBank: 'BCA260000',
+          reff: '1001',
+          keterangan: 'Saldo Awal Rekening',
+          tipe: 'Debet',
+          nominal: 311771182.79,
+          debet: 311771182.79,
+          kredit: 0,
+          saldoBerjalan: 311771182.79,
+          isOpeningBalance: true
+        }]);
+      } else {
+        saveItems(kept);
+      }
+      setSyncFeedback(`Data transaksi periode ${resetPeriodTarget} berhasil di-reset!`);
+    }
+
+    setShowResetModal(false);
+    setResetPinInput('');
+    setResetError(null);
+    setTimeout(() => setSyncFeedback(null), 4000);
   };
 
   // ── Helper buat No Bank Auto ──
@@ -421,6 +483,19 @@ export default function GeneralLedgerModule() {
           >
             <Download size={13} />
             Export CSV
+          </button>
+          <button
+            onClick={() => {
+              setResetPeriodTarget('ALL');
+              setResetPinInput('');
+              setResetError(null);
+              setShowResetModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all cursor-pointer"
+            title="Reset data dengan pengaman PIN 0000"
+          >
+            <RotateCcw size={13} />
+            Reset Data
           </button>
         </div>
       </div>
@@ -1007,6 +1082,97 @@ export default function GeneralLedgerModule() {
                   className="px-4 py-1.5 rounded text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer"
                 >
                   Simpan Transaksi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Reset Data General Ledger (PIN 0000) ── */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-rose-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-rose-700">
+                <AlertCircle size={20} />
+                <h3 className="text-sm font-black uppercase tracking-wide">Konfirmasi Reset General Ledger</h3>
+              </div>
+              <button
+                onClick={() => setShowResetModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleExecuteReset} className="mt-4 space-y-3.5">
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-900 leading-relaxed">
+                Fitur ini akan menghapus data transaksi General Ledger / Kas Bank. Untuk mencegah kesalahan klik, fitur ini dikunci dengan <b>PIN keamanan</b>.
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
+                  Pilih Periode yang Ingin Di-Reset:
+                </label>
+                <select
+                  value={resetPeriodTarget}
+                  onChange={e => setResetPeriodTarget(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
+                >
+                  <option value="ALL">🔴 SEMUA PERIODE (Hapus Seluruh Data Transaksi)</option>
+                  <option value="2026-09">Hanya Bulan September 2026 (2026-09)</option>
+                  <option value="2026-10">Hanya Bulan Oktober 2026 (2026-10)</option>
+                  <option value="2026-11">Hanya Bulan November 2026 (2026-11)</option>
+                  <option value="2026-12">Hanya Bulan Desember 2026 (2026-12)</option>
+                  <option value="2026-01">Hanya Bulan Januari 2026 (2026-01)</option>
+                  <option value="2026-02">Hanya Bulan Februari 2026 (2026-02)</option>
+                  <option value="2026-03">Hanya Bulan Maret 2026 (2026-03)</option>
+                  <option value="2026-04">Hanya Bulan April 2026 (2026-04)</option>
+                  <option value="2026-05">Hanya Bulan Mei 2026 (2026-05)</option>
+                  <option value="2026-06">Hanya Bulan Juni 2026 (2026-06)</option>
+                  <option value="2026-07">Hanya Bulan Juli 2026 (2026-07)</option>
+                  <option value="2026-08">Hanya Bulan Agustus 2026 (2026-08)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
+                  Masukkan PIN Keamanan (Ketik: <span className="font-mono text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">0000</span>):
+                </label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  required
+                  placeholder="Ketik 0000"
+                  value={resetPinInput}
+                  onChange={e => {
+                    setResetPinInput(e.target.value);
+                    setResetError(null);
+                  }}
+                  className="w-full bg-slate-50 border-2 border-slate-400 rounded-lg px-3 py-2 text-center text-lg font-black font-mono tracking-widest text-slate-900 focus:outline-none focus:border-rose-600"
+                />
+                {resetError && (
+                  <p className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle size={13} /> {resetError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowResetModal(false)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetPinInput.length !== 4}
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-all active:scale-95 disabled:opacity-40 cursor-pointer"
+                >
+                  Konfirmasi Reset
                 </button>
               </div>
             </form>
