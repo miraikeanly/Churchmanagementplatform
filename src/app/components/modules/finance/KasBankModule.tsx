@@ -150,8 +150,12 @@ export default function KasBankModule() {
     // 1. Separate opening balance rows and normal transaction rows
     // Determine all active periods present in normal transactions
     const nonOpening = items.filter(it => !it.isOpeningBalance);
-    // Sort transactions chronologically
-    const sortedTransactions = [...nonOpening].sort((a, b) => (a.tanggal || '').localeCompare(b.tanggal || ''));
+    // Sort transactions strictly chronologically by tanggal, then by noBank
+    const sortedTransactions = [...nonOpening].sort((a, b) => {
+      const cmpDate = (a.tanggal || '').localeCompare(b.tanggal || '');
+      if (cmpDate !== 0) return cmpDate;
+      return (a.noBank || '').localeCompare(b.noBank || '');
+    });
 
     // Map each month period (e.g. '2026-09') to its explicit opening balance item if user edited it
     const explicitOpeningsByPeriod: Record<string, KasBankItem> = {};
@@ -217,8 +221,13 @@ export default function KasBankModule() {
 
       finalItems.push(currentOpeningRow);
 
-      // Process all transactions in this month
+      // Process all transactions in this month (strictly sorted by date, then noBank)
       const monthTx = sortedTransactions.filter(t => t.tanggal && t.tanggal.startsWith(monthStr));
+      monthTx.sort((a, b) => {
+        const cmpDate = (a.tanggal || '').localeCompare(b.tanggal || '');
+        if (cmpDate !== 0) return cmpDate;
+        return (a.noBank || '').localeCompare(b.noBank || '');
+      });
       monthTx.forEach(tx => {
         const nom = Number(tx.nominal) || 0;
         const isDeb = tx.tipe === 'Debet';
@@ -955,7 +964,18 @@ export default function KasBankModule() {
 
         {/* ── Form Input Baris Transaksi Baru ── */}
         <form onSubmit={handleAddRow} className="p-3 sm:p-4 bg-blue-50/20">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Tanggal</label>
+              <input
+                type="date"
+                required
+                value={transDate}
+                onChange={e => setTransDate(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
             <div>
               <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">No Bank</label>
               <input
