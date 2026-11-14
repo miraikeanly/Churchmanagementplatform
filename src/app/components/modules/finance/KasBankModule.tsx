@@ -144,35 +144,128 @@ export default function KasBankModule() {
     return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
   };
 
-  // Re-calculate running total balance strictly across all rows
+  // Re-calculate running total balance strictly across all rows and chain opening balances across periods
   const calculatedItems = useMemo(() => {
-    let currentBalance = 0;
-    return items.map((item, index) => {
-      const nom = Number(item.nominal) || 0;
-      const isDeb = item.tipe === 'Debet';
-      const debetVal = isDeb ? nom : 0;
-      const kreditVal = !isDeb ? nom : 0;
+    // 1. Separate opening balance rows and normal transaction rows
+    // Determine all active periods present in normal transactions
+    const nonOpening = items.filter(it => !it.isOpeningBalance);
+    // Sort transactions chronologically
+    const sortedTransactions = [...nonOpening].sort((a, b) => (a.tanggal || '').localeCompare(b.tanggal || ''));
 
-      if (index === 0 && item.isOpeningBalance) {
-        currentBalance = nom;
+    // Map each month period (e.g. '2026-09') to its explicit opening balance item if user edited it
+    const explicitOpeningsByPeriod: Record<string, KasBankItem> = {};
+    items.filter(it => it.isOpeningBalance).forEach(op => {
+      const p = op.tanggal ? op.tanggal.substring(0, 7) : '';
+      if (p) explicitOpeningsByPeriod[p] = op;
+    });
+
+    // We also know the default initial opening balance for the earliest data (e.g. Sept 2026 or Aug end)
+    const defaultInitialSaldo = 311771182.79;
+
+    // Group transactions by month
+    const monthsSet = new Set<string>();
+    sortedTransactions.forEach(t => {
+      if (t.tanggal && t.tanggal.length >= 7) {
+        monthsSet.add(t.tanggal.substring(0, 7));
+      }
+    });
+    // Also include months from explicit openings
+    Object.keys(explicitOpeningsByPeriod).forEach(p => monthsSet.add(p));
+
+    const sortedMonths = Array.from(monthsSet).sort();
+
+    // Calculate month by month:
+    // Saldo Awal month M = Saldo Akhir month M-1 (or explicit opening if first month)
+    let runningBalance = defaultInitialSaldo;
+    const finalItems: KasBankItem[] = [];
+
+    sortedMonths.forEach((monthStr, idx) => {
+      // Find or create opening row for this month
+      const existingOp = explicitOpeningsByPeriod[monthStr];
+      const isFirstMonth = idx === 0;
+
+      let openingNominal: number;
+      if (isFirstMonth) {
+        openingNominal = existingOp?.nominal !== undefined ? Number(existingOp.nominal) : defaultInitialSaldo;
       } else {
-        currentBalance = currentBalance + debetVal - kreditVal;
+        // Automatically link to previous month's ending running balance!
+        openingNominal = runningBalance;
       }
 
-      return {
-        ...item,
-        debet: debetVal,
-        kredit: kreditVal,
-        saldoBerjalan: currentBalance
+      runningBalance = openingNominal;
+
+      const currentOpeningRow: KasBankItem = {
+        id: existingOp?.id || `opening-${monthStr}`,
+        tanggal: existingOp?.tanggal || `${monthStr}-01`,
+        noBank: existingOp?.noBank || 'BCA260000',
+        reff: existingOp?.reff || '1001',
+        keterangan: existingOp?.keterangan || 'Saldo Awal Rekening',
+        tipe: 'Debet',
+        nominal: openingNominal,
+        debet: openingNominal,
+        kredit: 0,
+        saldoBerjalan: openingNominal,
+        isOpeningBalance: true,
+        note: existingOp?.note
       };
+
+      finalItems.push(currentOpeningRow);
+
+      // Process all transactions in this month
+      const monthTx = sortedTransactions.filter(t => t.tanggal && t.tanggal.startsWith(monthStr));
+      monthTx.forEach(tx => {
+        const nom = Number(tx.nominal) || 0;
+        const isDeb = tx.tipe === 'Debet';
+        const debetVal = isDeb ? nom : 0;
+        const kreditVal = !isDeb ? nom : 0;
+        runningBalance = runningBalance + debetVal - kreditVal;
+
+        finalItems.push({
+          ...tx,
+          debet: debetVal,
+          kredit: kreditVal,
+          saldoBerjalan: runningBalance
+        });
+      });
     });
+
+    // If there are no months yet, fallback to single default opening item
+    if (finalItems.length === 0) {
+      const defaultOp: KasBankItem = items.find(it => it.isOpeningBalance) || {
+        id: 'initial-saldo',
+        tanggal: '2026-09-01',
+        noBank: 'BCA260000',
+        reff: '1001',
+        keterangan: 'Saldo Awal Rekening',
+        tipe: 'Debet',
+        nominal: defaultInitialSaldo,
+        debet: defaultInitialSaldo,
+        kredit: 0,
+        saldoBerjalan: defaultInitialSaldo,
+        isOpeningBalance: true
+      };
+      return [{
+        ...defaultOp,
+        debet: Number(defaultOp.nominal) || defaultInitialSaldo,
+        kredit: 0,
+        saldoBerjalan: Number(defaultOp.nominal) || defaultInitialSaldo
+      }];
+    }
+
+    return finalItems;
   }, [items]);
 
   // Filter items by selected period and search term
   const displayedItems = useMemo(() => {
     return calculatedItems.filter(item => {
-      if (selectedPeriod && !item.isOpeningBalance) {
-        if (!item.tanggal.startsWith(selectedPeriod)) return false;
+      if (selectedPeriod) {
+        // Only show transactions and opening balance of the selected period
+        if (item.isOpeningBalance) {
+          const itemPeriod = item.tanggal ? item.tanggal.substring(0, 7) : '';
+          if (itemPeriod !== selectedPeriod) return false;
+        } else {
+          if (!item.tanggal.startsWith(selectedPeriod)) return false;
+        }
       }
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
