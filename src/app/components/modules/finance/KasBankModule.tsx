@@ -3,7 +3,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import {
   FileText, Plus, Trash2, Search, Download, Upload,
   Save, CheckCircle2, AlertCircle, ChevronDown,
-  Edit2, X, PlusCircle, Columns, CornerDownRight, RotateCcw
+  Edit2, X, PlusCircle, Columns, CornerDownRight, RotateCcw,
+  ArrowRightCircle, ArrowRight
 } from 'lucide-react';
 import {
   GLAccount,
@@ -171,6 +172,11 @@ export default function KasBankModule() {
     });
     // Also include months from explicit openings
     Object.keys(explicitOpeningsByPeriod).forEach(p => monthsSet.add(p));
+
+    // Also include currently selected period so opening balance is immediately generated
+    if (selectedPeriod) {
+      monthsSet.add(selectedPeriod);
+    }
 
     const sortedMonths = Array.from(monthsSet).sort();
 
@@ -702,6 +708,76 @@ export default function KasBankModule() {
       setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  // Helper to get next month string: YYYY-MM -> YYYY-MM
+  const getNextMonthStr = (period: string): string => {
+    if (!period) return '';
+    const [y, m] = period.split('-').map(Number);
+    const d = new Date(y, m, 1);
+    const nextY = d.getFullYear();
+    const nextM = String(d.getMonth() + 1).padStart(2, '0');
+    return `${nextY}-${nextM}`;
+  };
+
+  const getMonthNameIndo = (period: string): string => {
+    if (!period) return '';
+    const monthNames: Record<string, string> = {
+      '01': 'Januari', '02': 'Februari', '03': 'Maret', '04': 'April',
+      '05': 'Mei', '06': 'Juni', '07': 'Juli', '08': 'Agustus',
+      '09': 'September', '10': 'Oktober', '11': 'November', '12': 'Desember'
+    };
+    const [y, m] = period.split('-');
+    return `${monthNames[m] || m} ${y}`;
+  };
+
+  // Handler to manually create / advance to next month with current ending balance
+  const handleAdvanceToNextMonth = () => {
+    const currentP = selectedPeriod || (items.length > 0 ? (items[items.length - 1].tanggal?.substring(0, 7) || '2026-01') : '2026-01');
+    const nextP = getNextMonthStr(currentP);
+    if (!nextP) return;
+
+    // Ending balance of current period
+    const endingSaldo = stats.latestSaldo;
+
+    // Check if opening row for next month already exists
+    const existingIndex = items.findIndex(it => it.isOpeningBalance && it.tanggal?.startsWith(nextP));
+    if (existingIndex >= 0) {
+      setItems(prev => prev.map((it, idx) => {
+        if (idx === existingIndex) {
+          return {
+            ...it,
+            nominal: endingSaldo,
+            debet: endingSaldo,
+            saldoBerjalan: endingSaldo
+          };
+        }
+        return it;
+      }));
+    } else {
+      const nextOpeningItem: KasBankItem = {
+        id: `opening-${nextP}`,
+        tanggal: `${nextP}-01`,
+        noBank: 'BCA260000',
+        reff: '1001',
+        keterangan: 'Saldo Awal Rekening',
+        tipe: 'Debet',
+        nominal: endingSaldo,
+        debet: endingSaldo,
+        kredit: 0,
+        saldoBerjalan: endingSaldo,
+        isOpeningBalance: true
+      };
+      setItems(prev => [...prev, nextOpeningItem]);
+    }
+
+    // Switch view to next period
+    setSelectedPeriod(nextP);
+    setTransDate(`${nextP}-01`);
+    setFeedbackMsg({
+      type: 'success',
+      text: `✓ Berhasil membuat periode ${getMonthNameIndo(nextP)} dengan Saldo Awal ${formatRupiah(endingSaldo)}!`
+    });
   };
 
   // Export to CSV/Excel format
@@ -1472,6 +1548,33 @@ export default function KasBankModule() {
               </tr>
             </tfoot>
           </table>
+        </div>
+
+        {/* ── Action Bar: Tombol Auto-Add ke Bulan Selanjutnya ── */}
+        <div className="bg-gradient-to-r from-blue-50/70 via-slate-50 to-emerald-50/60 p-3 sm:p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs text-slate-600">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span>
+              Saldo Akhir <strong className="text-slate-900">{getMonthNameIndo(selectedPeriod || '2026-01')}</strong>:{' '}
+              <span className="font-mono font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
+                {formatRupiah(stats.latestSaldo)}
+              </span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={handleAdvanceToNextMonth}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+              title="Kirim Saldo Akhir ini menjadi Saldo Awal di bulan berikutnya"
+            >
+              <ArrowRightCircle size={15} />
+              <span>
+                Lanjut ke Bulan {getMonthNameIndo(getNextMonthStr(selectedPeriod || '2026-01'))} (Auto Saldo Awal)
+              </span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
         </div>
       </div>
 
