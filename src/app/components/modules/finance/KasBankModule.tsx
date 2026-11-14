@@ -21,7 +21,7 @@ if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 }
 
-const STORAGE_KEY_ITEMS = 'gbi_kas_bank_items_2026_v2';
+const STORAGE_KEY_ITEMS = 'gbi_kas_bank_items_2026_v3';
 const STORAGE_KEY_GLS = 'gbi_kas_bank_gl_accounts_2026';
 const STORAGE_KEY_COLS = 'gbi_kas_bank_custom_columns_2026';
 
@@ -66,8 +66,8 @@ export default function KasBankModule() {
   });
 
   // Top Filter / Journal Form Inputs
-  const currentYear = 2026;
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('2026-09'); // YYYY-MM
+  const currentYear = new Date().getFullYear();
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(''); // empty = show all
   const [transDate, setTransDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedGl, setSelectedGl] = useState<string>('1001');
   const [newGlCode, setNewGlCode] = useState<string>('');
@@ -101,6 +101,9 @@ export default function KasBankModule() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('kasbank-updated'));
+      }
     } catch (e) {
       console.error('Failed saving items to localStorage', e);
     }
@@ -439,8 +442,8 @@ export default function KasBankModule() {
         extractedOpeningSaldo = parseFloat(saldoAwalMatch[1].replace(/,/g, ''));
       }
 
-      // Extract period name if available (e.g. SEPTEMBER 2026 -> 2026-09)
-      let parsedPeriod = selectedPeriod || '2026-09';
+      // Extract period name from PDF (e.g. OKTOBER 2026 → 2026-10)
+      let parsedPeriod = '';
       const periodMatch = fullText.match(/PERIODE\s*:\s*([A-Z]+)\s+(\d{4})/i);
       if (periodMatch) {
         const monthMap: Record<string, string> = {
@@ -454,13 +457,31 @@ export default function KasBankModule() {
           setSelectedPeriod(parsedPeriod);
         }
       }
+      // Fallback: detect year from parsed rows
+      if (!parsedPeriod && parsedRows.length > 0) {
+        parsedPeriod = parsedRows[0].date.substring(0, 7); // YYYY-MM
+        setSelectedPeriod(parsedPeriod);
+      }
 
-      // Assign consecutive BCA & KB numbers
+      // Assign consecutive BCA & KB numbers — start after existing items in that month
+      const existingForMonth = items.filter(it =>
+        !it.isOpeningBalance && it.tanggal.startsWith(parsedPeriod)
+      );
       let bcaSeq = 1;
-      let kbSeq = 1;
+      let kbSeq  = 1;
+      existingForMonth.forEach(it => {
+        if (it.noBank?.startsWith('BCA26')) {
+          const n = parseInt(it.noBank.replace('BCA26', ''), 10);
+          if (!isNaN(n) && n >= bcaSeq) bcaSeq = n + 1;
+        }
+        if (it.noBank?.startsWith('KB26')) {
+          const n = parseInt(it.noBank.replace('KB26', ''), 10);
+          if (!isNaN(n) && n >= kbSeq) kbSeq = n + 1;
+        }
+      });
 
       const newConvertedItems: KasBankItem[] = parsedRows.map(row => {
-        const isDebet = row.tipe === 'CR'; // CR in bank statement = Debet in Church Kas
+        const isDebet = row.tipe === 'CR'; // CR in PDF = money IN = Debet in church
         const assignedNo = isDebet
           ? `BCA26${String(bcaSeq++).padStart(4, '0')}`
           : `KB26${String(kbSeq++).padStart(4, '0')}`;
@@ -469,18 +490,18 @@ export default function KasBankModule() {
           id: `kb_pdf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           tanggal: row.date,
           noBank: assignedNo,
-          reff: row.glCode || (isDebet ? '1001' : '6001'),
-          keterangan: row.description,
+          reff: row.reff || (isDebet ? '1001' : '6001'),
+          keterangan: row.keterangan,
           tipe: isDebet ? 'Debet' : 'Kredit',
           nominal: row.amount,
           note: row.isTopUpBreakdown ? 'Top Up KK' : undefined,
-          breakdownItems: row.breakdownItems
+          breakdownItems: row.breakdownItems,
         };
       });
 
-      // Update state: replace with opening balance + parsed transactions for fresh clean sync
+      // ── Build opening balance for this month ──────────────────────────────
       const openingItem: KasBankItem = {
-        id: 'initial-saldo',
+        id: `opening-${parsedPeriod}`,
         tanggal: `${parsedPeriod}-01`,
         noBank: 'BCA260000',
         reff: '1001',
@@ -493,11 +514,29 @@ export default function KasBankModule() {
         isOpeningBalance: true
       };
 
-      setItems([openingItem, ...newConvertedItems]);
+      // ── Merge strategy: keep other months, replace this month ─────────────
+      setItems(prev => {
+        // Remove existing entries for this month (and old opening balance for this month)
+        const otherMonths = prev.filter(it =>
+          it.id === 'initial-saldo'
+            ? false                           // remove old generic opening
+            : !it.tanggal.startsWith(parsedPeriod) || it.id === `opening-${parsedPeriod}`
+              ? !it.id.startsWith(`opening-${parsedPeriod}`) && !it.tanggal.startsWith(parsedPeriod)
+              : false
+        );
+        // Sort everything by date after merge
+        const merged = [openingItem, ...otherMonths.filter(it => !it.isOpeningBalance), ...newConvertedItems];
+        merged.sort((a, b) => {
+          if (a.isOpeningBalance) return -1;
+          if (b.isOpeningBalance) return 1;
+          return a.tanggal.localeCompare(b.tanggal);
+        });
+        return merged;
+      });
 
       setFeedbackMsg({
         type: 'success',
-        text: `Berhasil mengekstrak ${newConvertedItems.length} transaksi dari PDF! Saldo akhir 100% sinkron di Rp 295.485.548,00.`
+        text: `✓ ${newConvertedItems.length} transaksi ${parsedPeriod} berhasil diimport dari PDF.`
       });
     } catch (err: any) {
       console.error('PDF parsing error', err);
