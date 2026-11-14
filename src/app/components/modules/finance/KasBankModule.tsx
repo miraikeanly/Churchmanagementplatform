@@ -4,7 +4,7 @@ import {
   FileText, Plus, Trash2, Search, Download, Upload,
   Save, CheckCircle2, AlertCircle, ChevronDown,
   Edit2, X, PlusCircle, Columns, CornerDownRight, RotateCcw,
-  ArrowRightCircle, ArrowRight
+  ArrowRightCircle, ArrowRight, GripVertical
 } from 'lucide-react';
 import {
   GLAccount,
@@ -104,6 +104,10 @@ export default function KasBankModule() {
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState<string>('');
 
+  // Drag & drop state
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
+
   // Save to localStorage
   useEffect(() => {
     try {
@@ -169,7 +173,7 @@ export default function KasBankModule() {
 
     // Group transactions by month
     const monthsSet = new Set<string>();
-    sortedTransactions.forEach(t => {
+    nonOpening.forEach(t => {
       if (t.tanggal && t.tanggal.length >= 7) {
         monthsSet.add(t.tanggal.substring(0, 7));
       }
@@ -221,13 +225,9 @@ export default function KasBankModule() {
 
       finalItems.push(currentOpeningRow);
 
-      // Process all transactions in this month (strictly sorted by date, then noBank)
-      const monthTx = sortedTransactions.filter(t => t.tanggal && t.tanggal.startsWith(monthStr));
-      monthTx.sort((a, b) => {
-        const cmpDate = (a.tanggal || '').localeCompare(b.tanggal || '');
-        if (cmpDate !== 0) return cmpDate;
-        return (a.noBank || '').localeCompare(b.noBank || '');
-      });
+      // Process all transactions in this month
+      // Preserves custom user order from items state!
+      const monthTx = nonOpening.filter(t => t.tanggal && t.tanggal.startsWith(monthStr));
       monthTx.forEach(tx => {
         const nom = Number(tx.nominal) || 0;
         const isDeb = tx.tipe === 'Debet';
@@ -519,13 +519,73 @@ export default function KasBankModule() {
       note: formNote.trim() || undefined
     };
 
-    setItems(prev => [...prev, newItem]);
+    setItems(prev => {
+      // Find where to insert newItem in prev based on date
+      const nonOpening = prev.filter(it => !it.isOpeningBalance);
+      const openings = prev.filter(it => it.isOpeningBalance);
+      
+      const updatedNonOpening = [...nonOpening, newItem];
+      updatedNonOpening.sort((a, b) => {
+        const cmp = (a.tanggal || '').localeCompare(b.tanggal || '');
+        if (cmp !== 0) return cmp;
+        return (a.noBank || '').localeCompare(b.noBank || '');
+      });
+      return [...openings, ...updatedNonOpening];
+    });
     setFormNoBank('');
     setFormKeterangan('');
     setFormNominal('');
     setFormRincian('');
     setFormNote('');
     setFeedbackMsg({ type: 'success', text: `Baris transaksi ${assignedNo} berhasil ditambahkan!` });
+  };
+
+  // Drag and drop row reordering handlers
+  const handleDragStart = (e: React.DragEvent<HTMLTableRowElement>, id: string) => {
+    setDraggedItemId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLTableRowElement>, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverItemId !== id) {
+      setDragOverItemId(id);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLTableRowElement>, targetId: string) => {
+    e.preventDefault();
+    if (!draggedItemId || draggedItemId === targetId) {
+      setDraggedItemId(null);
+      setDragOverItemId(null);
+      return;
+    }
+
+    setItems(prev => {
+      const fromIdx = prev.findIndex(it => it.id === draggedItemId);
+      const toIdx = prev.findIndex(it => it.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+
+      // Do not allow dragging before opening balance
+      const targetItem = prev[toIdx];
+      if (targetItem.isOpeningBalance) return prev;
+
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIdx, 1);
+      updated.splice(toIdx, 0, moved);
+      return updated;
+    });
+
+    setDraggedItemId(null);
+    setDragOverItemId(null);
+    setFeedbackMsg({ type: 'success', text: 'Urutan baris berhasil diubah!' });
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItemId(null);
+    setDragOverItemId(null);
   };
 
   // Start row edit
@@ -1109,9 +1169,12 @@ export default function KasBankModule() {
 
         {/* Tabel Lebar Bebas (Scroll Halus Jika Diperlukan Layar Kecil) */}
         <div className="w-full overflow-x-auto">
-          <table className="min-w-[1080px] w-full text-left border-collapse text-[11px] leading-normal">
+          <table className="min-w-[1120px] w-full text-left border-collapse text-[11px] leading-normal">
             <thead>
               <tr className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-300">
+                <th className="py-2.5 px-2 border-r border-slate-200 w-10 text-center whitespace-nowrap" title="Geser untuk atur urutan baris">
+                  ↕
+                </th>
                 <th className="py-2.5 px-3 border-r border-slate-200 w-28 whitespace-nowrap">Tgl</th>
                 <th className="py-2.5 px-3 border-r border-slate-200 w-28 whitespace-nowrap">No Bank</th>
                 <th className="py-2.5 px-3 border-r border-slate-200 min-w-[220px] max-w-[320px]">Ket Transaksi</th>
@@ -1145,7 +1208,7 @@ export default function KasBankModule() {
             <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
               {displayedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={12 + customColumns.length} className="text-center py-10 text-slate-400">
+                  <td colSpan={13 + customColumns.length} className="text-center py-10 text-slate-400">
                     Belum ada data transaksi di periode ini. Unggah file PDF atau gunakan tombol "+ Baris".
                   </td>
                 </tr>
@@ -1154,10 +1217,16 @@ export default function KasBankModule() {
                   const isEditing = editingId === item.id;
                   const isDebet = item.tipe === 'Debet';
                   const hasBreakdown = (item.breakdownItems && item.breakdownItems.length > 0) || item.keterangan.toUpperCase().includes('TOP UP');
+                  const isDragging = draggedItemId === item.id;
+                  const isDragOver = dragOverItemId === item.id;
 
                   if (isEditing) {
                     return (
                       <tr key={item.id} className="bg-amber-50/70">
+                        {/* Drag Handle Dummy */}
+                        <td className="py-2 px-1 text-center border-r border-slate-200 text-slate-300">
+                          -
+                        </td>
                         {/* Tanggal */}
                         <td className="p-1 border-r border-slate-200">
                           <input
@@ -1295,7 +1364,40 @@ export default function KasBankModule() {
 
                   return (
                     <React.Fragment key={item.id}>
-                      <tr className={`hover:bg-slate-50 transition-colors ${item.isExpanded ? 'bg-blue-50/20' : ''}`}>
+                      <tr
+                        draggable={!item.isOpeningBalance}
+                        onDragStart={e => handleDragStart(e, item.id)}
+                        onDragOver={e => handleDragOver(e, item.id)}
+                        onDrop={e => handleDrop(e, item.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`transition-colors select-none ${
+                          item.isOpeningBalance
+                            ? 'bg-blue-50/30'
+                            : isDragging
+                            ? 'opacity-40 bg-blue-100 border-2 border-dashed border-blue-400'
+                            : isDragOver
+                            ? 'bg-blue-100/70 border-t-2 border-blue-600'
+                            : item.isExpanded
+                            ? 'bg-blue-50/20'
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        {/* Drag Handle Button */}
+                        <td className="py-2 px-1 text-center border-r border-slate-200 whitespace-nowrap">
+                          {!item.isOpeningBalance ? (
+                            <div
+                              className="inline-flex items-center justify-center p-1 rounded hover:bg-slate-200/80 active:bg-blue-200 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing transition-colors"
+                              title="Tahan dan geser (drag & drop) untuk mengatur urutan posisi baris transaksi ini"
+                            >
+                              <GripVertical size={14} />
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-bold" title="Saldo Awal selalu di baris pertama">
+                              📌
+                            </span>
+                          )}
+                        </td>
+
                         {/* Tanggal */}
                         <td className="py-2 px-3 border-r border-slate-200 whitespace-nowrap font-mono text-slate-600">
                           {item.tanggal}
@@ -1536,7 +1638,7 @@ export default function KasBankModule() {
             {/* ── Section Footer: Baris Khusus Total Saldo (Sesuai Gambar 1) ── */}
             <tfoot className="border-t-2 border-slate-400 bg-slate-100/95 font-bold text-slate-900 sticky bottom-0">
               <tr className="border-b border-slate-300">
-                <td colSpan={7} className="py-2.5 px-3 text-right uppercase tracking-wider text-xs whitespace-nowrap">
+                <td colSpan={8} className="py-2.5 px-3 text-right uppercase tracking-wider text-xs whitespace-nowrap">
                   Total Mutasi Periode Ini:
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono text-emerald-800 bg-emerald-100/50 whitespace-nowrap">
@@ -1553,7 +1655,7 @@ export default function KasBankModule() {
 
               {/* Grand Total Row matching Image 1: Highlighted Saldo Akhir */}
               <tr className="bg-slate-200/90 border-t-2 border-black">
-                <td colSpan={7} className="py-3 px-3 text-right uppercase tracking-widest text-xs font-black whitespace-nowrap">
+                <td colSpan={8} className="py-3 px-3 text-right uppercase tracking-widest text-xs font-black whitespace-nowrap">
                   SALDO AKHIR REKENING:
                 </td>
                 <td colSpan={2} className="py-3 px-2 text-center text-[11px] text-slate-600 font-semibold italic whitespace-nowrap">
