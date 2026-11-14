@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, Download, Search, AlertCircle, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  RefreshCw, Download, Search, AlertCircle, CheckCircle2,
+  Plus, Edit2, Trash2, Check, X, RotateCcw
+} from 'lucide-react';
 import { KasBankItem, INITIAL_GL_ACCOUNTS, GLAccount, formatRupiah } from './financeUtils';
 
 const STORAGE_KEY_ITEMS = 'gbi_kas_bank_items_2026_v3';
@@ -28,6 +31,18 @@ export default function GeneralLedgerModule() {
     }
   };
 
+  const saveItems = (updated: KasBankItem[]) => {
+    setItems(updated);
+    try {
+      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(updated));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('kasbank-updated'));
+      }
+    } catch (e) {
+      console.error('Failed saving items to localStorage', e);
+    }
+  };
+
   useEffect(() => {
     loadData();
     const handleStorageChange = () => loadData();
@@ -53,6 +68,10 @@ export default function GeneralLedgerModule() {
     items.filter(it => !it.isOpeningBalance).forEach(it => {
       if (it.reff) codes.add(it.reff);
     });
+    // Add known common codes if list is empty
+    if (codes.size === 0) {
+      ['1001', '1004', '1007', '2001', '2010', 'OTA', 'DK', 'KPP', 'ABI', 'WBI', 'RBI', 'VSS', 'U'].forEach(c => codes.add(c));
+    }
     return Array.from(codes).sort((a, b) => {
       const aNum = parseInt(a, 10), bNum = parseInt(b, 10);
       if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
@@ -73,6 +92,54 @@ export default function GeneralLedgerModule() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
+  // ── Unique Keterangan list from Kas Bank for Autocomplete/Dropdown Search ──
+  const existingKeteranganList = useMemo(() => {
+    const setKet = new Set<string>();
+    items.filter(it => !it.isOpeningBalance && it.keterangan).forEach(it => {
+      setKet.add(it.keterangan.trim());
+    });
+    return Array.from(setKet).sort();
+  }, [items]);
+
+  // ── Editing Row State ──
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editRowData, setEditRowData] = useState<{
+    tanggal: string;
+    noBank: string;
+    keterangan: string;
+    tipe: 'Debet' | 'Kredit';
+    nominal: number;
+    manualSaldo?: number;
+    note?: string;
+  }>({
+    tanggal: '',
+    noBank: '',
+    keterangan: '',
+    tipe: 'Debet',
+    nominal: 0,
+    note: ''
+  });
+
+  // ── Modal / Form Tambah Baris Manual State ──
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newRowData, setNewRowData] = useState({
+    tanggal: new Date().toISOString().split('T')[0],
+    noBank: '',
+    reff: selectedCode || '1001',
+    keterangan: '',
+    tipe: 'Debet' as 'Debet' | 'Kredit',
+    nominal: '',
+    manualSaldo: '',
+    note: ''
+  });
+
+  // Keep newRowData.reff synced with selectedCode
+  useEffect(() => {
+    if (selectedCode) {
+      setNewRowData(prev => ({ ...prev, reff: selectedCode }));
+    }
+  }, [selectedCode]);
+
   // ── Filtered items based on selected GL Code ──
   const filtered = useMemo(() => {
     return items.filter(it => {
@@ -88,7 +155,7 @@ export default function GeneralLedgerModule() {
     });
   }, [items, selectedCode, searchTerm]);
 
-  // Running balance for this specific GL Code
+  // Running balance for this specific GL Code with support for manualSaldo overrides
   const { rowsWithSaldo, totalDebet, totalKredit, finalSaldo } = useMemo(() => {
     let running = 0;
     let tDeb = 0;
@@ -104,9 +171,21 @@ export default function GeneralLedgerModule() {
         tKre += nom;
         running -= nom;
       }
+
+      // If user provided a manualSaldo override on this row, adopt it
+      const currentSaldo = it.manualSaldo !== undefined && it.manualSaldo !== null && !isNaN(Number(it.manualSaldo))
+        ? Number(it.manualSaldo)
+        : running;
+
+      // Update running baseline if manual override was set
+      if (it.manualSaldo !== undefined && it.manualSaldo !== null && !isNaN(Number(it.manualSaldo))) {
+        running = Number(it.manualSaldo);
+      }
+
       return {
         ...it,
-        runningSaldoGL: running
+        runningSaldoGL: currentSaldo,
+        isManualSaldo: it.manualSaldo !== undefined && it.manualSaldo !== null
       };
     });
 
@@ -119,6 +198,122 @@ export default function GeneralLedgerModule() {
   }, [filtered]);
 
   const glInfo: GLAccount | undefined = selectedCode ? INITIAL_GL_ACCOUNTS[selectedCode] : undefined;
+
+  // ── Handlers Edit Row ──
+  const handleStartEdit = (item: any) => {
+    setEditingId(item.id);
+    setEditRowData({
+      tanggal: item.tanggal || '',
+      noBank: item.noBank || '',
+      keterangan: item.keterangan || '',
+      tipe: item.tipe || 'Debet',
+      nominal: Number(item.nominal) || 0,
+      manualSaldo: item.manualSaldo,
+      note: item.note || ''
+    });
+  };
+
+  const handleSaveEdit = (id: string) => {
+    const updated = items.map(it => {
+      if (it.id === id) {
+        const nom = Number(editRowData.nominal) || 0;
+        const isDeb = editRowData.tipe === 'Debet';
+        return {
+          ...it,
+          tanggal: editRowData.tanggal,
+          noBank: editRowData.noBank,
+          keterangan: editRowData.keterangan,
+          tipe: editRowData.tipe,
+          nominal: nom,
+          debet: isDeb ? nom : 0,
+          kredit: !isDeb ? nom : 0,
+          manualSaldo: editRowData.manualSaldo !== undefined && !isNaN(Number(editRowData.manualSaldo))
+            ? Number(editRowData.manualSaldo)
+            : undefined,
+          note: editRowData.note
+        };
+      }
+      return it;
+    });
+
+    saveItems(updated);
+    setEditingId(null);
+    setSyncFeedback('Baris berhasil diperbarui!');
+    setTimeout(() => setSyncFeedback(null), 3000);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+  };
+
+  const handleDeleteRow = (id: string) => {
+    if (window.confirm('Hapus transaksi ini dari General Ledger?')) {
+      const updated = items.filter(it => it.id !== id);
+      saveItems(updated);
+      setSyncFeedback('Baris berhasil dihapus!');
+      setTimeout(() => setSyncFeedback(null), 3000);
+    }
+  };
+
+  // ── Handler Tambah Baris Manual ──
+  const handleAddNewRow = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nom = parseFloat(newRowData.nominal.replace(/[^0-9.]/g, '')) || 0;
+    if (nom <= 0 && !newRowData.keterangan.trim()) {
+      alert('Mohon isi Keterangan dan Nominal transaksi!');
+      return;
+    }
+
+    const assignedCode = newRowData.reff || selectedCode || '1001';
+    const isDeb = newRowData.tipe === 'Debet';
+
+    // Generate bank number if empty
+    let autoNo = newRowData.noBank.trim();
+    if (!autoNo) {
+      const prefix = isDeb ? 'BCA26' : 'KB26';
+      let maxN = 0;
+      items.forEach(it => {
+        if (it.noBank?.startsWith(prefix)) {
+          const num = parseInt(it.noBank.replace(prefix, ''), 10);
+          if (!isNaN(num) && num > maxN) maxN = num;
+        }
+      });
+      autoNo = `${prefix}${String(maxN + 1).padStart(4, '0')}`;
+    }
+
+    const parsedManualSaldo = newRowData.manualSaldo.trim() !== ''
+      ? parseFloat(newRowData.manualSaldo.replace(/[^0-9.]/g, ''))
+      : undefined;
+
+    const newItem: KasBankItem = {
+      id: `gl_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      tanggal: newRowData.tanggal,
+      noBank: autoNo,
+      reff: assignedCode,
+      keterangan: newRowData.keterangan.trim() || `Transaksi ${assignedCode}`,
+      tipe: newRowData.tipe,
+      nominal: nom,
+      debet: isDeb ? nom : 0,
+      kredit: !isDeb ? nom : 0,
+      manualSaldo: !isNaN(Number(parsedManualSaldo)) ? parsedManualSaldo : undefined,
+      note: newRowData.note.trim() || undefined
+    };
+
+    saveItems([...items, newItem]);
+    setShowAddModal(false);
+    setNewRowData({
+      tanggal: new Date().toISOString().split('T')[0],
+      noBank: '',
+      reff: selectedCode || '1001',
+      keterangan: '',
+      tipe: 'Debet',
+      nominal: '',
+      manualSaldo: '',
+      note: ''
+    });
+    setSyncFeedback('Transaksi baru berhasil ditambahkan!');
+    setTimeout(() => setSyncFeedback(null), 3000);
+  };
 
   // Export CSV
   const handleExportCsv = () => {
@@ -150,6 +345,13 @@ export default function GeneralLedgerModule() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+          >
+            <Plus size={13} />
+            + Tambah Baris Manual
+          </button>
           <button
             onClick={handleSyncFromKasBank}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
@@ -232,31 +434,190 @@ export default function GeneralLedgerModule() {
           </div>
         </div>
 
-        {/* ── TABEL FORMAT SKETSA: Tgl | No Bank | Ket | Debet | Kredit | Saldo | Note ── */}
+        {/* ── TABEL FORMAT SKETSA: Tgl | No Bank | Ket | Debet | Kredit | Saldo | Note | Aksi ── */}
         <div className="overflow-x-auto border-2 border-slate-800 rounded-xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-900 text-white font-black text-center divide-x divide-slate-700">
-                <th className="py-2 px-2.5 w-24 text-center">Tgl</th>
-                <th className="py-2 px-2.5 w-28 text-center">No Bank</th>
+                <th className="py-2 px-2.5 w-28 text-center whitespace-nowrap">Tgl</th>
+                <th className="py-2 px-2.5 w-28 text-center whitespace-nowrap">No Bank</th>
                 <th className="py-2 px-3 text-left">Ket</th>
-                <th className="py-2 px-3 w-32 text-right">Debet</th>
-                <th className="py-2 px-3 w-32 text-right">Kredit</th>
-                <th className="py-2 px-3 w-36 text-right">Saldo</th>
-                <th className="py-2 px-2.5 w-28 text-center">Note</th>
+                <th className="py-2 px-3 w-32 text-right whitespace-nowrap">Debet</th>
+                <th className="py-2 px-3 w-32 text-right whitespace-nowrap">Kredit</th>
+                <th className="py-2 px-3 w-36 text-right whitespace-nowrap">Saldo</th>
+                <th className="py-2 px-2.5 w-28 text-center whitespace-nowrap">Note</th>
+                <th className="py-2 px-2 w-20 text-center whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-300 font-medium text-slate-800">
               {rowsWithSaldo.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <AlertCircle size={28} className="mx-auto mb-1.5 opacity-50" />
-                    Belum ada transaksi untuk Kode GL ini. Klik <b>"Generate dari Kas Bank"</b> di atas jika data Kas Bank sudah ada.
+                    Belum ada transaksi untuk Kode GL ini. Klik <b>"Generate dari Kas Bank"</b> atau <b>"+ Tambah Baris Manual"</b> di atas.
                   </td>
                 </tr>
               ) : (
                 rowsWithSaldo.map((it, idx) => {
+                  const isEditing = editingId === it.id;
                   const isDebet = it.tipe === 'Debet';
+
+                  if (isEditing) {
+                    return (
+                      <tr key={it.id || idx} className="bg-amber-50 divide-x divide-amber-200">
+                        {/* Tanggal Edit */}
+                        <td className="p-1">
+                          <input
+                            type="date"
+                            value={editRowData.tanggal}
+                            onChange={e => setEditRowData(p => ({ ...p, tanggal: e.target.value }))}
+                            className="w-full bg-white border border-slate-300 rounded px-1.5 py-1 text-xs"
+                          />
+                        </td>
+
+                        {/* No Bank Edit */}
+                        <td className="p-1">
+                          <input
+                            type="text"
+                            value={editRowData.noBank}
+                            onChange={e => setEditRowData(p => ({ ...p, noBank: e.target.value }))}
+                            className="w-full bg-white border border-slate-300 rounded px-1.5 py-1 text-xs font-mono font-bold"
+                          />
+                        </td>
+
+                        {/* Ket Edit with Datalist Search Dropdown from Kas Bank */}
+                        <td className="p-1">
+                          <input
+                            type="text"
+                            list="kasbank-keterangan-list"
+                            value={editRowData.keterangan}
+                            onChange={e => setEditRowData(p => ({ ...p, keterangan: e.target.value }))}
+                            className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                            placeholder="Pilih atau ketik keterangan..."
+                          />
+                          <datalist id="kasbank-keterangan-list">
+                            {existingKeteranganList.map((ket, kIdx) => (
+                              <option key={kIdx} value={ket} />
+                            ))}
+                          </datalist>
+                        </td>
+
+                        {/* Debet Edit */}
+                        <td className="p-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="any"
+                              disabled={editRowData.tipe !== 'Debet'}
+                              value={editRowData.tipe === 'Debet' ? editRowData.nominal : ''}
+                              onChange={e => setEditRowData(p => ({ ...p, nominal: parseFloat(e.target.value) || 0 }))}
+                              placeholder="0"
+                              className={`w-full border rounded px-1.5 py-1 text-xs text-right font-mono font-semibold ${
+                                editRowData.tipe === 'Debet' ? 'bg-white border-emerald-300 text-emerald-800' : 'bg-slate-100 border-slate-200 text-slate-400'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEditRowData(p => ({ ...p, tipe: 'Debet' }))}
+                              className={`text-[9px] px-1 py-0.5 rounded font-bold ${
+                                editRowData.tipe === 'Debet' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                              }`}
+                              title="Set sebagai Debet (Masuk)"
+                            >
+                              D
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Kredit Edit */}
+                        <td className="p-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="any"
+                              disabled={editRowData.tipe !== 'Kredit'}
+                              value={editRowData.tipe === 'Kredit' ? editRowData.nominal : ''}
+                              onChange={e => setEditRowData(p => ({ ...p, nominal: parseFloat(e.target.value) || 0 }))}
+                              placeholder="0"
+                              className={`w-full border rounded px-1.5 py-1 text-xs text-right font-mono font-semibold ${
+                                editRowData.tipe === 'Kredit' ? 'bg-white border-rose-300 text-rose-800' : 'bg-slate-100 border-slate-200 text-slate-400'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEditRowData(p => ({ ...p, tipe: 'Kredit' }))}
+                              className={`text-[9px] px-1 py-0.5 rounded font-bold ${
+                                editRowData.tipe === 'Kredit' ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-600'
+                              }`}
+                              title="Set sebagai Kredit (Keluar)"
+                            >
+                              K
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Saldo Edit (Auto-sum atau Custom Override) */}
+                        <td className="p-1">
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="any"
+                              value={editRowData.manualSaldo !== undefined ? editRowData.manualSaldo : ''}
+                              onChange={e => setEditRowData(p => ({
+                                ...p,
+                                manualSaldo: e.target.value !== '' ? parseFloat(e.target.value) : undefined
+                              }))}
+                              placeholder="Auto sum"
+                              className="w-full bg-white border border-blue-400 rounded px-1.5 py-1 text-xs text-right font-mono font-bold text-blue-900"
+                              title="Ketik angka untuk override manual, atau kosongkan untuk kembali ke auto sum"
+                            />
+                            {editRowData.manualSaldo !== undefined && (
+                              <button
+                                type="button"
+                                onClick={() => setEditRowData(p => ({ ...p, manualSaldo: undefined }))}
+                                className="absolute left-1 top-1.5 text-slate-400 hover:text-slate-600"
+                                title="Kembalikan ke Auto Sum"
+                              >
+                                <RotateCcw size={10} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Note Edit */}
+                        <td className="p-1">
+                          <input
+                            type="text"
+                            value={editRowData.note || ''}
+                            onChange={e => setEditRowData(p => ({ ...p, note: e.target.value }))}
+                            className="w-full bg-white border border-slate-300 rounded px-1.5 py-1 text-xs"
+                            placeholder="Catatan..."
+                          />
+                        </td>
+
+                        {/* Actions Save / Cancel */}
+                        <td className="p-1 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(it.id)}
+                            className="p-1 text-emerald-600 hover:text-emerald-700 mr-1 cursor-pointer"
+                            title="Simpan"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            title="Batal"
+                          >
+                            <X size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   return (
                     <tr
                       key={it.id || idx}
@@ -289,14 +650,41 @@ export default function GeneralLedgerModule() {
                         {!isDebet ? formatRupiah(it.nominal) : '-'}
                       </td>
 
-                      {/* Saldo */}
+                      {/* Saldo with indicator if manual override */}
                       <td className="py-2 px-3 text-right font-mono font-black text-slate-900 whitespace-nowrap bg-blue-50/30">
-                        {formatRupiah(it.runningSaldoGL)}
+                        <span className="flex items-center justify-end gap-1">
+                          {formatRupiah(it.runningSaldoGL)}
+                          {it.isManualSaldo && (
+                            <span className="text-[9px] bg-amber-200 text-amber-900 px-1 rounded font-sans font-bold" title="Saldo ini diisi manual">
+                              Edit
+                            </span>
+                          )}
+                        </span>
                       </td>
 
                       {/* Note */}
                       <td className="py-2 px-2.5 text-center text-slate-500 italic text-[11px] truncate max-w-[120px]">
                         {it.note || '-'}
+                      </td>
+
+                      {/* Aksi Edit & Hapus */}
+                      <td className="py-1 px-1 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(it)}
+                          className="p-1 text-slate-500 hover:text-blue-600 transition-colors mr-1 cursor-pointer"
+                          title="Edit baris"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRow(it.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Hapus baris"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -320,7 +708,7 @@ export default function GeneralLedgerModule() {
                   <td className="py-2.5 px-3 text-right font-mono text-sm font-black text-slate-950 bg-amber-100/80 whitespace-nowrap">
                     {formatRupiah(finalSaldo)}
                   </td>
-                  <td className="py-2.5 px-2 text-center text-[11px] text-slate-500">
+                  <td colSpan={2} className="py-2.5 px-2 text-center text-[11px] text-slate-500">
                     {rowsWithSaldo.length} baris
                   </td>
                 </tr>
@@ -329,6 +717,148 @@ export default function GeneralLedgerModule() {
           </table>
         </div>
       </div>
+
+      {/* ── Modal Tambah Baris Manual ── */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900">Tambah Transaksi Manual ke General Ledger</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddNewRow} className="mt-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Tanggal</label>
+                  <input
+                    type="date"
+                    required
+                    value={newRowData.tanggal}
+                    onChange={e => setNewRowData(p => ({ ...p, tanggal: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Kode GL (Ref)</label>
+                  <select
+                    value={newRowData.reff}
+                    onChange={e => setNewRowData(p => ({ ...p, reff: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs font-mono font-bold focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    {allGLCodes.map(c => (
+                      <option key={c} value={c}>
+                        {c} {INITIAL_GL_ACCOUNTS[c] ? `— ${INITIAL_GL_ACCOUNTS[c].name}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">No Bank (Opsional)</label>
+                  <input
+                    type="text"
+                    placeholder="Auto generated"
+                    value={newRowData.noBank}
+                    onChange={e => setNewRowData(p => ({ ...p, noBank: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Tipe</label>
+                  <select
+                    value={newRowData.tipe}
+                    onChange={e => setNewRowData(p => ({ ...p, tipe: e.target.value as any }))}
+                    className={`w-full border rounded px-2.5 py-1 text-xs font-bold cursor-pointer ${
+                      newRowData.tipe === 'Debet' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-300'
+                    }`}
+                  >
+                    <option value="Debet">Debet (Masuk)</option>
+                    <option value="Kredit">Kredit (Keluar)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                  Keterangan Transaksi <span className="text-slate-400 font-normal">(Ada dropdown dari Kas Bank)</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  list="modal-kasbank-keterangan"
+                  placeholder="Ketik atau pilih dari daftar Kas Bank..."
+                  value={newRowData.keterangan}
+                  onChange={e => setNewRowData(p => ({ ...p, keterangan: e.target.value }))}
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs focus:ring-1 focus:ring-indigo-500"
+                />
+                <datalist id="modal-kasbank-keterangan">
+                  {existingKeteranganList.map((ket, kIdx) => (
+                    <option key={kIdx} value={ket} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Nominal (Rp)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0"
+                    value={newRowData.nominal}
+                    onChange={e => setNewRowData(p => ({ ...p, nominal: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs text-right font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                    Saldo Khusus <span className="text-slate-400 font-normal">(Opsional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Auto-sum jika kosong"
+                    value={newRowData.manualSaldo}
+                    onChange={e => setNewRowData(p => ({ ...p, manualSaldo: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs text-right font-mono text-blue-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Note (Catatan)</label>
+                <input
+                  type="text"
+                  placeholder="Catatan tambahan jika ada..."
+                  value={newRowData.note}
+                  onChange={e => setNewRowData(p => ({ ...p, note: e.target.value }))}
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-3 py-1.5 rounded text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer"
+                >
+                  Simpan Transaksi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

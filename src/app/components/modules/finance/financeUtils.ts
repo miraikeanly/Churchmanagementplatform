@@ -77,6 +77,7 @@ export interface KasBankItem {
   breakdownItems?: BreakdownSubItem[];
   isExpanded?: boolean;
   extraColumns?: Record<string, string | number>;
+  manualSaldo?: number; // Override custom balance if edited manually in GL
 }
 
 export interface CustomColumn {
