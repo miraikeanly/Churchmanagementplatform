@@ -24,40 +24,47 @@ export interface ParsedTransaction {
   breakdownItems?: BreakdownSubItem[];
 }
 
-// ─── Boilerplate lines to skip ───────────────────────────────────────────────
-const SKIP_PATTERNS: (string | RegExp)[] = [
-  'SALDO AWAL   :',
-  'MUTASI CR   :',
-  'MUTASI DB   :',
-  'SALDO AKHIR   :',
-  'Bersambung ke halaman',
-  'REKENING TAHAPAN',
-  'K C P D U T A',
-  'GEREJA BETHEL INDONESIA',
-  'PEJAGALAN',
-  'PENJARINGAN RT',
-  'JL I NO 35',
-  'JAKARTA 14450',
-  'INDONESIA',
-  'NO. REKENING',
-  'HALAMAN   :',
-  'PERIODE   :',
-  'MATA UANG',
-  'C A T A T A N',
-  'Apabila nasabah',
-  'Rekening ini sampai',
-  'telah menyetujui',
-  'Rekening ini.',
-  'BCA berhak setiap',
-  'Laporan Mutasi',
-  'TANGGAL   KETERANGAN',
-  /^\d+\s*\/\s*\d+$/,
-];
+// ─── Boilerplate checker for BCA statement headers, footers & pagination ────
+function isBoilerplateLine(rawLine: string): boolean {
+  const line = rawLine.replace(/\s+/g, ' ').trim();
+  const unspaced = rawLine.replace(/\s+/g, '').toLowerCase();
 
-function shouldSkip(line: string): boolean {
-  return SKIP_PATTERNS.some(p =>
-    typeof p === 'string' ? line.includes(p) : p.test(line)
-  );
+  if (rawLine.startsWith('--- PAGE')) return true;
+  if (/^\d+\s*\/\s*\d+$/.test(line)) return true;
+  if (line === '•') return true;
+
+  if (
+    unspaced.includes('apabilanasabah') ||
+    unspaced.includes('rekeninginisampai') ||
+    unspaced.includes('telahmenyetujui') ||
+    unspaced.includes('bcaberhaksetiap') ||
+    unspaced.includes('laporanmutasi') ||
+    unspaced.includes('catatan:') ||
+    unspaced.includes('rekeningtahapan') ||
+    unspaced.includes('tanggalketerangan') ||
+    unspaced.includes('bersambungkehalaman') ||
+    unspaced.includes('kcpduta') ||
+    unspaced.includes('gerejabethelindonesia') ||
+    unspaced.includes('pejagalan') ||
+    unspaced.includes('penjaringan') ||
+    unspaced.includes('jakartaindonesia') ||
+    unspaced.includes('jakarta14450') ||
+    unspaced.includes('indonesia') ||
+    unspaced.includes('jlino35') ||
+    unspaced.includes('no.rekening') ||
+    unspaced.includes('norekening') ||
+    unspaced.includes('halaman:') ||
+    unspaced.includes('periode:') ||
+    unspaced.includes('matauang') ||
+    unspaced.includes('mutasicr') ||
+    unspaced.includes('mutasidb') ||
+    unspaced.includes('saldoakhir') ||
+    unspaced.includes('saldoawal') ||
+    unspaced === 'rekeningini.'
+  ) {
+    return true;
+  }
+  return false;
 }
 
 // ─── Date prefix: DD/MM ──────────────────────────────────────────────────────
@@ -149,12 +156,12 @@ export function parseBcaPdfText(
   let cur: Entry | null = null;
 
   for (const line of lines) {
-    if (shouldSkip(line)) continue;
+    if (isBoilerplateLine(line)) continue;
 
     const dm = line.match(DATE_RE);
     if (dm) {
       if (cur) entries.push(cur);
-      cur = { rawDate: dm[1], lines: [line.slice(dm[0].length)] };
+      cur = { rawDate: dm[1], lines: [line.slice(dm[0].length).trim()] };
     } else if (cur) {
       cur.lines.push(line);
     }
