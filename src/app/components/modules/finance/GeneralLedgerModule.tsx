@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   RefreshCw, Download, Search, AlertCircle, CheckCircle2,
-  Plus, Edit2, Trash2, Check, X, RotateCcw
+  Plus, Edit2, Trash2, Check, X, RotateCcw, Link2, Type
 } from 'lucide-react';
 import { KasBankItem, INITIAL_GL_ACCOUNTS, GLAccount, formatRupiah } from './financeUtils';
 
@@ -32,7 +32,6 @@ export default function GeneralLedgerModule() {
   };
 
   const saveItems = (updated: KasBankItem[]) => {
-    // Sort items by date so running balance makes chronological sense
     const sorted = [...updated].sort((a, b) => {
       if (a.isOpeningBalance) return -1;
       if (b.isOpeningBalance) return 1;
@@ -74,7 +73,6 @@ export default function GeneralLedgerModule() {
     items.filter(it => !it.isOpeningBalance).forEach(it => {
       if (it.reff) codes.add(it.reff);
     });
-    // Add known common codes if list is empty
     if (codes.size === 0) {
       ['1001', '1004', '1007', '2001', '2010', 'OTA', 'DK', 'KPP', 'ABI', 'WBI', 'RBI', 'VSS', 'U'].forEach(c => codes.add(c));
     }
@@ -87,7 +85,6 @@ export default function GeneralLedgerModule() {
     });
   }, [items]);
 
-  // Set default selected code to first available if not set
   const [selectedCode, setSelectedCode] = useState<string>('');
 
   useEffect(() => {
@@ -98,13 +95,9 @@ export default function GeneralLedgerModule() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  // ── Unique Keterangan list from Kas Bank for Autocomplete/Dropdown Search ──
-  const existingKeteranganList = useMemo(() => {
-    const setKet = new Set<string>();
-    items.filter(it => !it.isOpeningBalance && it.keterangan).forEach(it => {
-      setKet.add(it.keterangan.trim());
-    });
-    return Array.from(setKet).sort();
+  // ── Master transaksi Kas Bank untuk dropdown pintar (Nama + Nominal + Tipe) ──
+  const kasBankReferenceItems = useMemo(() => {
+    return items.filter(it => !it.isOpeningBalance && it.keterangan);
   }, [items]);
 
   // ── Quick Inline Add Baris Baru di Bawah Tabel ──
@@ -115,6 +108,11 @@ export default function GeneralLedgerModule() {
   const [quickAddNominal, setQuickAddNominal] = useState('');
   const [quickAddManualSaldo, setQuickAddManualSaldo] = useState('');
   const [quickAddNote, setQuickAddNote] = useState('');
+
+  // Dropdown search state untuk Quick Add
+  const [quickDropdownOpen, setQuickDropdownOpen] = useState(false);
+  const [quickKetSearch, setQuickKetSearch] = useState('');
+  const quickRef = useRef<HTMLDivElement>(null);
 
   // ── Editing Row State ──
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -135,6 +133,11 @@ export default function GeneralLedgerModule() {
     note: ''
   });
 
+  // Dropdown search state untuk Edit Row
+  const [editDropdownOpen, setEditDropdownOpen] = useState(false);
+  const [editKetSearch, setEditKetSearch] = useState('');
+  const editRef = useRef<HTMLDivElement>(null);
+
   // ── Modal Tambah Baris State ──
   const [showAddModal, setShowAddModal] = useState(false);
   const [newRowData, setNewRowData] = useState({
@@ -147,6 +150,9 @@ export default function GeneralLedgerModule() {
     manualSaldo: '',
     note: ''
   });
+  const [modalDropdownOpen, setModalDropdownOpen] = useState(false);
+  const [modalKetSearch, setModalKetSearch] = useState('');
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // ── Reset Modal State (PIN: 0000) ──
   const [showResetModal, setShowResetModal] = useState(false);
@@ -159,6 +165,23 @@ export default function GeneralLedgerModule() {
       setNewRowData(prev => ({ ...prev, reff: selectedCode }));
     }
   }, [selectedCode]);
+
+  // Click outside listener to close custom dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        setEditDropdownOpen(false);
+      }
+      if (quickRef.current && !quickRef.current.contains(e.target as Node)) {
+        setQuickDropdownOpen(false);
+      }
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        setModalDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // ── Filtered items based on selected GL Code ──
   const filtered = useMemo(() => {
@@ -192,12 +215,10 @@ export default function GeneralLedgerModule() {
         running -= nom;
       }
 
-      // If user provided a manualSaldo override on this row, adopt it
       const currentSaldo = it.manualSaldo !== undefined && it.manualSaldo !== null && !isNaN(Number(it.manualSaldo))
         ? Number(it.manualSaldo)
         : running;
 
-      // Update running baseline if manual override was set
       if (it.manualSaldo !== undefined && it.manualSaldo !== null && !isNaN(Number(it.manualSaldo))) {
         running = Number(it.manualSaldo);
       }
@@ -231,6 +252,8 @@ export default function GeneralLedgerModule() {
       manualSaldo: item.manualSaldo,
       note: item.note || ''
     });
+    setEditKetSearch(item.keterangan || '');
+    setEditDropdownOpen(false);
   };
 
   const handleSaveEdit = (id: string) => {
@@ -273,6 +296,18 @@ export default function GeneralLedgerModule() {
       setSyncFeedback('Baris transaksi berhasil dihapus!');
       setTimeout(() => setSyncFeedback(null), 3000);
     }
+  };
+
+  const getNextNoBank = (tipe: 'Debet' | 'Kredit') => {
+    const prefix = tipe === 'Debet' ? 'BCA26' : 'KB26';
+    let maxN = 0;
+    items.forEach(it => {
+      if (it.noBank?.startsWith(prefix)) {
+        const num = parseInt(it.noBank.replace(prefix, ''), 10);
+        if (!isNaN(num) && num > maxN) maxN = num;
+      }
+    });
+    return `${prefix}${String(maxN + 1).padStart(4, '0')}`;
   };
 
   // ── Handler Reset Data dengan PIN 0000 ──
@@ -331,19 +366,6 @@ export default function GeneralLedgerModule() {
     setTimeout(() => setSyncFeedback(null), 4000);
   };
 
-  // ── Helper buat No Bank Auto ──
-  const getNextNoBank = (tipe: 'Debet' | 'Kredit') => {
-    const prefix = tipe === 'Debet' ? 'BCA26' : 'KB26';
-    let maxN = 0;
-    items.forEach(it => {
-      if (it.noBank?.startsWith(prefix)) {
-        const num = parseInt(it.noBank.replace(prefix, ''), 10);
-        if (!isNaN(num) && num > maxN) maxN = num;
-      }
-    });
-    return `${prefix}${String(maxN + 1).padStart(4, '0')}`;
-  };
-
   // ── Handler Quick Inline Add Baris Langsung di Bawah Tabel ──
   const handleQuickAddRow = (e: React.FormEvent) => {
     e.preventDefault();
@@ -377,6 +399,7 @@ export default function GeneralLedgerModule() {
 
     saveItems([...items, newItem]);
     setQuickAddKet('');
+    setQuickKetSearch('');
     setQuickAddNominal('');
     setQuickAddNoBank('');
     setQuickAddManualSaldo('');
@@ -428,6 +451,7 @@ export default function GeneralLedgerModule() {
       manualSaldo: '',
       note: ''
     });
+    setModalKetSearch('');
     setSyncFeedback(`Baris transaksi berhasil ditambahkan ke Kode ${assignedCode}!`);
     setTimeout(() => setSyncFeedback(null), 3000);
   };
@@ -571,7 +595,7 @@ export default function GeneralLedgerModule() {
               <tr className="bg-slate-900 text-white font-black text-center divide-x divide-slate-700">
                 <th className="py-2 px-2.5 w-28 text-center whitespace-nowrap">Tgl</th>
                 <th className="py-2 px-2.5 w-28 text-center whitespace-nowrap">No Bank</th>
-                <th className="py-2 px-3 text-left">Ket</th>
+                <th className="py-2 px-3 text-left min-w-[240px]">Ket</th>
                 <th className="py-2 px-3 w-32 text-right whitespace-nowrap">Debet</th>
                 <th className="py-2 px-3 w-32 text-right whitespace-nowrap">Kredit</th>
                 <th className="py-2 px-3 w-36 text-right whitespace-nowrap">Saldo</th>
@@ -593,6 +617,10 @@ export default function GeneralLedgerModule() {
                   const isDebet = it.tipe === 'Debet';
 
                   if (isEditing) {
+                    const filteredRefs = kasBankReferenceItems.filter(refIt =>
+                      refIt.keterangan.toLowerCase().includes(editKetSearch.toLowerCase())
+                    );
+
                     return (
                       <tr key={it.id || idx} className="bg-amber-50 divide-x divide-amber-200">
                         {/* Tanggal Edit */}
@@ -615,21 +643,88 @@ export default function GeneralLedgerModule() {
                           />
                         </td>
 
-                        {/* Ket Edit with Datalist Search Dropdown from Kas Bank */}
-                        <td className="p-1">
-                          <input
-                            type="text"
-                            list="kasbank-keterangan-list"
-                            value={editRowData.keterangan}
-                            onChange={e => setEditRowData(p => ({ ...p, keterangan: e.target.value }))}
-                            className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
-                            placeholder="Pilih atau ketik keterangan..."
-                          />
-                          <datalist id="kasbank-keterangan-list">
-                            {existingKeteranganList.map((ket, kIdx) => (
-                              <option key={kIdx} value={ket} />
-                            ))}
-                          </datalist>
+                        {/* Ket Edit with Smart Dropdown (Auto Sync Nominal + Tipe, OR Edit Text Only) */}
+                        <td className="p-1 relative" ref={editRef}>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={editKetSearch}
+                              onChange={e => {
+                                setEditKetSearch(e.target.value);
+                                setEditRowData(p => ({ ...p, keterangan: e.target.value }));
+                                setEditDropdownOpen(true);
+                              }}
+                              onFocus={() => setEditDropdownOpen(true)}
+                              className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs pr-6"
+                              placeholder="Cari transaksi kas bank / ketik bebas..."
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEditDropdownOpen(p => !p)}
+                              className="absolute right-1 top-1 text-slate-400 hover:text-slate-600 text-[10px]"
+                            >
+                              ▼
+                            </button>
+                          </div>
+
+                          {editDropdownOpen && (
+                            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-300 rounded-xl shadow-xl z-50 max-h-56 overflow-y-auto text-xs divide-y divide-slate-100">
+                              {/* Option: Hanya Ubah Keterangan Doang */}
+                              <div
+                                onClick={() => {
+                                  setEditRowData(p => ({ ...p, keterangan: editKetSearch }));
+                                  setEditDropdownOpen(false);
+                                }}
+                                className="p-2 hover:bg-amber-50 cursor-pointer bg-slate-50 flex items-center justify-between text-indigo-700 font-semibold"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <Type size={12} />
+                                  Gunakan teks ini: "{editKetSearch || '...'}" (Hanya ubah keterangan, nominal tetap)
+                                </span>
+                              </div>
+
+                              {/* Kas Bank Transaction Options (Syncs Keterangan + Nominal + Tipe) */}
+                              {filteredRefs.length === 0 ? (
+                                <div className="p-2 text-slate-400 text-center italic">Tidak ada saran dari Kas Bank</div>
+                              ) : (
+                                filteredRefs.map((refIt, rIdx) => (
+                                  <div
+                                    key={refIt.id || rIdx}
+                                    onClick={() => {
+                                      const isRefDeb = refIt.tipe === 'Debet';
+                                      const refNom = Number(refIt.nominal) || 0;
+                                      setEditRowData(p => ({
+                                        ...p,
+                                        keterangan: refIt.keterangan,
+                                        nominal: refNom,
+                                        tipe: refIt.tipe,
+                                        noBank: refIt.noBank || p.noBank
+                                      }));
+                                      setEditKetSearch(refIt.keterangan);
+                                      setEditDropdownOpen(false);
+                                    }}
+                                    className="p-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between gap-2"
+                                  >
+                                    <div className="truncate">
+                                      <span className="font-bold text-slate-800 block truncate">{refIt.keterangan}</span>
+                                      <span className="text-[10px] text-slate-400 font-mono">{refIt.noBank} • Ref: {refIt.reff}</span>
+                                    </div>
+                                    <div className="text-right whitespace-nowrap flex-shrink-0">
+                                      <span className={`text-[11px] font-bold font-mono block ${
+                                        refIt.tipe === 'Debet' ? 'text-emerald-700' : 'text-rose-700'
+                                      }`}>
+                                        {refIt.tipe === 'Debet' ? '+ ' : '- '}
+                                        {formatRupiah(refIt.nominal)}
+                                      </span>
+                                      <span className="text-[9px] text-blue-600 flex items-center justify-end gap-1">
+                                        <Link2 size={9} /> Auto-sinkron
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
                         </td>
 
                         {/* Debet Edit */}
@@ -847,7 +942,7 @@ export default function GeneralLedgerModule() {
           </table>
         </div>
 
-        {/* ── Form Langsung Tambah Baris Transaksi Baru (Untuk Data yang Kelewat / Tambahan) ── */}
+        {/* ── Form Langsung Tambah Baris Transaksi Baru dengan Dropdown Pintar ── */}
         <form onSubmit={handleQuickAddRow} className="bg-indigo-50/50 border-2 border-dashed border-indigo-300 rounded-xl p-3">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-indigo-200/60">
             <span className="text-xs font-black text-indigo-900 flex items-center gap-1.5 uppercase">
@@ -884,25 +979,83 @@ export default function GeneralLedgerModule() {
               />
             </div>
 
-            {/* Keterangan */}
-            <div className="col-span-2">
+            {/* Keterangan dengan Dropdown Kas Bank Pintar */}
+            <div className="col-span-2 relative" ref={quickRef}>
               <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
                 Keterangan Transaksi
               </label>
-              <input
-                type="text"
-                required
-                list="quick-add-ket-list"
-                placeholder="Pilih / ketik keterangan transaksi..."
-                value={quickAddKet}
-                onChange={e => setQuickAddKet(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
-              />
-              <datalist id="quick-add-ket-list">
-                {existingKeteranganList.map((k, idx) => (
-                  <option key={idx} value={k} />
-                ))}
-              </datalist>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="Ketik / cari nama transaksi..."
+                  value={quickKetSearch}
+                  onChange={e => {
+                    setQuickKetSearch(e.target.value);
+                    setQuickAddKet(e.target.value);
+                    setQuickDropdownOpen(true);
+                  }}
+                  onFocus={() => setQuickDropdownOpen(true)}
+                  className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs pr-6"
+                />
+                <button
+                  type="button"
+                  onClick={() => setQuickDropdownOpen(p => !p)}
+                  className="absolute right-1 top-1 text-slate-400 hover:text-slate-600 text-[10px]"
+                >
+                  ▼
+                </button>
+              </div>
+
+              {quickDropdownOpen && (
+                <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-slate-300 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto text-xs divide-y divide-slate-100">
+                  <div
+                    onClick={() => {
+                      setQuickAddKet(quickKetSearch);
+                      setQuickDropdownOpen(false);
+                    }}
+                    className="p-2 hover:bg-amber-50 cursor-pointer bg-slate-50 flex items-center justify-between text-indigo-700 font-semibold"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Type size={12} />
+                      Gunakan teks ini: "{quickKetSearch || '...'}" (Hanya keterangan)
+                    </span>
+                  </div>
+
+                  {kasBankReferenceItems
+                    .filter(r => r.keterangan.toLowerCase().includes(quickKetSearch.toLowerCase()))
+                    .map((refIt, rIdx) => (
+                      <div
+                        key={refIt.id || rIdx}
+                        onClick={() => {
+                          setQuickAddKet(refIt.keterangan);
+                          setQuickKetSearch(refIt.keterangan);
+                          setQuickAddNominal(String(refIt.nominal || ''));
+                          setQuickAddTipe(refIt.tipe);
+                          if (refIt.noBank) setQuickAddNoBank(refIt.noBank);
+                          setQuickDropdownOpen(false);
+                        }}
+                        className="p-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between gap-2"
+                      >
+                        <div className="truncate">
+                          <span className="font-bold text-slate-800 block truncate">{refIt.keterangan}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{refIt.noBank}</span>
+                        </div>
+                        <div className="text-right whitespace-nowrap flex-shrink-0">
+                          <span className={`text-[11px] font-bold font-mono block ${
+                            refIt.tipe === 'Debet' ? 'text-emerald-700' : 'text-rose-700'
+                          }`}>
+                            {refIt.tipe === 'Debet' ? '+ ' : '- '}
+                            {formatRupiah(refIt.nominal)}
+                          </span>
+                          <span className="text-[9px] text-blue-600 flex items-center justify-end gap-1">
+                            <Link2 size={9} /> Auto-sinkron nominal
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
 
             {/* Tipe */}
@@ -1012,24 +1165,86 @@ export default function GeneralLedgerModule() {
                 </div>
               </div>
 
-              <div>
+              {/* Keterangan dengan Dropdown Pintar */}
+              <div className="relative" ref={modalRef}>
                 <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
-                  Keterangan Transaksi <span className="text-slate-400 font-normal">(Ada dropdown dari Kas Bank)</span>
+                  Keterangan Transaksi
                 </label>
-                <input
-                  type="text"
-                  required
-                  list="modal-kasbank-keterangan"
-                  placeholder="Ketik atau pilih dari daftar Kas Bank..."
-                  value={newRowData.keterangan}
-                  onChange={e => setNewRowData(p => ({ ...p, keterangan: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs focus:ring-1 focus:ring-indigo-500"
-                />
-                <datalist id="modal-kasbank-keterangan">
-                  {existingKeteranganList.map((ket, kIdx) => (
-                    <option key={kIdx} value={ket} />
-                  ))}
-                </datalist>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ketik atau pilih transaksi dari Kas Bank..."
+                    value={modalKetSearch}
+                    onChange={e => {
+                      setModalKetSearch(e.target.value);
+                      setNewRowData(p => ({ ...p, keterangan: e.target.value }));
+                      setModalDropdownOpen(true);
+                    }}
+                    onFocus={() => setModalDropdownOpen(true)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs pr-6"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setModalDropdownOpen(p => !p)}
+                    className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600 text-[10px]"
+                  >
+                    ▼
+                  </button>
+                </div>
+
+                {modalDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-300 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto text-xs divide-y divide-slate-100">
+                    <div
+                      onClick={() => {
+                        setNewRowData(p => ({ ...p, keterangan: modalKetSearch }));
+                        setModalDropdownOpen(false);
+                      }}
+                      className="p-2 hover:bg-amber-50 cursor-pointer bg-slate-50 flex items-center justify-between text-indigo-700 font-semibold"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Type size={12} />
+                        Gunakan teks ini: "{modalKetSearch || '...'}" (Hanya keterangan)
+                      </span>
+                    </div>
+
+                    {kasBankReferenceItems
+                      .filter(r => r.keterangan.toLowerCase().includes(modalKetSearch.toLowerCase()))
+                      .map((refIt, rIdx) => (
+                        <div
+                          key={refIt.id || rIdx}
+                          onClick={() => {
+                            setNewRowData(p => ({
+                              ...p,
+                              keterangan: refIt.keterangan,
+                              nominal: String(refIt.nominal || ''),
+                              tipe: refIt.tipe,
+                              noBank: refIt.noBank || p.noBank
+                            }));
+                            setModalKetSearch(refIt.keterangan);
+                            setModalDropdownOpen(false);
+                          }}
+                          className="p-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between gap-2"
+                        >
+                          <div className="truncate">
+                            <span className="font-bold text-slate-800 block truncate">{refIt.keterangan}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{refIt.noBank}</span>
+                          </div>
+                          <div className="text-right whitespace-nowrap flex-shrink-0">
+                            <span className={`text-[11px] font-bold font-mono block ${
+                              refIt.tipe === 'Debet' ? 'text-emerald-700' : 'text-rose-700'
+                            }`}>
+                              {refIt.tipe === 'Debet' ? '+ ' : '- '}
+                              {formatRupiah(refIt.nominal)}
+                            </span>
+                            <span className="text-[9px] text-blue-600 flex items-center justify-end gap-1">
+                              <Link2 size={9} /> Auto-sinkron nominal
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
