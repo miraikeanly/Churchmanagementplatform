@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   RefreshCw, Download, Search, AlertCircle, CheckCircle2,
   Plus, Edit2, Trash2, Check, X, RotateCcw
@@ -32,9 +32,15 @@ export default function GeneralLedgerModule() {
   };
 
   const saveItems = (updated: KasBankItem[]) => {
-    setItems(updated);
+    // Sort items by date so running balance makes chronological sense
+    const sorted = [...updated].sort((a, b) => {
+      if (a.isOpeningBalance) return -1;
+      if (b.isOpeningBalance) return 1;
+      return (a.tanggal || '').localeCompare(b.tanggal || '');
+    });
+    setItems(sorted);
     try {
-      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(updated));
+      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(sorted));
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('kasbank-updated'));
       }
@@ -101,6 +107,15 @@ export default function GeneralLedgerModule() {
     return Array.from(setKet).sort();
   }, [items]);
 
+  // ── Quick Inline Add Baris Baru di Bawah Tabel ──
+  const [quickAddDate, setQuickAddDate] = useState(new Date().toISOString().split('T')[0]);
+  const [quickAddNoBank, setQuickAddNoBank] = useState('');
+  const [quickAddKet, setQuickAddKet] = useState('');
+  const [quickAddTipe, setQuickAddTipe] = useState<'Debet' | 'Kredit'>('Debet');
+  const [quickAddNominal, setQuickAddNominal] = useState('');
+  const [quickAddManualSaldo, setQuickAddManualSaldo] = useState('');
+  const [quickAddNote, setQuickAddNote] = useState('');
+
   // ── Editing Row State ──
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRowData, setEditRowData] = useState<{
@@ -120,7 +135,7 @@ export default function GeneralLedgerModule() {
     note: ''
   });
 
-  // ── Modal / Form Tambah Baris Manual State ──
+  // ── Modal Tambah Baris State ──
   const [showAddModal, setShowAddModal] = useState(false);
   const [newRowData, setNewRowData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
@@ -133,7 +148,6 @@ export default function GeneralLedgerModule() {
     note: ''
   });
 
-  // Keep newRowData.reff synced with selectedCode
   useEffect(() => {
     if (selectedCode) {
       setNewRowData(prev => ({ ...prev, reff: selectedCode }));
@@ -238,7 +252,7 @@ export default function GeneralLedgerModule() {
 
     saveItems(updated);
     setEditingId(null);
-    setSyncFeedback('Baris berhasil diperbarui!');
+    setSyncFeedback('Baris transaksi berhasil diperbarui!');
     setTimeout(() => setSyncFeedback(null), 3000);
   };
 
@@ -247,16 +261,70 @@ export default function GeneralLedgerModule() {
   };
 
   const handleDeleteRow = (id: string) => {
-    if (window.confirm('Hapus transaksi ini dari General Ledger?')) {
+    if (window.confirm('Hapus baris transaksi ini?')) {
       const updated = items.filter(it => it.id !== id);
       saveItems(updated);
-      setSyncFeedback('Baris berhasil dihapus!');
+      setSyncFeedback('Baris transaksi berhasil dihapus!');
       setTimeout(() => setSyncFeedback(null), 3000);
     }
   };
 
-  // ── Handler Tambah Baris Manual ──
-  const handleAddNewRow = (e: React.FormEvent) => {
+  // ── Helper buat No Bank Auto ──
+  const getNextNoBank = (tipe: 'Debet' | 'Kredit') => {
+    const prefix = tipe === 'Debet' ? 'BCA26' : 'KB26';
+    let maxN = 0;
+    items.forEach(it => {
+      if (it.noBank?.startsWith(prefix)) {
+        const num = parseInt(it.noBank.replace(prefix, ''), 10);
+        if (!isNaN(num) && num > maxN) maxN = num;
+      }
+    });
+    return `${prefix}${String(maxN + 1).padStart(4, '0')}`;
+  };
+
+  // ── Handler Quick Inline Add Baris Langsung di Bawah Tabel ──
+  const handleQuickAddRow = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nom = parseFloat(quickAddNominal.replace(/[^0-9.]/g, '')) || 0;
+    if (nom <= 0 && !quickAddKet.trim()) {
+      alert('Mohon isi Keterangan dan Nominal transaksi yang ingin ditambahkan!');
+      return;
+    }
+
+    const assignedCode = selectedCode || '1001';
+    const isDeb = quickAddTipe === 'Debet';
+    const autoNo = quickAddNoBank.trim() || getNextNoBank(quickAddTipe);
+
+    const parsedManualSaldo = quickAddManualSaldo.trim() !== ''
+      ? parseFloat(quickAddManualSaldo.replace(/[^0-9.]/g, ''))
+      : undefined;
+
+    const newItem: KasBankItem = {
+      id: `gl_row_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      tanggal: quickAddDate,
+      noBank: autoNo,
+      reff: assignedCode,
+      keterangan: quickAddKet.trim() || `Transaksi ${assignedCode}`,
+      tipe: quickAddTipe,
+      nominal: nom,
+      debet: isDeb ? nom : 0,
+      kredit: !isDeb ? nom : 0,
+      manualSaldo: !isNaN(Number(parsedManualSaldo)) ? parsedManualSaldo : undefined,
+      note: quickAddNote.trim() || undefined
+    };
+
+    saveItems([...items, newItem]);
+    setQuickAddKet('');
+    setQuickAddNominal('');
+    setQuickAddNoBank('');
+    setQuickAddManualSaldo('');
+    setQuickAddNote('');
+    setSyncFeedback(`Baris transaksi baru berhasil ditambahkan ke Kode ${assignedCode}!`);
+    setTimeout(() => setSyncFeedback(null), 3000);
+  };
+
+  // ── Handler Tambah Baris Manual (Modal) ──
+  const handleAddNewRowModal = (e: React.FormEvent) => {
     e.preventDefault();
     const nom = parseFloat(newRowData.nominal.replace(/[^0-9.]/g, '')) || 0;
     if (nom <= 0 && !newRowData.keterangan.trim()) {
@@ -266,20 +334,7 @@ export default function GeneralLedgerModule() {
 
     const assignedCode = newRowData.reff || selectedCode || '1001';
     const isDeb = newRowData.tipe === 'Debet';
-
-    // Generate bank number if empty
-    let autoNo = newRowData.noBank.trim();
-    if (!autoNo) {
-      const prefix = isDeb ? 'BCA26' : 'KB26';
-      let maxN = 0;
-      items.forEach(it => {
-        if (it.noBank?.startsWith(prefix)) {
-          const num = parseInt(it.noBank.replace(prefix, ''), 10);
-          if (!isNaN(num) && num > maxN) maxN = num;
-        }
-      });
-      autoNo = `${prefix}${String(maxN + 1).padStart(4, '0')}`;
-    }
+    const autoNo = newRowData.noBank.trim() || getNextNoBank(newRowData.tipe);
 
     const parsedManualSaldo = newRowData.manualSaldo.trim() !== ''
       ? parseFloat(newRowData.manualSaldo.replace(/[^0-9.]/g, ''))
@@ -311,7 +366,7 @@ export default function GeneralLedgerModule() {
       manualSaldo: '',
       note: ''
     });
-    setSyncFeedback('Transaksi baru berhasil ditambahkan!');
+    setSyncFeedback(`Baris transaksi berhasil ditambahkan ke Kode ${assignedCode}!`);
     setTimeout(() => setSyncFeedback(null), 3000);
   };
 
@@ -454,7 +509,7 @@ export default function GeneralLedgerModule() {
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
                     <AlertCircle size={28} className="mx-auto mb-1.5 opacity-50" />
-                    Belum ada transaksi untuk Kode GL ini. Klik <b>"Generate dari Kas Bank"</b> atau <b>"+ Tambah Baris Manual"</b> di atas.
+                    Belum ada transaksi untuk Kode GL ini. Tambahkan data di form bawah atau klik <b>"+ Tambah Baris Manual"</b> di atas.
                   </td>
                 </tr>
               ) : (
@@ -716,6 +771,105 @@ export default function GeneralLedgerModule() {
             )}
           </table>
         </div>
+
+        {/* ── Form Langsung Tambah Baris Transaksi Baru (Untuk Data yang Kelewat / Tambahan) ── */}
+        <form onSubmit={handleQuickAddRow} className="bg-indigo-50/50 border-2 border-dashed border-indigo-300 rounded-xl p-3">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-indigo-200/60">
+            <span className="text-xs font-black text-indigo-900 flex items-center gap-1.5 uppercase">
+              <Plus size={14} className="text-indigo-600" />
+              Tambah Baris Transaksi ke Kode GL: <span className="bg-indigo-600 text-white px-2 py-0.5 rounded font-mono text-xs">{selectedCode || 'Semua'}</span>
+            </span>
+            <span className="text-[10px] text-slate-500 italic">
+              Input data yang kelewat / tambahan transaksi tanpa perlu buka modal
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 items-end">
+            {/* Tgl */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Tgl</label>
+              <input
+                type="date"
+                required
+                value={quickAddDate}
+                onChange={e => setQuickAddDate(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+              />
+            </div>
+
+            {/* No Bank */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">No Bank</label>
+              <input
+                type="text"
+                placeholder={getNextNoBank(quickAddTipe)}
+                value={quickAddNoBank}
+                onChange={e => setQuickAddNoBank(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs font-mono font-semibold"
+              />
+            </div>
+
+            {/* Keterangan */}
+            <div className="col-span-2">
+              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                Keterangan Transaksi
+              </label>
+              <input
+                type="text"
+                required
+                list="quick-add-ket-list"
+                placeholder="Pilih / ketik keterangan transaksi..."
+                value={quickAddKet}
+                onChange={e => setQuickAddKet(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+              />
+              <datalist id="quick-add-ket-list">
+                {existingKeteranganList.map((k, idx) => (
+                  <option key={idx} value={k} />
+                ))}
+              </datalist>
+            </div>
+
+            {/* Tipe */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Tipe</label>
+              <select
+                value={quickAddTipe}
+                onChange={e => setQuickAddTipe(e.target.value as any)}
+                className={`w-full border rounded px-1.5 py-1 text-xs font-bold cursor-pointer ${
+                  quickAddTipe === 'Debet' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-300'
+                }`}
+              >
+                <option value="Debet">Debet (+)</option>
+                <option value="Kredit">Kredit (-)</option>
+              </select>
+            </div>
+
+            {/* Nominal */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Nominal (Rp)</label>
+              <input
+                type="text"
+                required
+                placeholder="0"
+                value={quickAddNominal}
+                onChange={e => setQuickAddNominal(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-right font-mono font-bold"
+              />
+            </div>
+
+            {/* Tombol Tambahkan */}
+            <div>
+              <button
+                type="submit"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs flex items-center justify-center gap-1 transition-all cursor-pointer"
+              >
+                <Plus size={13} />
+                + Tambah Baris
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
 
       {/* ── Modal Tambah Baris Manual ── */}
@@ -729,7 +883,7 @@ export default function GeneralLedgerModule() {
               </button>
             </div>
 
-            <form onSubmit={handleAddNewRow} className="mt-4 space-y-3">
+            <form onSubmit={handleAddNewRowModal} className="mt-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Tanggal</label>
