@@ -46,22 +46,49 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     delete (headers as any)['Content-Type'];
   }
 
-  const response = await fetch(fullUrl, {
-    ...options,
-    headers,
-    credentials: isLocalOrNative ? 'include' : 'same-origin',
-  });
+  const isGet = !options.method || options.method.toUpperCase() === 'GET';
+  const maxAttempts = isGet ? 3 : 1;
+  let response: Response | null = null;
+  let lastFetchError: any = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      response = await fetch(fullUrl, {
+        ...options,
+        headers,
+        credentials: isLocalOrNative ? 'include' : 'same-origin',
+      });
+      // Retry transient 502/503/504 on GET (e.g., Vercel cold start / network hiccup)
+      if (isGet && (response.status === 502 || response.status === 503 || response.status === 504) && attempt < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, attempt === 0 ? 500 : 1200));
+        continue;
+      }
+      break;
+    } catch (err) {
+      lastFetchError = err;
+      if (attempt < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, attempt === 0 ? 500 : 1200));
+        continue;
+      }
+      throw lastFetchError;
+    }
+  }
+
+  if (!response) {
+    throw lastFetchError || new Error('Network error');
+  }
 
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
     const isPublicEndpoint = url.includes('/api/content') || url.includes('custom_form');
     if (response.status === 401 && !isPublicEndpoint) {
-      // Unauthorized - session might be expired
-      // AuthContext will handle state, but we could trigger an event here
+      // Unauthorized - session expired
       window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
-    throw new Error(data.error || `HTTP error ${response.status}`);
+    const err: any = new Error(data.error || `HTTP error ${response.status}`);
+    err.status = response.status;
+    throw err;
   }
 
   return data;

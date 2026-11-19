@@ -60,7 +60,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         safeLocalStorage.removeItem('gjt_session_token');
         setUser(null);
       }
-    } catch (e) {
+    } catch (e: any) {
+      // If backend explicitly says 401 Unauthorized, clear stale session immediately so dashboard never freezes at 0
+      if (e?.status === 401) {
+        safeLocalStorage.removeItem(AUTH_USER_KEY);
+        safeLocalStorage.removeItem('gjt_session_token');
+        setUser(null);
+      }
       // Network hiccup should not log out user immediately if offline/slow
     } finally {
       setLoading(false);
@@ -69,6 +75,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshSession();
+
+    const handleUnauthorized = () => {
+      safeLocalStorage.removeItem(AUTH_USER_KEY);
+      safeLocalStorage.removeItem('gjt_session_token');
+      setUser(null);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSession();
+      }
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
