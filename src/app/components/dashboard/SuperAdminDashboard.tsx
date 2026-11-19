@@ -30,8 +30,7 @@ import {
   LayoutDashboard, Users, ClipboardCheck, CalendarCheck, Group,
   Wallet, Package, HandHelping, Megaphone, ShieldCheck, Menu, X,
   LogOut, ChevronRight, ChevronDown, Cake, Gift, Images, UserRound, Activity,
-  HeartHandshake, Heart, Phone, MessageSquare, Building2, BookOpen, Layers, Coins, FileText
-} from 'lucide-react';
+  HeartHandshake, Heart, Phone, MessageSquare, Building2, BookOpen, Layers, Coins, FileText, Sun, Moon, Monitor, Sparkles, Sliders, Eye} from 'lucide-react';
 
 
 // ── Birthday & Anniversary helpers ───────────────────────────────────────────
@@ -150,6 +149,61 @@ export default function SuperAdminDashboard() {
   };
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  // ── Gen-Z Dark Mode & Appearance Preferences ─────────────────────────
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'dim' | 'auto'>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gjt_theme_prefs') || '{}');
+      if (['light', 'dark', 'dim', 'auto'].includes(saved.themeMode)) return saved.themeMode;
+    } catch {}
+    return 'light';
+  });
+  const [brightness, setBrightness] = useState<number>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gjt_theme_prefs') || '{}');
+      if (typeof saved.brightness === 'number') return saved.brightness;
+    } catch {}
+    return 100;
+  });
+  const [warmMode, setWarmMode] = useState<boolean>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gjt_theme_prefs') || '{}');
+      return Boolean(saved.warmMode);
+    } catch {}
+    return false;
+  });
+  const [showAppearanceModal, setShowAppearanceModal] = useState(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const resolveEffective = () => {
+      if (themeMode === 'auto') {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      return themeMode;
+    };
+    const apply = () => {
+      const eff = resolveEffective();
+      root.classList.remove('theme-light', 'theme-dark', 'theme-dim');
+      root.classList.add(`theme-${eff}`);
+      root.classList.toggle('theme-warm', warmMode);
+      root.style.setProperty('--app-brightness', String(brightness / 100));
+    };
+    apply();
+    try {
+      localStorage.setItem('gjt_theme_prefs', JSON.stringify({ themeMode, brightness, warmMode }));
+    } catch {}
+    const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    if (mq && themeMode === 'auto') {
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+  }, [themeMode, brightness, warmMode]);
+
+  const isDarkActive = themeMode === 'dark' || themeMode === 'dim' || (themeMode === 'auto' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  const toggleQuickDark = () => {
+    setThemeMode(prev => (prev === 'dark' || prev === 'dim') ? 'light' : 'dark');
+  };
   const [stats, setStats] = useState({
     totalMembers: 0,
     totalKomsel: 0,
@@ -409,14 +463,27 @@ export default function SuperAdminDashboard() {
           })}
         </nav>
 
-        {/* User + logout */}
-        <div className={`border-t border-white/10 p-3 ${(!sidebarOpen && !mobileDrawerOpen) ? 'md:flex md:flex-col md:items-center' : ''}`}>
-          {(sidebarOpen || mobileDrawerOpen) && (
-            <div className="mb-3 px-2">
-              <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
-              <p className="text-xs text-blue-300 truncate">{isSuperAdmin ? 'Super Admin' : 'Admin'}</p>
+        {/* User + Appearance Settings + logout */}
+        <div className={`border-t border-white/10 p-3 space-y-1.5 ${(!sidebarOpen && !mobileDrawerOpen) ? 'md:flex md:flex-col md:items-center' : ''}`}>
+          <button
+            type="button"
+            onClick={() => setShowAppearanceModal(true)}
+            title="Pengaturan Profil & Tampilan (Dark Mode)"
+            className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/15 active:scale-[0.98] transition-all cursor-pointer text-left group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+              {(user?.name || 'A').slice(0, 2).toUpperCase()}
             </div>
-          )}
+            {(sidebarOpen || mobileDrawerOpen) && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate leading-tight">{user?.name}</p>
+                <p className="text-[11px] text-blue-300 truncate flex items-center gap-1 mt-0.5">
+                  <Sliders size={10} />
+                  <span>{isDarkActive ? 'Dark Mode' : 'Light Mode'} • Setting</span>
+                </p>
+              </div>
+            )}
+          </button>
           <button
             onClick={handleSignOut}
             title={(!sidebarOpen && !mobileDrawerOpen) ? 'Keluar' : undefined}
@@ -455,6 +522,34 @@ export default function SuperAdminDashboard() {
                 {stats.pendingApprovals} Pending
               </button>
             )}
+
+            {/* Animated Gen-Z Dark Mode Quick Toggle */}
+            <button
+              type="button"
+              onClick={toggleQuickDark}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-all active:scale-90 cursor-pointer"
+              title={isDarkActive ? 'Ganti ke Mode Terang' : 'Ganti ke Dark Mode'}
+              aria-label="Toggle Dark Mode"
+            >
+              <span key={isDarkActive ? 'moon' : 'sun'} className="animate-theme-pop inline-flex items-center justify-center">
+                {isDarkActive ? (
+                  <Moon size={15} className="text-indigo-600" />
+                ) : (
+                  <Sun size={15} className="text-amber-500" />
+                )}
+              </span>
+              <span className="hidden lg:inline">{isDarkActive ? 'Gelap' : 'Terang'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowAppearanceModal(true)}
+              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 shadow-2xs transition-all active:scale-90 cursor-pointer"
+              title="Pengaturan Tampilan, Kecerahan & Mode Nyaman Mata"
+              aria-label="Pengaturan Tampilan"
+            >
+              <Sliders size={15} />
+            </button>
 
             {/* Admin Internal Chat & Task Toggle Button */}
             <button
@@ -828,6 +923,146 @@ export default function SuperAdminDashboard() {
         pendingTaskCountChange={handlePendingTaskCountChange}
         unreadCountChange={handleUnreadChatCountChange}
       />
+
+      {/* ── Pengaturan Profil & Tampilan (Gen-Z Dark Mode + Brightness + Eye Care) ── */}
+      {showAppearanceModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setShowAppearanceModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 animate-theme-pop"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 px-6 py-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center font-black text-base">
+                  {(user?.name || 'A').slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold leading-tight">{user?.name || 'Admin'}</h3>
+                  <p className="text-xs text-white/80">{isSuperAdmin ? 'Super Admin' : 'Admin'} • Pengaturan Tampilan</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAppearanceModal(false)}
+                className="p-1.5 rounded-xl bg-white/15 hover:bg-white/25 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* Theme Mode Selector */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">
+                  Mode Tampilan
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    { id: 'light', label: 'Terang', desc: 'Cerah & bersih', icon: Sun, color: 'text-amber-500' },
+                    { id: 'dark', label: 'Dark Mode', desc: 'Gelap ala Gen-Z', icon: Moon, color: 'text-indigo-600' },
+                    { id: 'dim', label: 'Redup (Dim)', desc: 'Kontras lembut', icon: Sparkles, color: 'text-purple-600' },
+                    { id: 'auto', label: 'Otomatis', desc: 'Ikuti device', icon: Monitor, color: 'text-blue-600' },
+                  ].map(opt => {
+                    const IconComp = opt.icon;
+                    const active = themeMode === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setThemeMode(opt.id as any)}
+                        className={`flex items-center gap-3 p-3 rounded-2xl border-2 text-left transition-all active:scale-95 cursor-pointer ${
+                          active
+                            ? 'border-indigo-600 bg-indigo-50/70 shadow-xs'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${active ? 'bg-indigo-600 text-white animate-theme-pop' : 'bg-slate-100 ' + opt.color}`}>
+                          <IconComp size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900">{opt.label}</div>
+                          <div className="text-[10px] text-slate-500 truncate">{opt.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Brightness Slider */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Sun size={14} className="text-amber-500" />
+                    Kecerahan Layar
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg">
+                      {brightness}%
+                    </span>
+                    {brightness !== 100 && (
+                      <button
+                        type="button"
+                        onClick={() => setBrightness(100)}
+                        className="text-[10px] font-semibold text-slate-500 hover:text-indigo-600 underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={80}
+                  max={115}
+                  step={1}
+                  value={brightness}
+                  onChange={e => setBrightness(Number(e.target.value))}
+                  className="w-full accent-indigo-600 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                  <span>Lebih Redup (80%)</span>
+                  <span>Normal (100%)</span>
+                  <span>Lebih Terang (115%)</span>
+                </div>
+              </div>
+
+              {/* Warm Eye-Comfort Toggle */}
+              <div
+                onClick={() => setWarmMode(prev => !prev)}
+                className="flex items-center justify-between p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 cursor-pointer hover:bg-amber-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <Eye size={17} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900">Mode Nyaman Mata (Warm)</div>
+                    <div className="text-[11px] text-slate-500">Kurangi cahaya biru agar mata tidak cepat lelah</div>
+                  </div>
+                </div>
+                <div className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-300 ${warmMode ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                  <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-300 ${warmMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowAppearanceModal(false)}
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+              >
+                Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

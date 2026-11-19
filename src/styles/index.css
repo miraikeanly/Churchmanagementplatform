@@ -17,3 +17,61 @@
   100% { background-position: 100% 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .hero-aurora { animation: none; } }
+
+/* ─── Gen-Z Dark Mode, Dim Mode, Warm Eye-Care & Brightness ─── */
+html {
+  --app-brightness: 1;
+  transition: filter 0.35s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.35s ease;
+}
+
+html.theme-light {
+  filter: brightness(var(--app-brightness, 1));
+}
+
+html.theme-light.theme-warm {
+  filter: brightness(var(--app-brightness, 1)) sepia(0.14) saturate(0.95);
+}
+
+html.theme-dark {
+  background-color: #0b0f19;
+  filter: invert(0.92) hue-rotate(180deg) brightness(var(--app-brightness, 1));
+}
+
+html.theme-dark.theme-warm {
+  background-color: #0f0e0c;
+  filter: invert(0.92) hue-rotate(180deg) brightness(var(--app-brightness, 1)) sepia(0.14);
+}
+
+html.theme-dim {
+  background-color: #141923;
+  filter: invert(0.86) hue-rotate(180deg) contrast(0.94) brightness(var(--app-brightness, 1));
+}
+
+html.theme-dim.theme-warm {
+  background-color: #181612;
+  filter: invert(0.86) hue-rotate(180deg) contrast(0.94) brightness(var(--app-brightness, 1)) sepia(0.16);
+}
+
+/* Keep photos, avatars, videos, canvases, and explicit badges true-to-color in dark/dim mode */
+html.theme-dark img,
+html.theme-dark video,
+html.theme-dark canvas,
+html.theme-dark picture,
+html.theme-dark .no-dark-invert,
+html.theme-dim img,
+html.theme-dim video,
+html.theme-dim canvas,
+html.theme-dim picture,
+html.theme-dim .no-dark-invert {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+@keyframes theme-icon-pop {
+  0% { transform: scale(0.6) rotate(-45deg); opacity: 0.4; }
+  60% { transform: scale(1.18) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.animate-theme-pop {
+  animation: theme-icon-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
