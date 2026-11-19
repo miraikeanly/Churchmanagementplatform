@@ -616,15 +616,22 @@ function sundaysInMonth(year: number, month: number): string[] {
   return dates;
 }
 
-// Returns true if member should appear in Ibadah Raya (Ibadah Umum) attendance
+// Returns true ONLY for active members explicitly linked to Ibadah Raya / Ibadah Umum ('IR')
 function isIbadahRayaMember(m: Member): boolean {
-  const statusLower = (m.status || 'active').toLowerCase();
-  if (statusLower === 'inactive' || statusLower === 'visitor' || statusLower === 'visitors' || statusLower === 'tamu') return false;
+  const statusLower = (m.status || 'active').toLowerCase().trim();
+  if (
+    statusLower === 'inactive' ||
+    statusLower === 'tidak aktif' ||
+    statusLower === 'non-aktif' ||
+    statusLower === 'nonaktif' ||
+    statusLower === 'visitor' ||
+    statusLower === 'visitors' ||
+    statusLower === 'tamu'
+  ) {
+    return false;
+  }
   const ibadah = m.ibadah || [];
-  // If member has no ibadah specified → include (not yet categorized)
-  // If member has ibadah specified but IR is not in list → exclude
-  if (ibadah.length > 0 && !ibadah.includes('IR')) return false;
-  return true;
+  return ibadah.includes('IR');
 }
 
 // Inactive rule: only inactive if absent in 3 consecutive distinct weeks of general service sessions
@@ -3762,10 +3769,45 @@ function ReportSummary({
   const currentWeek = useMemo(() => getWeekInfo(selectedDate), [selectedDate]);
   const sundays = useMemo(() => sundaysInMonth(year, month), [year, month]);
 
+  const [reportStatusFilter, setReportStatusFilter] = useState<'absen_hari_h' | 'jarang_aktif' | 'hadir_hari_h' | 'tidak_aktif'>('absen_hari_h');
+  const [brokenPhotoIds, setBrokenPhotoIds] = useState<Set<string>>(new Set());
+
   const inactiveMembers = useMemo(() => {
     const ids = getInactiveMembers(members, sessions);
     return members.filter(m => ids.includes(m.id));
   }, [members, sessions]);
+
+  const latestGeneralSession = useMemo(() => {
+    const gen = sessions
+      .filter(s => s.serviceType === SERVICE_TYPE)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    return gen[0] || null;
+  }, [sessions]);
+
+  const activeIRMembers = useMemo(() => members.filter(isIbadahRayaMember), [members]);
+
+  const statusFilteredList = useMemo(() => {
+    const latestPresentSet = new Set(latestGeneralSession?.presentIds || []);
+    if (reportStatusFilter === 'absen_hari_h') {
+      return activeIRMembers
+        .filter(m => !latestPresentSet.has(m.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (reportStatusFilter === 'hadir_hari_h') {
+      return activeIRMembers
+        .filter(m => latestPresentSet.has(m.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (reportStatusFilter === 'tidak_aktif') {
+      return members
+        .filter(m => {
+          const st = (m.status || '').toLowerCase().trim();
+          return st === 'inactive' || st === 'tidak aktif' || st === 'non-aktif' || st === 'nonaktif' || st === 'visitor' || st === 'visitors' || st === 'tamu';
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return [...inactiveMembers].sort((a, b) => a.name.localeCompare(b.name));
+  }, [reportStatusFilter, activeIRMembers, latestGeneralSession, members, inactiveMembers]);
 
   // Navigate weeks
   const prevWeek = () => {
@@ -4311,26 +4353,81 @@ function ReportSummary({
         </div>
       </div>
 
-      {/* ─── Inactive Members Alert (Laporan Absensi) ─── */}
-      {inactiveMembers.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 shadow-xs">
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0 text-amber-700">
-                <AlertTriangle size={18} />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-amber-900">
-                  Jemaat Jarang Aktif ({inactiveMembers.length} orang)
-                </p>
-                <p className="text-xs text-amber-700">
-                  Tidak hadir dalam 3 sesi ibadah umum berturut-turut. Hubungi untuk pelayanan penggembalaan:
-                </p>
-              </div>
+      {/* ─── Daftar Status Jemaat (Laporan Absensi + Dropdown Filter) ─── */}
+      <div className={`border rounded-2xl p-4 sm:p-5 shadow-xs ${
+        reportStatusFilter === 'hadir_hari_h'
+          ? 'bg-emerald-50/70 border-emerald-200'
+          : reportStatusFilter === 'tidak_aktif'
+          ? 'bg-slate-50 border-slate-200'
+          : 'bg-amber-50 border-amber-200'
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+              reportStatusFilter === 'hadir_hari_h'
+                ? 'bg-emerald-100 text-emerald-700'
+                : reportStatusFilter === 'tidak_aktif'
+                ? 'bg-slate-200 text-slate-700'
+                : 'bg-amber-100 text-amber-700'
+            }`}>
+              <AlertTriangle size={18} />
+            </div>
+            <div>
+              <p className={`text-sm font-bold ${
+                reportStatusFilter === 'hadir_hari_h'
+                  ? 'text-emerald-900'
+                  : reportStatusFilter === 'tidak_aktif'
+                  ? 'text-slate-900'
+                  : 'text-amber-900'
+              }`}>
+                {reportStatusFilter === 'absen_hari_h' && `Jemaat Aktif Absen Hari H (${statusFilteredList.length} orang)`}
+                {reportStatusFilter === 'jarang_aktif' && `Jemaat Jarang Aktif (${statusFilteredList.length} orang)`}
+                {reportStatusFilter === 'hadir_hari_h' && `Jemaat Aktif Hadir Hari H (${statusFilteredList.length} orang)`}
+                {reportStatusFilter === 'tidak_aktif' && `Jemaat Tidak Aktif / Visitor (${statusFilteredList.length} orang)`}
+              </p>
+              <p className={`text-xs ${
+                reportStatusFilter === 'hadir_hari_h'
+                  ? 'text-emerald-700'
+                  : reportStatusFilter === 'tidak_aktif'
+                  ? 'text-slate-600'
+                  : 'text-amber-700'
+              }`}>
+                {reportStatusFilter === 'absen_hari_h' && (
+                  latestGeneralSession
+                    ? `Jemaat aktif Ibadah Umum yang tidak hadir pada sesi ${latestGeneralSession.date}.`
+                    : 'Jemaat aktif Ibadah Umum yang belum hadir pada sesi terbaru.'
+                )}
+                {reportStatusFilter === 'jarang_aktif' && 'Jemaat aktif Ibadah Umum yang tidak hadir 3 sesi berturut-turut.'}
+                {reportStatusFilter === 'hadir_hari_h' && (
+                  latestGeneralSession
+                    ? `Jemaat aktif Ibadah Umum yang hadir pada sesi ${latestGeneralSession.date}.`
+                    : 'Jemaat aktif Ibadah Umum yang hadir pada sesi terbaru.'
+                )}
+                {reportStatusFilter === 'tidak_aktif' && 'Daftar jemaat berstatus tidak aktif atau visitor (tidak masuk hitungan absensi rutin).'}
+              </p>
             </div>
           </div>
+
+          {/* Dropdown Filter Lengkap */}
+          <select
+            value={reportStatusFilter}
+            onChange={e => setReportStatusFilter(e.target.value as any)}
+            className="px-3 py-2 text-xs font-bold bg-white border border-gray-300 rounded-xl text-gray-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          >
+            <option value="absen_hari_h">Jemaat Absen (Hari H - Aktif IR)</option>
+            <option value="hadir_hari_h">Jemaat Hadir (Hari H - Aktif IR)</option>
+            <option value="jarang_aktif">Jemaat Jarang Aktif (3x Absen)</option>
+            <option value="tidak_aktif">Jemaat Tidak Aktif / Visitor</option>
+          </select>
+        </div>
+
+        {statusFilteredList.length === 0 ? (
+          <div className="py-6 text-center text-xs text-gray-500 bg-white/70 rounded-xl border border-dashed border-gray-200">
+            Tidak ada jemaat pada kategori ini.
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto pr-1">
-            {inactiveMembers.map(m => {
+            {statusFilteredList.map(m => {
               const cleanPhone = (m.phone || '').replace(/[^0-9]/g, '');
               let waNumber = cleanPhone;
               if (waNumber.startsWith('0')) {
@@ -4339,14 +4436,22 @@ function ReportSummary({
               const waText = encodeURIComponent(
                 `Shalom ${m.name}, salam kasih dari gereja GBI Jeltim. Kami rindu menyapa dan menanyakan kabar Bpk/Ibu/Sdr. Semoga selalu dalam lindungan dan berkat Tuhan.`
               );
+              const showPhoto = Boolean(m.photoUrl) && !brokenPhotoIds.has(m.id);
 
               return (
                 <div key={m.id} className="flex flex-col justify-between rounded-xl bg-white border border-amber-200/70 p-3 shadow-xs hover:border-amber-400 transition-colors">
                   <div className="flex items-start gap-2.5 min-w-0 mb-2">
-                    {m.photoUrl ? (
+                    {showPhoto ? (
                       <img
                         src={m.photoUrl}
                         alt={m.name}
+                        onError={() => {
+                          setBrokenPhotoIds(prev => {
+                            const next = new Set(prev);
+                            next.add(m.id);
+                            return next;
+                          });
+                        }}
                         className="w-9 h-9 rounded-full object-cover border border-amber-300 flex-shrink-0"
                       />
                     ) : (
@@ -4368,9 +4473,26 @@ function ReportSummary({
                             Non-PKS
                           </span>
                         )}
-                        <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded">
-                          3x Berturut Absen
-                        </span>
+                        {reportStatusFilter === 'absen_hari_h' && (
+                          <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded">
+                            Absen Hari H
+                          </span>
+                        )}
+                        {reportStatusFilter === 'jarang_aktif' && (
+                          <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded">
+                            3x Berturut Absen
+                          </span>
+                        )}
+                        {reportStatusFilter === 'hadir_hari_h' && (
+                          <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
+                            Hadir
+                          </span>
+                        )}
+                        {reportStatusFilter === 'tidak_aktif' && (
+                          <span className="text-[10px] text-red-700 font-semibold bg-red-50 px-1.5 py-0.5 rounded">
+                            {m.status === 'visitor' || m.status === 'visitors' ? 'Visitor' : 'Tidak Aktif'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -4403,8 +4525,8 @@ function ReportSummary({
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Search */}
       <div className="relative max-w-xs">
