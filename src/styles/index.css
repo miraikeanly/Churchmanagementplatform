@@ -75,3 +75,16 @@ html.theme-dim .no-dark-invert {
 .animate-theme-pop {
   animation: theme-icon-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* ─── Mobile UI Polish: prevent text/button overflow & enforce touch targets ─── */
+@media (max-width: 640px) {
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  button, a[role="button"] {
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+}

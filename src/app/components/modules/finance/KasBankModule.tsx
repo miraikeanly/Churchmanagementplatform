@@ -977,7 +977,7 @@ export default function KasBankModule() {
               : 'bg-rose-50 border-rose-200 text-rose-800'
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {feedbackMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
             <span className="text-xs sm:text-sm font-medium">{feedbackMsg.text}</span>
           </div>
@@ -990,13 +990,13 @@ export default function KasBankModule() {
       {/* ── Section 1: Journal Details (Image 1 Style) ── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="bg-slate-50/70 border-b border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <FileText size={17} className="text-blue-600" />
             <h2 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-wider">
               Kas Bank &amp; Detail Jurnal Transaksi
             </h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <input
               type="file"
               ref={fileInputRef}
@@ -1629,7 +1629,7 @@ export default function KasBankModule() {
                           <td colSpan={12 + customColumns.length} className="p-3 pl-8">
                             <div className="bg-white rounded-xl border border-blue-200 p-3 shadow-xs max-w-3xl">
                               <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <CornerDownRight size={14} className="text-blue-600" />
                                   <span className="text-xs font-bold text-slate-800">
                                     Rincian Breakdown: {item.keterangan}
@@ -1811,7 +1811,7 @@ export default function KasBankModule() {
                 </td>
                 <td colSpan={2 + customColumns.length} className="py-3 px-3 text-xs font-bold whitespace-nowrap">
                   {stats.hasManualOverride ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-amber-700">✎ MANUAL</span>
                       <button
                         type="button"

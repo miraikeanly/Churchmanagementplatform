@@ -514,12 +514,13 @@ export default function SuperAdminDashboard() {
               <p className="text-xs text-gray-400 hidden sm:block truncate">Gereja Jelambar Timur</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 shrink-0">
             {stats.pendingApprovals > 0 && isSuperAdmin && (
               <button onClick={() => setActiveTab('pendingApprovals')}
-                className="flex items-center gap-1.5 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-orange-100">
-                <ClipboardCheck size={14} />
-                {stats.pendingApprovals} Pending
+                className="flex items-center gap-1 bg-orange-50 border border-orange-200 text-orange-700 text-[11px] sm:text-xs font-semibold px-2 sm:px-3 py-1.5 min-h-[38px] rounded-full hover:bg-orange-100 whitespace-nowrap shrink-0">
+                <ClipboardCheck size={14} className="shrink-0" />
+                <span>{stats.pendingApprovals}</span>
+                <span className="hidden sm:inline">Pending</span>
               </button>
             )}
 
@@ -527,15 +528,15 @@ export default function SuperAdminDashboard() {
             <button
               type="button"
               onClick={toggleQuickDark}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-all active:scale-90 cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-all active:scale-90 cursor-pointer shrink-0"
               title={isDarkActive ? 'Ganti ke Mode Terang' : 'Ganti ke Dark Mode'}
               aria-label="Toggle Dark Mode"
             >
               <span key={isDarkActive ? 'moon' : 'sun'} className="animate-theme-pop inline-flex items-center justify-center">
                 {isDarkActive ? (
-                  <Moon size={15} className="text-indigo-600" />
+                  <Moon size={16} className="text-indigo-600" />
                 ) : (
-                  <Sun size={15} className="text-amber-500" />
+                  <Sun size={16} className="text-amber-500" />
                 )}
               </span>
               <span className="hidden lg:inline">{isDarkActive ? 'Gelap' : 'Terang'}</span>
@@ -544,18 +545,18 @@ export default function SuperAdminDashboard() {
             <button
               type="button"
               onClick={() => setShowAppearanceModal(true)}
-              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 shadow-2xs transition-all active:scale-90 cursor-pointer"
+              className="flex items-center justify-center p-2 min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 shadow-2xs transition-all active:scale-90 cursor-pointer shrink-0"
               title="Pengaturan Tampilan, Kecerahan & Mode Nyaman Mata"
               aria-label="Pengaturan Tampilan"
             >
-              <Sliders size={15} />
+              <Sliders size={16} />
             </button>
 
             {/* Admin Internal Chat & Task Toggle Button */}
             <button
               type="button"
               onClick={() => setAdminChatOpen(prev => !prev)}
-              className={`relative flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none active:scale-95 ${
+              className={`relative flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 min-h-[38px] min-w-[38px] rounded-xl border text-xs font-bold transition-all cursor-pointer select-none active:scale-95 shrink-0 ${
                 adminChatOpen
                   ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                   : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300 shadow-2xs'
