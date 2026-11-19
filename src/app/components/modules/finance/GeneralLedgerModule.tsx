@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   RefreshCw, Download, Search, AlertCircle, CheckCircle2,
-  Plus, Edit2, Trash2, Check, X, RotateCcw, Link2, Type
+  Plus, Edit2, Trash2, Check, X, RotateCcw, Link2, Type, Save
 } from 'lucide-react';
 import { KasBankItem, INITIAL_GL_ACCOUNTS, GLAccount, formatRupiah } from './financeUtils';
+import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
+
+const KV = 'kv_store_561004a0';
+const DB_KEY_ITEMS = 'finance:kas_bank_items_2026_v3';
 
 const STORAGE_KEY_ITEMS = 'gbi_kas_bank_items_2026_v3';
 
@@ -17,6 +21,29 @@ function formatTgl(iso: string): string {
 export default function GeneralLedgerModule() {
   const [items, setItems] = useState<KasBankItem[]>([]);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [isSavingDb, setIsSavingDb] = useState<boolean>(false);
+  const [lastSavedDb, setLastSavedDb] = useState<string | null>(null);
+
+  const handleSaveToDatabase = async () => {
+    setIsSavingDb(true);
+    try {
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+      } catch {}
+      await supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: items }, { onConflict: 'key' });
+      const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      setLastSavedDb(nowStr);
+      setSyncFeedback(`Data General Ledger (${items.length} baris) berhasil disimpan ke Database (${nowStr})!`);
+      setTimeout(() => setSyncFeedback(null), 5000);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('kasbank-updated'));
+      }
+    } catch (err: any) {
+      setSyncFeedback(`Gagal menyimpan ke database: ${err?.message || 'Terjadi kesalahan'}`);
+    } finally {
+      setIsSavingDb(false);
+    }
+  };
 
   // Load items from Kas Bank
   const loadData = () => {
@@ -50,6 +77,17 @@ export default function GeneralLedgerModule() {
 
   useEffect(() => {
     loadData();
+    (async () => {
+      try {
+        const { data: itemsRow } = await supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_ITEMS).maybeSingle();
+        if (itemsRow?.value && Array.isArray(itemsRow.value) && itemsRow.value.length > 0) {
+          setItems(itemsRow.value);
+          try { localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(itemsRow.value)); } catch {}
+        }
+      } catch (err) {
+        console.warn('Gagal memuat General Ledger dari database:', err);
+      }
+    })();
     const handleStorageChange = () => loadData();
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('kasbank-updated', handleStorageChange);
@@ -198,43 +236,40 @@ export default function GeneralLedgerModule() {
     });
   }, [items, selectedCode, searchTerm]);
 
-  // Running balance for this specific GL Code with support for manualSaldo overrides
+  // Running balance for this specific GL Code (Exact Excel integer-cent arithmetic + manualSaldo override)
   const { rowsWithSaldo, totalDebet, totalKredit, finalSaldo } = useMemo(() => {
-    let running = 0;
-    let tDeb = 0;
-    let tKre = 0;
+    let runningCents = 0;
+    let tDebCents = 0;
+    let tKreCents = 0;
 
     const mapped = filtered.map(it => {
-      const nom = Number(it.nominal) || 0;
+      const nomCents = Math.round((Number(it.nominal) || 0) * 100);
       const isDebet = it.tipe === 'Debet';
       if (isDebet) {
-        tDeb += nom;
-        running += nom;
+        tDebCents += nomCents;
+        runningCents += nomCents;
       } else {
-        tKre += nom;
-        running -= nom;
+        tKreCents += nomCents;
+        runningCents -= nomCents;
       }
 
-      const currentSaldo = it.manualSaldo !== undefined && it.manualSaldo !== null && !isNaN(Number(it.manualSaldo))
-        ? Number(it.manualSaldo)
-        : running;
-
-      if (it.manualSaldo !== undefined && it.manualSaldo !== null && !isNaN(Number(it.manualSaldo))) {
-        running = Number(it.manualSaldo);
+      const hasManual = it.manualSaldo !== undefined && it.manualSaldo !== null && !isNaN(Number(it.manualSaldo));
+      if (hasManual) {
+        runningCents = Math.round(Number(it.manualSaldo) * 100);
       }
 
       return {
         ...it,
-        runningSaldoGL: currentSaldo,
-        isManualSaldo: it.manualSaldo !== undefined && it.manualSaldo !== null
+        runningSaldoGL: runningCents / 100,
+        isManualSaldo: hasManual
       };
     });
 
     return {
       rowsWithSaldo: mapped,
-      totalDebet: tDeb,
-      totalKredit: tKre,
-      finalSaldo: running
+      totalDebet: tDebCents / 100,
+      totalKredit: tKreCents / 100,
+      finalSaldo: runningCents / 100
     };
   }, [filtered]);
 
@@ -485,7 +520,16 @@ export default function GeneralLedgerModule() {
           <p className="text-[11px] text-slate-500">Tampilan per kategori Kode Ref / GL sesuai buku kas gereja</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleSaveToDatabase}
+            disabled={isSavingDb}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Simpan semua data keuangan ke Database agar tersinkron di semua device"
+          >
+            <Save size={13} />
+            {isSavingDb ? 'Menyimpan...' : lastSavedDb ? `Simpan Data (${lastSavedDb})` : 'Simpan Data'}
+          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"

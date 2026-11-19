@@ -16,6 +16,12 @@ import {
   classifyTransaction
 } from './financeUtils';
 import { parseBcaPdfText } from './pdfParser';
+import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
+
+const KV = 'kv_store_561004a0';
+const DB_KEY_ITEMS = 'finance:kas_bank_items_2026_v3';
+const DB_KEY_GLS = 'finance:kas_bank_gl_accounts_2026';
+const DB_KEY_COLS = 'finance:kas_bank_custom_columns_2026';
 
 // Initialize PDF.js worker
 if (typeof window !== 'undefined') {
@@ -83,6 +89,66 @@ export default function KasBankModule() {
   const [resetPeriodTarget, setResetPeriodTarget] = useState<string>('ALL');
   const [resetPinInput, setResetPinInput] = useState<string>('');
   const [resetError, setResetError] = useState<string | null>(null);
+
+  // Database persistence & Manual Total Override states
+  const [isSavingDb, setIsSavingDb] = useState<boolean>(false);
+  const [lastSavedDb, setLastSavedDb] = useState<string | null>(null);
+  const [manualTotalOverrides, setManualTotalOverrides] = useState<Record<string, number>>({});
+  const [editingTotalSaldo, setEditingTotalSaldo] = useState<boolean>(false);
+  const [editTotalSaldoInput, setEditTotalSaldoInput] = useState<string>('');
+
+  // Load latest saved data from Supabase KV on mount (so data syncs across devices)
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: itemsRow }, { data: glsRow }, { data: colsRow }] = await Promise.all([
+          supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_ITEMS).maybeSingle(),
+          supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_GLS).maybeSingle(),
+          supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_COLS).maybeSingle(),
+        ]);
+        if (itemsRow?.value && Array.isArray(itemsRow.value) && itemsRow.value.length > 0) {
+          setItems(itemsRow.value);
+          try { localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(itemsRow.value)); } catch {}
+        }
+        if (glsRow?.value && typeof glsRow.value === 'object') {
+          setGlAccounts(glsRow.value);
+          try { localStorage.setItem(STORAGE_KEY_GLS, JSON.stringify(glsRow.value)); } catch {}
+        }
+        if (colsRow?.value && Array.isArray(colsRow.value)) {
+          setCustomColumns(colsRow.value);
+          try { localStorage.setItem(STORAGE_KEY_COLS, JSON.stringify(colsRow.value)); } catch {}
+        }
+      } catch (err) {
+        console.warn('Gagal memuat Kas Bank dari database, menggunakan data lokal:', err);
+      }
+    })();
+  }, []);
+
+  const handleSaveToDatabase = async () => {
+    setIsSavingDb(true);
+    try {
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+        localStorage.setItem(STORAGE_KEY_GLS, JSON.stringify(glAccounts));
+        localStorage.setItem(STORAGE_KEY_COLS, JSON.stringify(customColumns));
+      } catch {}
+      await Promise.all([
+        supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: items }, { onConflict: 'key' }),
+        supabaseAdmin.from(KV).upsert({ key: DB_KEY_GLS, value: glAccounts }, { onConflict: 'key' }),
+        supabaseAdmin.from(KV).upsert({ key: DB_KEY_COLS, value: customColumns }, { onConflict: 'key' }),
+      ]);
+      const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      setLastSavedDb(nowStr);
+      setFeedbackMsg({ type: 'success', text: `Data Kas Bank (${items.length} baris) berhasil disimpan ke Database (${nowStr})! Bisa diakses dari device lain.` });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('kasbank-updated'));
+      }
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: `Gagal menyimpan ke database: ${err?.message || 'Terjadi kesalahan'}` });
+    } finally {
+      setIsSavingDb(false);
+    }
+  };
 
   // New Transaction Quick Input State
   const [formNoBank, setFormNoBank] = useState<string>('');
@@ -152,60 +218,53 @@ export default function KasBankModule() {
   // Re-calculate running total balance strictly across all rows and chain opening balances across periods
   const calculatedItems = useMemo(() => {
     // 1. Separate opening balance rows and normal transaction rows
-    // Determine all active periods present in normal transactions
     const nonOpening = items.filter(it => !it.isOpeningBalance);
-    // Sort transactions strictly chronologically by tanggal, then by noBank
-    const sortedTransactions = [...nonOpening].sort((a, b) => {
-      const cmpDate = (a.tanggal || '').localeCompare(b.tanggal || '');
-      if (cmpDate !== 0) return cmpDate;
-      return (a.noBank || '').localeCompare(b.noBank || '');
-    });
 
-    // Map each month period (e.g. '2026-09') to its explicit opening balance item if user edited it
+    // Map each month period (e.g. '2026-01') to its explicit opening balance item
     const explicitOpeningsByPeriod: Record<string, KasBankItem> = {};
     items.filter(it => it.isOpeningBalance).forEach(op => {
       const p = op.tanggal ? op.tanggal.substring(0, 7) : '';
       if (p) explicitOpeningsByPeriod[p] = op;
     });
 
-    // We also know the default initial opening balance for the earliest data (e.g. Sept 2026 or Aug end)
+    // Default initial saldo (Aug 2026 ending → Sep 2026 opening)
     const defaultInitialSaldo = 311771182.79;
 
-    // Group transactions by month
+    // Collect all months that have transactions OR explicit openings
     const monthsSet = new Set<string>();
     nonOpening.forEach(t => {
       if (t.tanggal && t.tanggal.length >= 7) {
         monthsSet.add(t.tanggal.substring(0, 7));
       }
     });
-    // Also include months from explicit openings
     Object.keys(explicitOpeningsByPeriod).forEach(p => monthsSet.add(p));
-
-    // Also include currently selected period so opening balance is immediately generated
-    if (selectedPeriod) {
-      monthsSet.add(selectedPeriod);
-    }
+    // Always include the currently viewed period
+    if (selectedPeriod) monthsSet.add(selectedPeriod);
 
     const sortedMonths = Array.from(monthsSet).sort();
 
-    // Calculate month by month:
-    // Saldo Awal month M = Saldo Akhir month M-1 (or explicit opening if first month)
+    // ── Excel-exact cascading formula: H_n = H_(n-1) + Debet_n - Kredit_n ──
+    // runningBalance carries forward month-to-month (like DES25→JAN26 in Excel)
     let runningBalance = defaultInitialSaldo;
     const finalItems: KasBankItem[] = [];
 
     sortedMonths.forEach((monthStr, idx) => {
-      // Find or create opening row for this month
       const existingOp = explicitOpeningsByPeriod[monthStr];
       const isFirstMonth = idx === 0;
 
       let openingNominal: number;
       if (isFirstMonth) {
-        openingNominal = existingOp?.nominal !== undefined ? Number(existingOp.nominal) : defaultInitialSaldo;
+        // First month: use stored opening if available, else default
+        openingNominal = existingOp?.nominal !== undefined
+          ? Number(existingOp.nominal)
+          : defaultInitialSaldo;
       } else {
-        // Automatically link to previous month's ending running balance!
+        // Every subsequent month: opening = previous month ending (auto-chain)
         openingNominal = runningBalance;
       }
 
+      // Round to 2 decimal places to prevent floating-point drift (like Excel)
+      openingNominal = Math.round(openingNominal * 100) / 100;
       runningBalance = openingNominal;
 
       const currentOpeningRow: KasBankItem = {
@@ -225,15 +284,26 @@ export default function KasBankModule() {
 
       finalItems.push(currentOpeningRow);
 
-      // Process all transactions in this month
-      // Preserves custom user order from items state!
-      const monthTx = nonOpening.filter(t => t.tanggal && t.tanggal.startsWith(monthStr));
+      // ── Sort transactions within month strictly by tanggal then noBank (numeric) ──
+      // This guarantees same order as Excel regardless of how items were added / drag-reordered.
+      const monthTx = nonOpening
+        .filter(t => t.tanggal && t.tanggal.startsWith(monthStr))
+        .sort((a, b) => {
+          const cmpDate = (a.tanggal || '').localeCompare(b.tanggal || '');
+          if (cmpDate !== 0) return cmpDate;
+          // Secondary sort: numeric part of noBank for correct sequence
+          const numA = parseInt((a.noBank || '').replace(/\D+/g, ''), 10) || 0;
+          const numB = parseInt((b.noBank || '').replace(/\D+/g, ''), 10) || 0;
+          return numA - numB;
+        });
+
       monthTx.forEach(tx => {
-        const nom = Number(tx.nominal) || 0;
+        const nom = Math.round((Number(tx.nominal) || 0) * 100) / 100;
         const isDeb = tx.tipe === 'Debet';
         const debetVal = isDeb ? nom : 0;
         const kreditVal = !isDeb ? nom : 0;
-        runningBalance = runningBalance + debetVal - kreditVal;
+        // Excel formula H_n = H_(n-1) + F_n - G_n, rounded to 2dp to prevent drift
+        runningBalance = Math.round((runningBalance + debetVal - kreditVal) * 100) / 100;
 
         finalItems.push({
           ...tx,
@@ -294,20 +364,30 @@ export default function KasBankModule() {
     });
   }, [calculatedItems, selectedPeriod, searchTerm]);
 
-  // Overall Statistics for current display
+  // Overall Statistics for current display (Exact Excel integer-cent arithmetic — zero floating-point drift)
   const stats = useMemo(() => {
-    let totalDebet = 0;
-    let totalKredit = 0;
+    let openingCents = 0;
+    let totalDebetCents = 0;
+    let totalKreditCents = 0;
     displayedItems.forEach(item => {
-      if (!item.isOpeningBalance) {
-        totalDebet += item.debet || 0;
-        totalKredit += item.kredit || 0;
+      if (item.isOpeningBalance) {
+        openingCents = Math.round((Number(item.nominal ?? item.saldoBerjalan) || 0) * 100);
+      } else {
+        totalDebetCents += Math.round((Number(item.debet) || 0) * 100);
+        totalKreditCents += Math.round((Number(item.kredit) || 0) * 100);
       }
     });
+    const totalDebet = totalDebetCents / 100;
+    const totalKredit = totalKreditCents / 100;
+    const expectedSaldo = (openingCents + totalDebetCents - totalKreditCents) / 100;
     const lastItem = displayedItems[displayedItems.length - 1];
-    const latestSaldo = lastItem ? lastItem.saldoBerjalan || 0 : 0;
-    return { totalDebet, totalKredit, latestSaldo };
-  }, [displayedItems]);
+    const calculatedLatest = lastItem ? (Number(lastItem.saldoBerjalan) || 0) : expectedSaldo;
+    const periodKey = selectedPeriod || 'ALL';
+    const hasManualOverride = manualTotalOverrides[periodKey] !== undefined;
+    const latestSaldo = hasManualOverride ? manualTotalOverrides[periodKey] : expectedSaldo;
+    const isSynced = !hasManualOverride && Math.abs(calculatedLatest - expectedSaldo) < 0.01;
+    return { totalDebet, totalKredit, latestSaldo, expectedSaldo, isSynced, hasManualOverride };
+  }, [displayedItems, selectedPeriod, manualTotalOverrides]);
 
   // ── Handlers ────────────────────────────────────────────────────────
 
@@ -924,6 +1004,15 @@ export default function KasBankModule() {
               className="hidden"
               onChange={handlePdfUpload}
             />
+            <button
+              onClick={handleSaveToDatabase}
+              disabled={isSavingDb}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="Simpan semua data Kas Bank ke Database agar tersinkron di semua device"
+            >
+              <Save size={13} />
+              {isSavingDb ? 'Menyimpan...' : lastSavedDb ? `Simpan Data (${lastSavedDb})` : 'Simpan Data'}
+            </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isImporting}
@@ -1661,11 +1750,89 @@ export default function KasBankModule() {
                 <td colSpan={2} className="py-3 px-2 text-center text-[11px] text-slate-600 font-semibold italic whitespace-nowrap">
                   (Saldo Awal + Debet - Kredit)
                 </td>
-                <td className="py-3 px-3 text-right font-mono text-base font-black text-slate-950 bg-amber-200/90 border-2 border-black whitespace-nowrap">
-                  {formatRupiah(stats.latestSaldo)}
+                <td
+                  className="py-3 px-3 text-right font-mono text-base font-black text-slate-950 bg-amber-200/90 border-2 border-black whitespace-nowrap cursor-pointer hover:bg-amber-300/90 transition-colors"
+                  title="Klik untuk edit manual total saldo jika diperlukan"
+                  onClick={() => {
+                    if (!editingTotalSaldo) {
+                      setEditTotalSaldoInput(String(stats.latestSaldo));
+                      setEditingTotalSaldo(true);
+                    }
+                  }}
+                >
+                  {editingTotalSaldo ? (
+                    <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        autoFocus
+                        value={editTotalSaldoInput}
+                        onChange={e => setEditTotalSaldoInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const val = parseFloat(editTotalSaldoInput);
+                            if (!isNaN(val)) {
+                              setManualTotalOverrides(prev => ({ ...prev, [selectedPeriod || 'ALL']: Math.round(val * 100) / 100 }));
+                            }
+                            setEditingTotalSaldo(false);
+                          } else if (e.key === 'Escape') {
+                            setEditingTotalSaldo(false);
+                          }
+                        }}
+                        className="w-36 px-2 py-0.5 text-right text-sm font-mono bg-white border border-slate-500 rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = parseFloat(editTotalSaldoInput);
+                          if (!isNaN(val)) {
+                            setManualTotalOverrides(prev => ({ ...prev, [selectedPeriod || 'ALL']: Math.round(val * 100) / 100 }));
+                          }
+                          setEditingTotalSaldo(false);
+                        }}
+                        className="px-1.5 py-0.5 text-[10px] bg-emerald-600 text-white rounded font-bold cursor-pointer"
+                      >
+                        OK
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTotalSaldo(false)}
+                        className="px-1.5 py-0.5 text-[10px] bg-slate-500 text-white rounded font-bold cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      {formatRupiah(stats.latestSaldo)}
+                      <Edit2 size={12} className="text-slate-600 opacity-60" />
+                    </span>
+                  )}
                 </td>
-                <td colSpan={2 + customColumns.length} className="py-3 px-3 text-xs text-emerald-700 font-bold whitespace-nowrap">
-                  ✓ SINKRON
+                <td colSpan={2 + customColumns.length} className="py-3 px-3 text-xs font-bold whitespace-nowrap">
+                  {stats.hasManualOverride ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-700">✎ MANUAL</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualTotalOverrides(prev => {
+                            const next = { ...prev };
+                            delete next[selectedPeriod || 'ALL'];
+                            return next;
+                          });
+                        }}
+                        className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold cursor-pointer"
+                        title={`Kembalikan ke rumus Excel Auto-Sum (${formatRupiah(stats.expectedSaldo)})`}
+                      >
+                        Auto-Sum Ulang
+                      </button>
+                    </div>
+                  ) : stats.isSynced ? (
+                    <span className="text-emerald-700">✓ SINKRON</span>
+                  ) : (
+                    <span className="text-emerald-700">✓ AUTO-SUM EXCEL</span>
+                  )}
                 </td>
               </tr>
             </tfoot>

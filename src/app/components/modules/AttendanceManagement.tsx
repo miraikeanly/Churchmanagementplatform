@@ -10,8 +10,7 @@ import {
   Loader2, X, Sparkles, Filter, RotateCcw, Phone, MessageCircle, Edit2, RefreshCw,
   Trash2, Edit, Heart, User, MapPin, Mail, Cake, Church, Lock, Unlock,
   ChevronDown, UserCheck, Home, UserPlus, GripVertical, ArrowRightLeft, ZoomIn, ExternalLink,
-  Camera
-} from 'lucide-react';
+  Camera, Check} from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   CartesianGrid, ReferenceLine, Cell
@@ -617,6 +616,17 @@ function sundaysInMonth(year: number, month: number): string[] {
   return dates;
 }
 
+// Returns true if member should appear in Ibadah Raya (Ibadah Umum) attendance
+function isIbadahRayaMember(m: Member): boolean {
+  const statusLower = (m.status || 'active').toLowerCase();
+  if (statusLower === 'inactive' || statusLower === 'visitor' || statusLower === 'visitors' || statusLower === 'tamu') return false;
+  const ibadah = m.ibadah || [];
+  // If member has no ibadah specified → include (not yet categorized)
+  // If member has ibadah specified but IR is not in list → exclude
+  if (ibadah.length > 0 && !ibadah.includes('IR')) return false;
+  return true;
+}
+
 // Inactive rule: only inactive if absent in 3 consecutive distinct weeks of general service sessions
 // Must have at least 3 distinct weeks recorded in history; excludes visitors and members joined within 3 weeks.
 function getInactiveMembers(members: Member[], sessions: Session[], currentPresent?: Set<string>): string[] {
@@ -645,9 +655,8 @@ function getInactiveMembers(members: Member[], sessions: Session[], currentPrese
 
   return members
     .filter(m => {
-      // Exclude visitors
-      const statusLower = (m.status || '').toLowerCase();
-      if (statusLower === 'visitor' || statusLower === 'visitors' || statusLower === 'tamu') return false;
+      // Only check active IR members
+      if (!isIbadahRayaMember(m)) return false;
 
       // Exclude members who joined recently (less than 3 weeks ago)
       const joinStr = (m.joinDate || m.createdAt || '').slice(0, 10);
@@ -861,6 +870,25 @@ function MemberQuickInfoModal({
 
         {/* Detail Scrollable Body */}
         <div className="p-5 overflow-y-auto space-y-4 text-xs sm:text-sm">
+          {/* Status badges: Tidak Aktif / Non-IR */}
+          {member.status === 'inactive' && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-red-600 shrink-0" />
+              <span className="text-xs font-semibold text-red-800">Jemaat Tidak Aktif – tidak muncul di daftar absensi otomatis</span>
+            </div>
+          )}
+          {(member.status === 'visitor' || member.status === 'visitors') && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-orange-500 shrink-0" />
+              <span className="text-xs font-semibold text-orange-800">Jemaat Visitor – tidak muncul di daftar absensi otomatis</span>
+            </div>
+          )}
+          {(member.ibadah || []).length > 0 && !(member.ibadah || []).includes('IR') && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-yellow-600 shrink-0" />
+              <span className="text-xs font-semibold text-yellow-800">Jemaat ini tidak terdaftar di Ibadah Raya (IR) – tidak muncul di absensi umum</span>
+            </div>
+          )}
           {/* 1. INFORMASI PERSONAL */}
           <div className="bg-white rounded-xl border border-gray-100 p-3.5 space-y-2.5">
             <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1607,6 +1635,10 @@ function DailyInput({
   const [recentlyEditedFamilyKey, setRecentlyEditedFamilyKey] = useState<string | null>(null);
   const [keepModalOpenAfterAdd, setKeepModalOpenAfterAdd] = useState(false);
 
+  // Manual Add: tambah jemaat non-rutin / visitor ke sesi ini
+  const [isManualAddOpen, setIsManualAddOpen] = useState(false);
+  const [manualAddSearch, setManualAddSearch] = useState('');
+
   // Load persisted custom family links, unlinks, role overrides, and explicit family cards on mount
   useEffect(() => {
     (async () => {
@@ -2078,10 +2110,13 @@ function DailyInput({
     }
   };
 
-  // Build all family groups from the full members array + custom links - custom unlinks + role overrides + custom family cards
+  // Only IR-active members shown by default in attendance
+  const irMembers = useMemo(() => members.filter(isIbadahRayaMember), [members]);
+
+  // Build all family groups from IR members + custom links - custom unlinks + role overrides + custom family cards
   const allFamilyGroups = useMemo(
-    () => buildAttendanceFamilyGroups(members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers),
-    [members, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers]
+    () => buildAttendanceFamilyGroups(irMembers, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers),
+    [irMembers, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers]
   );
 
   // Set of all member IDs that belong to any family in attendance
@@ -2098,7 +2133,7 @@ function DailyInput({
   // Filtered members for individual / single attendance
   // By default (single_only), members who are already grouped in a family are automatically excluded so data is never duplicated
   const filtered = useMemo(() => {
-    let list = members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+    let list = irMembers.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
 
     if (singleFilterScope === 'single_only') {
       list = list.filter(m => !familyMemberIds.has(m.id));
@@ -2110,7 +2145,7 @@ function DailyInput({
       sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
     );
     return list;
-  }, [members, search, filter, sortDir, present, singleFilterScope, familyMemberIds]);
+  }, [irMembers, search, filter, sortDir, present, singleFilterScope, familyMemberIds]);
 
   const markAll = () => {
     if (!canEdit || isSessionLocked) return;
@@ -2349,7 +2384,7 @@ function DailyInput({
   };
 
   const presentCount = present.size;
-  const absentCount = members.length - presentCount;
+  const absentCount = irMembers.length - presentCount;
   const todayStr = fmt(new Date());
 
   return (
@@ -2496,7 +2531,7 @@ function DailyInput({
           <div className="text-xs text-red-500 mt-1">Absen</div>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-blue-700">{members.length}</div>
+          <div className="text-2xl font-bold text-blue-700">{irMembers.length}</div>
           <div className="text-xs text-blue-600 mt-1">Total Jemaat</div>
         </div>
       </div>
@@ -2577,6 +2612,13 @@ function DailyInput({
             <button onClick={clearAll} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 active:scale-[0.98] bg-white cursor-pointer font-semibold shadow-2xs">
               <Square size={13} /> Clear
             </button>
+            <button
+              onClick={() => setIsManualAddOpen(true)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-blue-200 text-blue-700 rounded-xl hover:bg-blue-50 active:scale-[0.98] bg-white cursor-pointer font-semibold shadow-2xs"
+              title="Tambah jemaat visitor / tidak aktif ke sesi ini"
+            >
+              <UserPlus size={13} /> + Tambah Jemaat
+            </button>
           </div>
         )}
       </div>
@@ -2637,7 +2679,7 @@ function DailyInput({
                 }`}
                 title="Hanya tampilkan jemaat yang belum masuk ke grup keluarga mana pun"
               >
-                Hanya Single ({members.filter(m => !familyMemberIds.has(m.id)).length})
+                Hanya Single ({irMembers.filter(m => !familyMemberIds.has(m.id)).length})
               </button>
               <button
                 type="button"
@@ -2649,7 +2691,7 @@ function DailyInput({
                 }`}
                 title="Tampilkan semua jemaat gereja"
               >
-                Semua ({members.length})
+                Semua ({irMembers.length})
               </button>
             </div>
           </div>
@@ -3568,6 +3610,94 @@ function DailyInput({
         </div>
       )}
 
+      {/* Manual Add Modal – tambah jemaat visitor / non-IR ke sesi ini */}
+      {isManualAddOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Tambah Jemaat ke Sesi Ini</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Cari jemaat visitor / non-rutin untuk ditandai hadir</p>
+              </div>
+              <button
+                onClick={() => { setIsManualAddOpen(false); setManualAddSearch(''); }}
+                className="text-gray-400 hover:text-gray-700 cursor-pointer p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-4 py-3 border-b border-gray-100">
+              <input
+                autoFocus
+                type="text"
+                placeholder="Cari nama jemaat..."
+                value={manualAddSearch}
+                onChange={e => setManualAddSearch(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+              {members
+                .filter(m => m.name.toLowerCase().includes(manualAddSearch.toLowerCase()))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(m => {
+                  const isPresent = present.has(m.id);
+                  const isIR = isIbadahRayaMember(m);
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={() => {
+                        if (!canEdit || isSessionLocked) return;
+                        isDirtyRef.current = true;
+                        setIsEditing(true);
+                        setSaved(false);
+                        setSaveSuccessNotice('');
+                        setPresent(prev => {
+                          const next = new Set(prev);
+                          if (isPresent) {
+                            next.delete(m.id);
+                            explicitlyUncheckedRef.current.add(m.id);
+                          } else {
+                            next.add(m.id);
+                            explicitlyUncheckedRef.current.delete(m.id);
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isPresent ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${isPresent ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'}`}>
+                        {isPresent && <Check size={11} className="text-white" strokeWidth={3} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-gray-900 truncate">{m.name}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {!isIR && (
+                            <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">
+                              {m.status === 'visitor' || m.status === 'visitors' ? 'Visitor' : m.status === 'inactive' ? 'Tidak Aktif' : 'Non-IR'}
+                            </span>
+                          )}
+                          {m.ibadah && m.ibadah.length > 0 && (
+                            <span className="text-[10px] text-gray-400">{m.ibadah.join(', ')}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+            <div className="px-4 py-3 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => { setIsManualAddOpen(false); setManualAddSearch(''); }}
+                className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl cursor-pointer transition-colors"
+              >
+                Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* AI Face Recognition Camera Attendance Scanner Modal */}
       <FaceAttendanceScannerModal
         isOpen={showFaceScanner}
@@ -3697,7 +3827,9 @@ function ReportSummary({
     dateCols.filter(d => getPresentSet(d).includes(memberId)).length;
 
   const filteredMembers = useMemo(() =>
-    members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
+    members
+      .filter(m => isIbadahRayaMember(m))
+      .filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => a.name.localeCompare(b.name)),
     [members, search]);
 
