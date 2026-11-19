@@ -100,6 +100,15 @@ export default function PelayanManagement() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [brokenPhotoIds, setBrokenPhotoIds] = useState<Set<string>>(new Set());
+  const markPhotoBroken = (id: string) => {
+    setBrokenPhotoIds(prev => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
   const [selected, setSelected] = useState<string>(() => {
     return searchParams.get('bidang') || searchParams.get('pelayan') || SCHEDULE_PELAYAN[0].key;
   });
@@ -535,8 +544,8 @@ export default function PelayanManagement() {
                 key={m.id}
                 className="flex items-start gap-3.5 p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all"
               >
-                {m.photoUrl ? (
-                  <img src={m.photoUrl} alt={m.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0 border border-slate-200 shadow-2xs" />
+                {m.photoUrl && !brokenPhotoIds.has(m.id) ? (
+                  <img src={m.photoUrl} alt={m.name} onError={() => markPhotoBroken(m.id)} className="w-11 h-11 rounded-full object-cover flex-shrink-0 border border-slate-200 shadow-2xs" />
                 ) : (
                   <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-bold text-sm flex items-center justify-center flex-shrink-0 shadow-2xs">
                     {initials(m.name)}
@@ -644,8 +653,8 @@ export default function PelayanManagement() {
             <div className="overflow-y-auto p-6 space-y-5 flex-1">
               {/* Profile Card Header */}
               <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                {infoMember.photoUrl ? (
-                  <img src={infoMember.photoUrl} alt={infoMember.name} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
+                {infoMember.photoUrl && !brokenPhotoIds.has(infoMember.id) ? (
+                  <img src={infoMember.photoUrl} alt={infoMember.name} onError={() => markPhotoBroken(infoMember.id)} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
                 ) : (
                   <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-xl flex items-center justify-center flex-shrink-0 shadow-sm">
                     {initials(infoMember.name)}
@@ -1009,8 +1018,8 @@ export default function PelayanManagement() {
                     className="flex items-center justify-between p-2.5 hover:bg-slate-50 rounded-xl transition-all pt-2.5 gap-3"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {m.photoUrl ? (
-                        <img src={m.photoUrl} alt={m.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-slate-200 shadow-2xs" />
+                      {m.photoUrl && !brokenPhotoIds.has(m.id) ? (
+                        <img src={m.photoUrl} alt={m.name} onError={() => markPhotoBroken(m.id)} className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-slate-200 shadow-2xs" />
                       ) : (
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-2xs">
                           {initials(m.name)}
