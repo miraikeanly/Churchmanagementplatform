@@ -100,65 +100,113 @@ html.theme-dim .bg-slate-200\/90 {
   background-color: var(--dm-surface-2) !important;
 }
 
-/* Soft tinted cards in dark mode so colors stay rich & easy on the eyes */
-html.theme-dark .bg-emerald-50,
-html.theme-dark .bg-emerald-50\/70,
-html.theme-dark .bg-emerald-100\/50,
-html.theme-dark .bg-emerald-100\/60,
-html.theme-dark .bg-emerald-100\/70,
-html.theme-dark .bg-emerald-100\/80,
-html.theme-dim .bg-emerald-50,
-html.theme-dim .bg-emerald-50\/70,
-html.theme-dim .bg-emerald-100\/50,
-html.theme-dim .bg-emerald-100\/60,
-html.theme-dim .bg-emerald-100\/70,
-html.theme-dim .bg-emerald-100\/80 {
-  background-color: rgba(16, 185, 129, 0.12) !important;
+/* Soft tinted cards & pills in dark mode — sleek dark translucent (never harsh pastel!) */
+html.theme-dark [class*="bg-emerald-50"],
+html.theme-dark [class*="bg-emerald-100"],
+html.theme-dark [class*="bg-green-50"],
+html.theme-dark [class*="bg-green-100"],
+html.theme-dark [class*="bg-teal-50"],
+html.theme-dark [class*="bg-teal-100"],
+html.theme-dim [class*="bg-emerald-50"],
+html.theme-dim [class*="bg-emerald-100"],
+html.theme-dim [class*="bg-green-50"],
+html.theme-dim [class*="bg-green-100"],
+html.theme-dim [class*="bg-teal-50"],
+html.theme-dim [class*="bg-teal-100"] {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+  border-color: rgba(16, 185, 129, 0.28) !important;
 }
 
-html.theme-dark .bg-rose-50,
-html.theme-dark .bg-rose-50\/70,
-html.theme-dark .bg-rose-100\/50,
-html.theme-dark .bg-rose-100\/60,
-html.theme-dark .bg-rose-100\/70,
-html.theme-dark .bg-rose-100\/80,
-html.theme-dark .bg-red-50,
-html.theme-dim .bg-rose-50,
-html.theme-dim .bg-rose-50\/70,
-html.theme-dim .bg-rose-100\/50,
-html.theme-dim .bg-rose-100\/60,
-html.theme-dim .bg-rose-100\/70,
-html.theme-dim .bg-rose-100\/80,
-html.theme-dim .bg-red-50 {
-  background-color: rgba(244, 63, 94, 0.12) !important;
+html.theme-dark [class*="bg-rose-50"],
+html.theme-dark [class*="bg-rose-100"],
+html.theme-dark [class*="bg-red-50"],
+html.theme-dark [class*="bg-red-100"],
+html.theme-dark [class*="bg-pink-50"],
+html.theme-dark [class*="bg-pink-100"],
+html.theme-dim [class*="bg-rose-50"],
+html.theme-dim [class*="bg-rose-100"],
+html.theme-dim [class*="bg-red-50"],
+html.theme-dim [class*="bg-red-100"],
+html.theme-dim [class*="bg-pink-50"],
+html.theme-dim [class*="bg-pink-100"] {
+  background-color: rgba(244, 63, 94, 0.14) !important;
+  border-color: rgba(244, 63, 94, 0.28) !important;
 }
 
-html.theme-dark .bg-blue-50,
-html.theme-dark .bg-blue-50\/80,
-html.theme-dark .bg-blue-100\/60,
-html.theme-dark .bg-indigo-50,
-html.theme-dark .bg-indigo-50\/70,
-html.theme-dim .bg-blue-50,
-html.theme-dim .bg-blue-50\/80,
-html.theme-dim .bg-blue-100\/60,
-html.theme-dim .bg-indigo-50,
-html.theme-dim .bg-indigo-50\/70 {
-  background-color: rgba(99, 102, 241, 0.14) !important;
+html.theme-dark [class*="bg-blue-50"],
+html.theme-dark [class*="bg-blue-100"],
+html.theme-dark [class*="bg-sky-50"],
+html.theme-dark [class*="bg-sky-100"],
+html.theme-dark [class*="bg-cyan-50"],
+html.theme-dark [class*="bg-cyan-100"],
+html.theme-dark [class*="bg-indigo-50"],
+html.theme-dark [class*="bg-indigo-100"],
+html.theme-dim [class*="bg-blue-50"],
+html.theme-dim [class*="bg-blue-100"],
+html.theme-dim [class*="bg-sky-50"],
+html.theme-dim [class*="bg-sky-100"],
+html.theme-dim [class*="bg-cyan-50"],
+html.theme-dim [class*="bg-cyan-100"],
+html.theme-dim [class*="bg-indigo-50"],
+html.theme-dim [class*="bg-indigo-100"] {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+  border-color: rgba(99, 102, 241, 0.28) !important;
 }
 
-html.theme-dark .bg-amber-50,
-html.theme-dark .bg-amber-50\/60,
-html.theme-dark .bg-amber-100,
-html.theme-dark .bg-amber-100\/80,
-html.theme-dark .bg-amber-200\/90,
-html.theme-dark .bg-yellow-50,
-html.theme-dim .bg-amber-50,
-html.theme-dim .bg-amber-50\/60,
-html.theme-dim .bg-amber-100,
-html.theme-dim .bg-amber-100\/80,
-html.theme-dim .bg-amber-200\/90,
-html.theme-dim .bg-yellow-50 {
+html.theme-dark [class*="bg-purple-50"],
+html.theme-dark [class*="bg-purple-100"],
+html.theme-dark [class*="bg-violet-50"],
+html.theme-dark [class*="bg-violet-100"],
+html.theme-dim [class*="bg-purple-50"],
+html.theme-dim [class*="bg-purple-100"],
+html.theme-dim [class*="bg-violet-50"],
+html.theme-dim [class*="bg-violet-100"] {
+  background-color: rgba(168, 85, 247, 0.15) !important;
+  border-color: rgba(168, 85, 247, 0.28) !important;
+}
+
+html.theme-dark [class*="bg-amber-50"],
+html.theme-dark [class*="bg-amber-100"],
+html.theme-dark [class*="bg-amber-200"],
+html.theme-dark [class*="bg-yellow-50"],
+html.theme-dark [class*="bg-yellow-100"],
+html.theme-dark [class*="bg-orange-50"],
+html.theme-dark [class*="bg-orange-100"],
+html.theme-dim [class*="bg-amber-50"],
+html.theme-dim [class*="bg-amber-100"],
+html.theme-dim [class*="bg-amber-200"],
+html.theme-dim [class*="bg-yellow-50"],
+html.theme-dim [class*="bg-yellow-100"],
+html.theme-dim [class*="bg-orange-50"],
+html.theme-dim [class*="bg-orange-100"] {
   background-color: rgba(245, 158, 11, 0.14) !important;
+  border-color: rgba(245, 158, 11, 0.28) !important;
+}
+
+html.theme-dark [class*="text-purple-"],
+html.theme-dark [class*="text-violet-"],
+html.theme-dim [class*="text-purple-"],
+html.theme-dim [class*="text-violet-"] {
+  color: #c084fc !important;
+}
+
+html.theme-dark [class*="text-pink-"],
+html.theme-dim [class*="text-pink-"] {
+  color: #f472b6 !important;
+}
+
+html.theme-dark [class*="text-green-"],
+html.theme-dark [class*="text-teal-"],
+html.theme-dim [class*="text-green-"],
+html.theme-dim [class*="text-teal-"] {
+  color: #34d399 !important;
+}
+
+html.theme-dark [class*="text-sky-"],
+html.theme-dark [class*="text-cyan-"],
+html.theme-dim [class*="text-sky-"],
+html.theme-dim [class*="text-cyan-"] {
+  color: #38bdf8 !important;
 }
 
 /* Text */
