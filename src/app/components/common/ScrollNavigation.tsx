@@ -2,63 +2,56 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
 
 export default function ScrollNavigation() {
-  const [visibleDir, setVisibleDir] = useState<'up' | 'down' | null>(null);
-  const [isActive, setIsActive] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const [canScroll, setCanScroll] = useState(false);
+  const [mode, setMode] = useState<'up' | 'down'>('down');
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
-
   const lastScrollY = useRef<number>(0);
-  const hideTimer = useRef<any>(null);
 
   useEffect(() => {
-    const getScrollMetrics = (target?: EventTarget | null) => {
-      if (target && target instanceof HTMLElement && target !== document.documentElement && target !== document.body) {
-        return {
-          top: target.scrollTop,
-          max: target.scrollHeight - target.clientHeight,
-        };
-      }
-      const top = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      const max = scrollHeight - window.innerHeight;
-      return { top, max };
-    };
+    const updateScrollState = (e?: Event) => {
+      let top = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      let max = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) - window.innerHeight;
 
-    const handleScroll = (e?: Event) => {
-      const { top, max } = getScrollMetrics(e?.target);
-      if (max <= 80) {
-        setIsActive(false);
-        return;
+      if (e?.target && e.target instanceof HTMLElement && e.target !== document.documentElement && e.target !== document.body) {
+        const el = e.target;
+        if (el.scrollHeight > el.clientHeight + 80) {
+          top = el.scrollTop;
+          max = el.scrollHeight - el.clientHeight;
+        }
       }
+
+      const scrollable = max > 80;
+      setCanScroll(scrollable);
+      if (!scrollable) return;
 
       const delta = top - lastScrollY.current;
       lastScrollY.current = top;
 
-      const atTop = top <= 40;
-      const atBottom = top >= max - 40;
+      const atTop = top <= 50;
+      const atBottom = top >= max - 50;
 
-      if (delta < -3 && !atTop) {
-        // Scrolling UP -> show ONLY Scroll-to-Top button, hide bottom button
-        setVisibleDir('up');
-        setIsActive(true);
-      } else if (delta > 3 && !atBottom) {
-        // Scrolling DOWN -> show ONLY Scroll-to-Bottom button, hide top button
-        setVisibleDir('down');
-        setIsActive(true);
-      } else if (atTop || atBottom) {
-        setIsActive(false);
+      if (atTop) {
+        // Di paling atas -> tampilkan tombol ke bawah (↓) terus
+        setMode('down');
+      } else if (atBottom) {
+        // Di paling bawah -> tampilkan tombol ke atas (↑) terus
+        setMode('up');
+      } else if (delta < -2) {
+        // Sedang scroll ke atas -> tampilkan tombol ke atas (↑), tombol bawah hilang
+        setMode('up');
+      } else if (delta > 2) {
+        // Sedang scroll ke bawah -> tampilkan tombol ke bawah (↓), tombol atas hilang
+        setMode('down');
       }
-
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-      hideTimer.current = setTimeout(() => {
-        setIsActive(false);
-      }, 1600);
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    updateScrollState();
+    window.addEventListener('scroll', updateScrollState, { passive: true, capture: true });
+    window.addEventListener('resize', () => updateScrollState());
+    const timer = setInterval(() => updateScrollState(), 1000);
     return () => {
-      window.removeEventListener('scroll', handleScroll, { capture: true } as any);
-      if (hideTimer.current) clearTimeout(hideTimer.current);
+      window.removeEventListener('scroll', updateScrollState, { capture: true } as any);
+      clearInterval(timer);
     };
   }, []);
 
@@ -72,7 +65,7 @@ export default function ScrollNavigation() {
     return () => clearInterval(interval);
   }, []);
 
-  if (chatDrawerOpen || !visibleDir) return null;
+  if (chatDrawerOpen || !canScroll) return null;
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -81,7 +74,7 @@ export default function ScrollNavigation() {
     document.querySelectorAll<HTMLElement>('.overflow-y-auto, main, [data-scroll-container]').forEach(el => {
       if (el.scrollHeight > el.clientHeight) el.scrollTo({ top: 0, behavior: 'smooth' });
     });
-    setIsActive(false);
+    setMode('down');
   };
 
   const scrollToBottom = () => {
@@ -92,38 +85,28 @@ export default function ScrollNavigation() {
     document.querySelectorAll<HTMLElement>('.overflow-y-auto, main, [data-scroll-container]').forEach(el => {
       if (el.scrollHeight > el.clientHeight) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     });
-    setIsActive(false);
+    setMode('up');
   };
-
-  const showNow = isActive || isHovered;
 
   return (
     <aside
       aria-label="Navigasi Scroll Halaman"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`fixed right-2.5 sm:right-4 bottom-4 z-40 flex flex-col gap-2 transition-all duration-250 ${
-        showNow
-          ? 'opacity-90 hover:opacity-100 translate-y-0 scale-100 pointer-events-auto'
-          : 'opacity-0 translate-y-2 scale-90 pointer-events-none'
-      }`}
+      className="fixed right-2 sm:right-3 bottom-3 z-40 flex flex-col pointer-events-none"
     >
-      {visibleDir === 'up' && (
+      {mode === 'up' ? (
         <button
           type="button"
           onClick={scrollToTop}
-          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/85 backdrop-blur-xs text-slate-700 hover:text-blue-600 hover:bg-white shadow-md border border-slate-200/80 flex items-center justify-center transition-all active:scale-90 cursor-pointer"
+          className="pointer-events-auto w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/90 backdrop-blur-xs text-slate-700 hover:text-blue-600 hover:bg-white shadow-md border border-slate-200/90 flex items-center justify-center transition-all transform hover:-translate-y-0.5 active:scale-90 cursor-pointer"
           title="Scroll ke paling atas"
         >
           <ArrowUpToLine size={17} strokeWidth={2.3} />
         </button>
-      )}
-
-      {visibleDir === 'down' && (
+      ) : (
         <button
           type="button"
           onClick={scrollToBottom}
-          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/85 backdrop-blur-xs text-slate-700 hover:text-blue-600 hover:bg-white shadow-md border border-slate-200/80 flex items-center justify-center transition-all active:scale-90 cursor-pointer"
+          className="pointer-events-auto w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/90 backdrop-blur-xs text-slate-700 hover:text-blue-600 hover:bg-white shadow-md border border-slate-200/90 flex items-center justify-center transition-all transform hover:translate-y-0.5 active:scale-90 cursor-pointer"
           title="Scroll ke paling bawah"
         >
           <ArrowDownToLine size={17} strokeWidth={2.3} />
