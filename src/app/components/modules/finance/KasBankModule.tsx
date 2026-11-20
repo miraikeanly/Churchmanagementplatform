@@ -293,14 +293,23 @@ export default function KasBankModule() {
     // 1. Separate opening balance rows and normal transaction rows
     const nonOpening = items.filter(it => !it.isOpeningBalance);
 
+    const getOpeningPeriod = (op: KasBankItem): string => {
+      if ((op as any).period) return (op as any).period;
+      if (op.id && /^opening-\d{4}-\d{2}/.test(op.id)) return op.id.slice(8, 15);
+      return op.tanggal ? op.tanggal.substring(0, 7) : '';
+    };
+
     // Map each month period (e.g. '2026-01') to its explicit opening balance item
     const explicitOpeningsByPeriod: Record<string, KasBankItem> = {};
     items.filter(it => it.isOpeningBalance).forEach(op => {
-      const p = op.tanggal ? op.tanggal.substring(0, 7) : '';
+      if (op.id === 'initial-saldo' && (nonOpening.length > 0 || items.filter(x => x.isOpeningBalance).length > 1)) {
+        return;
+      }
+      const p = getOpeningPeriod(op);
       if (p) explicitOpeningsByPeriod[p] = op;
     });
 
-    // Default initial saldo (Aug 2026 ending → Sep 2026 opening)
+    // Default initial saldo
     const defaultInitialSaldo = 311771182.79;
 
     // Collect all months that have transactions OR explicit openings
@@ -317,7 +326,6 @@ export default function KasBankModule() {
     const sortedMonths = Array.from(monthsSet).sort();
 
     // ── Excel-exact cascading formula: H_n = H_(n-1) + Debet_n - Kredit_n ──
-    // runningBalance carries forward month-to-month (like DES25→JAN26 in Excel)
     let runningBalance = defaultInitialSaldo;
     const finalItems: KasBankItem[] = [];
 
@@ -334,12 +342,11 @@ export default function KasBankModule() {
         openingNominal = runningBalance;
       }
 
-      // Round to 2 decimal places to prevent floating-point drift (like Excel)
       openingNominal = Math.round(openingNominal * 100) / 100;
       runningBalance = openingNominal;
 
       const currentOpeningRow: KasBankItem = {
-        id: existingOp?.id || `opening-${monthStr}`,
+        id: `opening-${monthStr}`,
         tanggal: existingOp?.tanggal || `${monthStr}-01`,
         noBank: existingOp?.noBank || 'BCA260000',
         reff: existingOp?.reff || '1001',
@@ -350,7 +357,8 @@ export default function KasBankModule() {
         kredit: 0,
         saldoBerjalan: openingNominal,
         isOpeningBalance: true,
-        note: existingOp?.note
+        note: existingOp?.note,
+        ...({ period: monthStr } as any)
       };
 
       finalItems.push(currentOpeningRow);
@@ -416,8 +424,9 @@ export default function KasBankModule() {
     return calculatedItems.filter(item => {
       if (selectedPeriod) {
         // Only show transactions and opening balance of the selected period
+        // (For opening balance, check its bound period/id first so editing tanggal to 31/12/2025 still shows in 2026-01!)
         if (item.isOpeningBalance) {
-          const itemPeriod = item.tanggal ? item.tanggal.substring(0, 7) : '';
+          const itemPeriod = (item as any).period || (item.id?.startsWith('opening-') ? item.id.slice(8, 15) : (item.tanggal ? item.tanggal.substring(0, 7) : ''));
           if (itemPeriod !== selectedPeriod) return false;
         } else {
           if (!item.tanggal.startsWith(selectedPeriod)) return false;
@@ -745,15 +754,30 @@ export default function KasBankModule() {
     setEditFormData({ ...item });
   };
 
-  // Save row edit (supports both normal rows and virtual opening balance rows, and auto-saves to DB)
+  // Save row edit (supports both normal rows and opening balance rows without duplicating)
   const handleSaveEdit = (id: string) => {
     setItems(prev => {
-      const exists = prev.some(it => it.id === id);
       const updatedNom = Math.round((Number(editFormData.nominal) || 0) * 100) / 100;
       const updatedTipe = (editFormData.tipe || 'Debet') as 'Debet' | 'Kredit';
+      const isOp = Boolean(editFormData.isOpeningBalance || id.startsWith('opening-'));
+      const targetPeriod = isOp
+        ? ((editFormData as any).period || (id.startsWith('opening-') ? id.slice(8, 15) : (selectedPeriod || (editFormData.tanggal ? editFormData.tanggal.substring(0, 7) : '2026-01'))))
+        : undefined;
+      const canonicalId = isOp && targetPeriod ? `opening-${targetPeriod}` : id;
+
+      // If editing an opening balance row, remove any old duplicate opening balance rows for that period
+      const cleaned = isOp
+        ? prev.filter(it => {
+            if (!it.isOpeningBalance) return true;
+            if (it.id === id || it.id === canonicalId || it.id === 'initial-saldo') return false;
+            const p = (it as any).period || (it.id?.startsWith('opening-') ? it.id.slice(8, 15) : (it.tanggal ? it.tanggal.substring(0, 7) : ''));
+            return p !== targetPeriod;
+          })
+        : prev;
+
       let next: KasBankItem[];
-      if (exists) {
-        next = prev.map(it => {
+      if (!isOp && cleaned.some(it => it.id === id)) {
+        next = cleaned.map(it => {
           if (it.id === id) {
             return {
               ...it,
@@ -768,9 +792,9 @@ export default function KasBankModule() {
         });
       } else {
         next = [
-          ...prev,
+          ...cleaned,
           {
-            id,
+            id: canonicalId,
             tanggal: editFormData.tanggal || '2026-01-01',
             noBank: editFormData.noBank || 'BCA260000',
             reff: editFormData.reff || '1001',
@@ -780,9 +804,10 @@ export default function KasBankModule() {
             debet: updatedTipe === 'Debet' ? updatedNom : 0,
             kredit: updatedTipe === 'Kredit' ? updatedNom : 0,
             saldoBerjalan: updatedNom,
-            isOpeningBalance: Boolean(editFormData.isOpeningBalance || id.startsWith('opening-')),
-            note: editFormData.note
-          }
+            isOpeningBalance: isOp,
+            note: editFormData.note,
+            ...(targetPeriod ? { period: targetPeriod } : {})
+          } as KasBankItem
         ];
       }
       persistItemsToDb(next);
