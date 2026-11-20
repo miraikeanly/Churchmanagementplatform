@@ -137,20 +137,105 @@ export default function PettyCashModule() {
           if (cur.trim()) lines.push(cur.trim());
           fullText += lines.join('\n') + '\n';
         }
-        const parsed = parseBcaPdfText(fullText);
-        parsed.transactions.forEach((tx, idx) => {
-          const nom = Math.round((Number(tx.nominal) || 0) * 100) / 100;
-          if (nom <= 0) return;
+
+        // Dedicated parser for Arus Kas Kecil / Petty Cash PDF format:
+        // [Tanggal?] [No?] [Reff?] [Keterangan] [Nominal] [Saldo]
+        const parseMoney = (s: string) => {
+          const cleaned = s.replace(/,/g, '').trim();
+          const n = parseFloat(cleaned);
+          return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+        };
+
+        const rawLines = fullText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let currentDate = `${selectedYear}-${selectedMonth === 'ALL' ? '01' : selectedMonth}-01`;
+        let lastNo = '';
+        let prevSaldo: number | null = null;
+
+        for (let idx = 0; idx < rawLines.length; idx++) {
+          let line = rawLines[idx];
+
+          // Skip headers / titles
+          if (/^(Arus Kas Kecil|Ibadah Raya|Per \d+|Tanggal\s+No)/i.test(line)) continue;
+
+          // Opening balance line: e.g. "31 DES Saldo 30,000,000.00"
+          const openMatch = line.match(/Saldo\s+([\d,]+\.\d{2})$/i);
+          if (openMatch && !/(KK|KB|PC)\d{4,}/i.test(line)) {
+            const openSaldo = parseMoney(openMatch[1]);
+            if (openSaldo > 0) {
+              prevSaldo = openSaldo;
+              imported.push({
+                id: `pc-pdf-open-${Date.now()}-${idx}`,
+                tanggal: `${selectedYear}-${selectedMonth === 'ALL' ? '01' : selectedMonth}-01`,
+                no: 'SALDO',
+                ref: '1001',
+                keterangan: 'Saldo Awal Petty Cash',
+                tipe: 'Debet',
+                nominal: openSaldo
+              });
+            }
+            continue;
+          }
+
+          // Transaction line ends with TWO amounts: [nominal] [saldo]
+          const twoNums = line.match(/([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/);
+          if (!twoNums) continue;
+
+          const nom = parseMoney(twoNums[1]);
+          const saldo = parseMoney(twoNums[2]);
+          if (nom <= 0) continue;
+
+          // Determine Debet vs Kredit mathematically from prevSaldo
+          let tipe: 'Debet' | 'Kredit' = 'Kredit';
+          if (prevSaldo !== null) {
+            if (Math.abs((prevSaldo + nom) - saldo) < 1) {
+              tipe = 'Debet';
+            } else if (Math.abs((prevSaldo - nom) - saldo) < 1) {
+              tipe = 'Kredit';
+            } else {
+              tipe = saldo > prevSaldo ? 'Debet' : 'Kredit';
+            }
+          } else if (/top\s*up/i.test(line)) {
+            tipe = 'Debet';
+          }
+          prevSaldo = saldo;
+
+          // Strip trailing amounts
+          let rest = line.slice(0, twoNums.index).trim();
+
+          // Optional leading date DD/MM/YYYY
+          const dateMatch = rest.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+/);
+          if (dateMatch) {
+            currentDate = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+            rest = rest.slice(dateMatch[0].length).trim();
+          }
+
+          // Optional doc No (KK260001, KB260023, PC260001, etc.)
+          let docNo = lastNo;
+          const noMatch = rest.match(/^([A-Z]{2,3}\d{4,})\s+/);
+          if (noMatch) {
+            docNo = noMatch[1];
+            lastNo = docNo;
+            rest = rest.slice(noMatch[0].length).trim();
+          }
+
+          // Optional Reff code (DK, OTA, KPP, 6001, 2001, 2002, 3002, etc.)
+          let refCode = '1001';
+          const refMatch = rest.match(/^(\d{4}|DK|OTA|KPP|WBI|SM|TEENS|YOUTH)\s+/i);
+          if (refMatch) {
+            refCode = refMatch[1].toUpperCase();
+            rest = rest.slice(refMatch[0].length).trim();
+          }
+
           imported.push({
             id: `pc-pdf-${Date.now()}-${idx}`,
-            tanggal: tx.tanggal || new Date().toISOString().split('T')[0],
-            no: `PC${selectedYear.slice(-2)}${String(items.length + idx + 1).padStart(4, '0')}`,
-            ref: '1001',
-            keterangan: tx.keterangan || 'Transaksi PDF',
-            tipe: tx.tipe === 'Debet' ? 'Debet' : 'Kredit',
+            tanggal: currentDate,
+            no: docNo || `PC${selectedYear.slice(-2)}${String(items.length + imported.length + 1).padStart(4, '0')}`,
+            ref: refCode,
+            keterangan: rest || 'Transaksi Petty Cash',
+            tipe,
             nominal: nom
           });
-        });
+        }
       } else {
         // CSV / TSV / Excel-saved CSV
         const text = await file.text();
