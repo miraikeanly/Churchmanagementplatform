@@ -744,105 +744,124 @@ export default function UserManagement() {
                         </label>
                       </div>
 
-                      {/* Sub-selector khusus Keuangan: batasan per sub-menu keuangan */}
-                      {mod.key === 'Keuangan' && (canView || canEdit) && (
+                      {/* Sub-selector khusus Keuangan: View / Edit per sub-menu (selalu tampil agar langsung terlihat) */}
+                      {mod.key === 'Keuangan' && (
                         <div className="mt-3 pt-3 border-t border-blue-100 space-y-2.5">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-xs font-bold text-slate-800">Cakupan Menu Keuangan yang Diizinkan:</span>
-                            <div className="inline-flex rounded-lg p-0.5 bg-slate-100 border border-slate-200">
+                            <span className="text-xs font-bold text-slate-800">Hak Akses Per Menu Keuangan (View / Edit):</span>
+                            <div className="flex items-center gap-2 text-[11px]">
                               <button
                                 type="button"
-                                onClick={() => setTempPermissions((prev: any) => ({
-                                  ...prev,
-                                  allKeuangan: true,
-                                  allowedKeuangan: KEUANGAN_OPTIONS.map(k => k.id)
-                                }))}
-                                className={`text-[11px] font-bold px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                                  tempPermissions.allKeuangan !== false ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                                }`}
+                                onClick={() => setTempPermissions((prev: any) => {
+                                  const subPerms: Record<string, { view: boolean; edit: boolean }> = {};
+                                  KEUANGAN_OPTIONS.forEach(k => { subPerms[k.id] = { view: true, edit: true }; });
+                                  return {
+                                    ...prev,
+                                    viewKeuangan: true,
+                                    editKeuangan: true,
+                                    allKeuangan: true,
+                                    allowedKeuangan: KEUANGAN_OPTIONS.map(k => k.id),
+                                    keuanganSubPermissions: subPerms
+                                  };
+                                })}
+                                className="text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
                               >
-                                Semua Keuangan
+                                Pilih Semua
                               </button>
+                              <span className="text-slate-300">•</span>
                               <button
                                 type="button"
                                 onClick={() => setTempPermissions((prev: any) => ({
                                   ...prev,
-                                  allKeuangan: false
+                                  viewKeuangan: false,
+                                  editKeuangan: false,
+                                  allKeuangan: false,
+                                  allowedKeuangan: [],
+                                  keuanganSubPermissions: {}
                                 }))}
-                                className={`text-[11px] font-bold px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                                  tempPermissions.allKeuangan === false ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                                }`}
+                                className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
                               >
-                                Pilih Menu Tertentu
+                                Kosongkan
                               </button>
                             </div>
                           </div>
 
-                          {tempPermissions.allKeuangan === false ? (
-                            <div className="bg-white/90 p-3 rounded-xl border border-slate-200/90 space-y-2.5">
-                              <p className="text-[11px] text-slate-500">
-                                Centang hanya menu Keuangan yang boleh diakses (misal: hanya <strong>Patty Cash</strong> atau <strong>Laporan Keuangan</strong>):
-                              </p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {KEUANGAN_OPTIONS.map(keu => {
-                                  const isChecked = (tempPermissions.allowedKeuangan || []).includes(keu.id);
-                                  return (
-                                    <label
-                                      key={keu.id}
-                                      className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer select-none ${
-                                        isChecked
-                                          ? 'bg-blue-50/60 border-blue-300 ring-1 ring-blue-200'
-                                          : 'bg-white border-slate-200 hover:border-slate-300'
-                                      }`}
-                                    >
+                          <div className="bg-white/90 p-2.5 rounded-xl border border-slate-200/90 space-y-1.5">
+                            {KEUANGAN_OPTIONS.map(keu => {
+                              const subPerms = tempPermissions.keuanganSubPermissions || {};
+                              const isAllowedLegacy = (tempPermissions.allowedKeuangan || []).includes(keu.id);
+                              const subView = subPerms[keu.id]?.view ?? (canView && (tempPermissions.allKeuangan !== false || isAllowedLegacy));
+                              const subEdit = subPerms[keu.id]?.edit ?? (canEdit && (tempPermissions.allKeuangan !== false || isAllowedLegacy));
+
+                              const toggleSub = (type: 'view' | 'edit') => {
+                                setTempPermissions((prev: any) => {
+                                  const nextSub = { ...(prev.keuanganSubPermissions || {}) };
+                                  // Initialize all keys if not yet present
+                                  KEUANGAN_OPTIONS.forEach(k => {
+                                    if (!nextSub[k.id]) {
+                                      const leg = (prev.allowedKeuangan || []).includes(k.id);
+                                      nextSub[k.id] = {
+                                        view: !!(prev.viewKeuangan && (prev.allKeuangan !== false || leg)),
+                                        edit: !!(prev.editKeuangan && (prev.allKeuangan !== false || leg)),
+                                      };
+                                    }
+                                  });
+                                  const cur = nextSub[keu.id];
+                                  if (type === 'edit') {
+                                    const nextEditVal = !cur.edit;
+                                    nextSub[keu.id] = { view: nextEditVal ? true : cur.view, edit: nextEditVal };
+                                  } else {
+                                    const nextViewVal = !cur.view;
+                                    nextSub[keu.id] = { view: nextViewVal, edit: nextViewVal ? cur.edit : false };
+                                  }
+                                  const allowed = KEUANGAN_OPTIONS.filter(k => nextSub[k.id]?.view || nextSub[k.id]?.edit).map(k => k.id);
+                                  const anyView = allowed.length > 0;
+                                  const anyEdit = KEUANGAN_OPTIONS.some(k => nextSub[k.id]?.edit);
+                                  return {
+                                    ...prev,
+                                    viewKeuangan: anyView,
+                                    editKeuangan: anyEdit,
+                                    allKeuangan: allowed.length === KEUANGAN_OPTIONS.length,
+                                    allowedKeuangan: allowed,
+                                    keuanganSubPermissions: nextSub
+                                  };
+                                });
+                              };
+
+                              return (
+                                <div
+                                  key={keu.id}
+                                  className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${
+                                    subView || subEdit
+                                      ? 'bg-blue-50/50 border-blue-200'
+                                      : 'bg-white border-slate-100'
+                                  }`}
+                                >
+                                  <span className="font-bold text-slate-800 text-xs">{keu.label}</span>
+                                  <div className="flex items-center gap-3">
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-medium text-slate-700">
                                       <input
                                         type="checkbox"
-                                        checked={isChecked}
-                                        onChange={() => {
-                                          setTempPermissions((prev: any) => {
-                                            const current = prev.allowedKeuangan || [];
-                                            const next = isChecked
-                                              ? current.filter((id: string) => id !== keu.id)
-                                              : [...current, keu.id];
-                                            return { ...prev, allowedKeuangan: next, allKeuangan: false };
-                                          });
-                                        }}
-                                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                        checked={!!subView}
+                                        onChange={() => toggleSub('view')}
+                                        className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
                                       />
-                                      <span className="font-bold text-slate-800 text-xs">{keu.label}</span>
+                                      View
                                     </label>
-                                  );
-                                })}
-                              </div>
-                              <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                                <span className="text-slate-400 font-medium">
-                                  Terpilih: <strong>{(tempPermissions.allowedKeuangan || []).length}</strong> dari {KEUANGAN_OPTIONS.length} menu
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setTempPermissions((p: any) => ({ ...p, allowedKeuangan: KEUANGAN_OPTIONS.map(k => k.id) }))}
-                                    className="text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
-                                  >
-                                    Pilih Semua
-                                  </button>
-                                  <span className="text-slate-300">•</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setTempPermissions((p: any) => ({ ...p, allowedKeuangan: [] }))}
-                                    className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
-                                  >
-                                    Kosongkan
-                                  </button>
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-medium text-slate-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!subEdit}
+                                        onChange={() => toggleSub('edit')}
+                                        className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
+                                      />
+                                      Edit
+                                    </label>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200/80 text-[11px] text-emerald-800 font-medium flex items-center gap-2">
-                              <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                              <span>Admin ini dapat mengakses seluruh 5 menu Keuangan (Kas Bank, General Ledger, Patty Cash, Kas Kecil, Laporan Keuangan).</span>
-                            </div>
-                          )}
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
 
