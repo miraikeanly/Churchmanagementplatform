@@ -13,6 +13,7 @@ import {
   BreakdownSubItem,
   CustomColumn,
   formatRupiah,
+  formatTanggalDMY,
   classifyTransaction
 } from './financeUtils';
 import { parseBcaPdfText } from './pdfParser';
@@ -1594,9 +1595,9 @@ export default function KasBankModule() {
                           )}
                         </td>
 
-                        {/* Tanggal */}
+                        {/* Tanggal (DD/MM/YYYY - Tanggal/Bulan/Tahun) */}
                         <td className="py-2 px-3 border-r border-slate-200 whitespace-nowrap font-mono text-slate-600">
-                          {item.tanggal}
+                          {formatTanggalDMY(item.tanggal)}
                         </td>
 
                         {/* No Bank */}

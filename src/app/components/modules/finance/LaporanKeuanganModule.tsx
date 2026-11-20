@@ -7,7 +7,8 @@ import {
   KasBankItem,
   GLAccount,
   INITIAL_GL_ACCOUNTS,
-  formatRupiah
+  formatRupiah,
+  formatTanggalDMY
 } from './financeUtils';
 import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
 
@@ -576,7 +577,7 @@ export default function LaporanKeuanganModule() {
               LAPORAN KEUANGAN — {formatPeriodeIndo(selectedPeriod).toUpperCase()}
             </div>
             <div className="text-[11px] text-slate-300">
-              GBI Jelambar Timur • Tanggal Laporan: {currentMeta.tanggalLaporan}
+              GBI Jelambar Timur • Tanggal Laporan: {formatTanggalDMY(currentMeta.tanggalLaporan)}
             </div>
           </div>
           <div className="text-[11px] font-mono bg-white/10 px-2.5 py-1 rounded-lg">

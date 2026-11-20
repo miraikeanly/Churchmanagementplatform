@@ -154,3 +154,11 @@ export function classifyTransaction(desc: string, tipe: 'CR' | 'DB' | 'Debet' | 
     return '1001';
   }
 }
+
+/** Format YYYY-MM-DD into DD/MM/YYYY (Tanggal/Bulan/Tahun) */
+export function formatTanggalDMY(iso?: string): string {
+  if (!iso) return '-';
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
