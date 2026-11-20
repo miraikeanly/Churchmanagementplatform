@@ -15,16 +15,16 @@ type AppUser = {
 const MODULES = [
   { key: 'Jemaat', label: 'Data Jemaat' },
   { key: 'Absensi', label: 'Absensi' },
-  { key: 'Komsel', label: 'Komsel' },
-  { key: 'Keuangan', label: 'Keuangan' },
   { key: 'Inventaris', label: 'Inventaris' },
   { key: 'Pelayan', label: 'Pelayan' },
   { key: 'Pengumuman', label: 'Pengumuman' },
   { key: 'Galeri', label: 'Galeri Foto' },
-  { key: 'Komisi', label: 'Komisi (Per-Komisi)' },
   { key: 'Jadwal', label: 'Jadwal Pelayanan' },
   { key: 'Tim', label: 'Tim Pelayanan' },
-  { key: 'Pendaftaran', label: 'Pendaftaran' }
+  { key: 'Pendaftaran', label: 'Pendaftaran' },
+  { key: 'Komsel', label: 'Komsel' },
+  { key: 'Keuangan', label: 'Keuangan' },
+  { key: 'Komisi', label: 'Komisi (Per-Komisi)' },
 ];
 
 export const KOMISI_OPTIONS = [
