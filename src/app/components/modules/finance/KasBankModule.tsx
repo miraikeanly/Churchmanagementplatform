@@ -97,19 +97,76 @@ export default function KasBankModule() {
   const [editingTotalSaldo, setEditingTotalSaldo] = useState<boolean>(false);
   const [editTotalSaldoInput, setEditTotalSaldoInput] = useState<string>('');
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState<boolean>(false);
+  const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<KasBankItem>>>({});
+
+  // Auto-persist helper so edits immediately save to localStorage AND Supabase DB
+  const persistItemsToDb = (nextItems: KasBankItem[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(nextItems));
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('kasbank-updated'));
+    } catch {}
+    supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: nextItems }, { onConflict: 'key' }).catch(() => {});
+  };
+
+  const openBulkEditModal = () => {
+    const drafts: Record<string, Partial<KasBankItem>> = {};
+    displayedItems.forEach(r => {
+      drafts[r.id] = { ...r };
+    });
+    setBulkDrafts(drafts);
+    setIsBulkEditModalOpen(true);
+  };
 
   const handleBulkUpdateKasBankField = (id: string, field: keyof KasBankItem, value: any) => {
-    setItems(prev => prev.map(it => {
-      if (it.id !== id) return it;
-      const updated = { ...it, [field]: value };
-      if (field === 'nominal' || field === 'tipe') {
-        const nom = Math.round((Number(updated.nominal) || 0) * 100) / 100;
-        updated.nominal = nom;
-        updated.debet = updated.tipe === 'Debet' ? nom : 0;
-        updated.kredit = updated.tipe === 'Kredit' ? nom : 0;
-      }
-      return updated;
+    setBulkDrafts(prev => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [field]: value }
     }));
+  };
+
+  const handleCommitBulkEdit = () => {
+    setItems(prev => {
+      const existingIds = new Set(prev.map(it => it.id));
+      const updated = prev.map(it => {
+        const d = bulkDrafts[it.id];
+        if (!d) return it;
+        const nom = Math.round((Number(d.nominal ?? it.nominal) || 0) * 100) / 100;
+        const tipe = (d.tipe || it.tipe) as 'Debet' | 'Kredit';
+        return {
+          ...it,
+          ...d,
+          nominal: nom,
+          tipe,
+          debet: tipe === 'Debet' ? nom : 0,
+          kredit: tipe === 'Kredit' ? nom : 0,
+        } as KasBankItem;
+      });
+      // Also insert any virtual opening balance row that was edited
+      Object.entries(bulkDrafts).forEach(([id, d]) => {
+        if (!existingIds.has(id) && d) {
+          const nom = Math.round((Number(d.nominal) || 0) * 100) / 100;
+          const tipe = (d.tipe || 'Debet') as 'Debet' | 'Kredit';
+          updated.push({
+            id,
+            tanggal: d.tanggal || '2026-01-01',
+            noBank: d.noBank || 'BCA260000',
+            reff: d.reff || '1001',
+            keterangan: d.keterangan || 'Saldo Awal Rekening',
+            tipe,
+            nominal: nom,
+            debet: tipe === 'Debet' ? nom : 0,
+            kredit: tipe === 'Kredit' ? nom : 0,
+            saldoBerjalan: nom,
+            isOpeningBalance: Boolean(d.isOpeningBalance || id.startsWith('opening-')),
+            note: d.note
+          });
+        }
+      });
+      persistItemsToDb(updated);
+      return updated;
+    });
+    setIsBulkEditModalOpen(false);
+    setFeedbackMsg({ type: 'success', text: 'Semua perubahan berhasil disimpan ke Database!' });
   };
 
   // Load latest saved data from Supabase KV on mount (so data syncs across devices)
@@ -268,13 +325,11 @@ export default function KasBankModule() {
       const isFirstMonth = idx === 0;
 
       let openingNominal: number;
-      if (isFirstMonth) {
-        // First month: use stored opening if available, else default
-        openingNominal = existingOp?.nominal !== undefined
-          ? Number(existingOp.nominal)
-          : defaultInitialSaldo;
+      if (existingOp?.nominal !== undefined && !isNaN(Number(existingOp.nominal))) {
+        openingNominal = Number(existingOp.nominal);
+      } else if (isFirstMonth) {
+        openingNominal = defaultInitialSaldo;
       } else {
-        // Every subsequent month: opening = previous month ending (auto-chain)
         openingNominal = runningBalance;
       }
 
@@ -689,24 +744,52 @@ export default function KasBankModule() {
     setEditFormData({ ...item });
   };
 
-  // Save row edit
+  // Save row edit (supports both normal rows and virtual opening balance rows, and auto-saves to DB)
   const handleSaveEdit = (id: string) => {
-    setItems(prev =>
-      prev.map(it => {
-        if (it.id === id) {
-          const updatedNom = Number(editFormData.nominal) || 0;
-          return {
-            ...it,
-            ...editFormData,
-            nominal: updatedNom
-          } as KasBankItem;
-        }
-        return it;
-      })
-    );
+    setItems(prev => {
+      const exists = prev.some(it => it.id === id);
+      const updatedNom = Math.round((Number(editFormData.nominal) || 0) * 100) / 100;
+      const updatedTipe = (editFormData.tipe || 'Debet') as 'Debet' | 'Kredit';
+      let next: KasBankItem[];
+      if (exists) {
+        next = prev.map(it => {
+          if (it.id === id) {
+            return {
+              ...it,
+              ...editFormData,
+              nominal: updatedNom,
+              tipe: updatedTipe,
+              debet: updatedTipe === 'Debet' ? updatedNom : 0,
+              kredit: updatedTipe === 'Kredit' ? updatedNom : 0,
+            } as KasBankItem;
+          }
+          return it;
+        });
+      } else {
+        next = [
+          ...prev,
+          {
+            id,
+            tanggal: editFormData.tanggal || '2026-01-01',
+            noBank: editFormData.noBank || 'BCA260000',
+            reff: editFormData.reff || '1001',
+            keterangan: editFormData.keterangan || 'Saldo Awal Rekening',
+            tipe: updatedTipe,
+            nominal: updatedNom,
+            debet: updatedTipe === 'Debet' ? updatedNom : 0,
+            kredit: updatedTipe === 'Kredit' ? updatedNom : 0,
+            saldoBerjalan: updatedNom,
+            isOpeningBalance: Boolean(editFormData.isOpeningBalance || id.startsWith('opening-')),
+            note: editFormData.note
+          }
+        ];
+      }
+      persistItemsToDb(next);
+      return next;
+    });
     setEditingId(null);
     setEditFormData({});
-    setFeedbackMsg({ type: 'success', text: 'Perubahan baris berhasil disimpan.' });
+    setFeedbackMsg({ type: 'success', text: 'Perubahan baris berhasil disimpan ke Database.' });
   };
 
   // Delete row
@@ -1021,7 +1104,7 @@ export default function KasBankModule() {
             />
             <button
               type="button"
-              onClick={() => setIsBulkEditModalOpen(true)}
+              onClick={openBulkEditModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
               title="Edit banyak baris Kas Bank sekaligus seperti Excel"
             >
@@ -2109,13 +2192,22 @@ export default function KasBankModule() {
                 <h3 className="text-sm font-bold">Edit Semua Baris Kas Bank ({displayedItems.length} baris)</h3>
                 <p className="text-[11px] text-indigo-100">Ubah tanggal, No Bank, Keterangan, Kode GL, Tipe, atau Nominal sekaligus — otomatis hitung ulang saldo!</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsBulkEditModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg bg-white text-indigo-700 text-xs font-bold hover:bg-indigo-50 cursor-pointer"
-              >
-                Selesai
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkEditModalOpen(false)}
+                  className="px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-semibold hover:bg-white/25 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCommitBulkEdit}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black hover:bg-emerald-300 cursor-pointer shadow-xs"
+                >
+                  ✓ Simpan Semua Editan
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-3">
               <table className="w-full text-xs border-collapse min-w-[780px]">
@@ -2131,12 +2223,14 @@ export default function KasBankModule() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {displayedItems.map(row => (
+                  {displayedItems.map(row => {
+                    const d = bulkDrafts[row.id] || row;
+                    return (
                     <tr key={row.id} className="hover:bg-indigo-50/30">
                       <td className="p-1.5">
                         <input
                           type="date"
-                          value={row.tanggal || ''}
+                          value={d.tanggal || ''}
                           onChange={e => handleBulkUpdateKasBankField(row.id, 'tanggal', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono"
                         />
@@ -2144,7 +2238,7 @@ export default function KasBankModule() {
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.noBank || ''}
+                          value={d.noBank || ''}
                           onChange={e => handleBulkUpdateKasBankField(row.id, 'noBank', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono"
                         />
@@ -2152,7 +2246,7 @@ export default function KasBankModule() {
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.keterangan || ''}
+                          value={d.keterangan || ''}
                           onChange={e => handleBulkUpdateKasBankField(row.id, 'keterangan', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs"
                         />
@@ -2160,14 +2254,14 @@ export default function KasBankModule() {
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.reff || ''}
+                          value={d.reff || ''}
                           onChange={e => handleBulkUpdateKasBankField(row.id, 'reff', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono font-bold"
                         />
                       </td>
                       <td className="p-1.5">
                         <select
-                          value={row.tipe}
+                          value={d.tipe || 'Debet'}
                           onChange={e => handleBulkUpdateKasBankField(row.id, 'tipe', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-bold"
                         >
@@ -2179,21 +2273,22 @@ export default function KasBankModule() {
                         <input
                           type="number"
                           step="0.01"
-                          value={row.nominal ?? 0}
-                          onChange={e => handleBulkUpdateKasBankField(row.id, 'nominal', parseFloat(e.target.value) || 0)}
+                          value={d.nominal ?? 0}
+                          onChange={e => handleBulkUpdateKasBankField(row.id, 'nominal', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono text-right"
                         />
                       </td>
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.note || ''}
+                          value={d.note || ''}
                           onChange={e => handleBulkUpdateKasBankField(row.id, 'note', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs"
                         />
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>

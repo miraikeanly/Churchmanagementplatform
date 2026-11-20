@@ -27,20 +27,43 @@ export default function GeneralLedgerModule() {
   const [lastSavedDb, setLastSavedDb] = useState<string | null>(null);
   const [isSyncingLaporan, setIsSyncingLaporan] = useState<boolean>(false);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState<boolean>(false);
+  const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<KasBankItem>>>({});
+
+  const openBulkEditGlModal = () => {
+    const drafts: Record<string, Partial<KasBankItem>> = {};
+    rowsWithSaldo.forEach(r => {
+      drafts[r.id] = { ...r };
+    });
+    setBulkDrafts(drafts);
+    setIsBulkEditModalOpen(true);
+  };
 
   const handleBulkUpdateGlField = (id: string, field: keyof KasBankItem, value: any) => {
+    setBulkDrafts(prev => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [field]: value }
+    }));
+  };
+
+  const handleCommitBulkEditGl = () => {
     const updated = items.map(it => {
-      if (it.id !== id) return it;
-      const next = { ...it, [field]: value };
-      if (field === 'nominal' || field === 'tipe') {
-        const nom = Math.round((Number(next.nominal) || 0) * 100) / 100;
-        next.nominal = nom;
-        next.debet = next.tipe === 'Debet' ? nom : 0;
-        next.kredit = next.tipe === 'Kredit' ? nom : 0;
-      }
-      return next;
+      const d = bulkDrafts[it.id];
+      if (!d) return it;
+      const nom = Math.round((Number(d.nominal ?? it.nominal) || 0) * 100) / 100;
+      const tipe = (d.tipe || it.tipe) as 'Debet' | 'Kredit';
+      return {
+        ...it,
+        ...d,
+        nominal: nom,
+        tipe,
+        debet: tipe === 'Debet' ? nom : 0,
+        kredit: tipe === 'Kredit' ? nom : 0,
+      } as KasBankItem;
     });
     saveItems(updated);
+    setIsBulkEditModalOpen(false);
+    setSyncFeedback('Semua perubahan baris General Ledger berhasil disimpan ke Database!');
+    setTimeout(() => setSyncFeedback(null), 4000);
   };
 
   const handleSyncCodeToLaporan = async () => {
@@ -120,6 +143,7 @@ export default function GeneralLedgerModule() {
     } catch (e) {
       console.error('Failed saving items to localStorage', e);
     }
+    supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: sorted }, { onConflict: 'key' }).catch(() => {});
   };
 
   useEffect(() => {
@@ -570,7 +594,7 @@ export default function GeneralLedgerModule() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            onClick={() => setIsBulkEditModalOpen(true)}
+            onClick={openBulkEditGlModal}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
             title="Edit banyak baris General Ledger sekaligus seperti Excel"
           >
@@ -1516,13 +1540,22 @@ export default function GeneralLedgerModule() {
                 <h3 className="text-sm font-bold">Edit Semua Baris General Ledger ({rowsWithSaldo.length} baris)</h3>
                 <p className="text-[11px] text-indigo-100">Edit Tanggal, No Bank, Keterangan, Kode GL, Tipe, Nominal, dan Note sekaligus — langsung auto-sum!</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsBulkEditModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg bg-white text-indigo-700 text-xs font-bold hover:bg-indigo-50 cursor-pointer"
-              >
-                Selesai
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkEditModalOpen(false)}
+                  className="px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-semibold hover:bg-white/25 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCommitBulkEditGl}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black hover:bg-emerald-300 cursor-pointer shadow-xs"
+                >
+                  ✓ Simpan Semua Editan
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-3">
               <table className="w-full text-xs border-collapse min-w-[780px]">
@@ -1538,12 +1571,14 @@ export default function GeneralLedgerModule() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {rowsWithSaldo.map(row => (
+                  {rowsWithSaldo.map(row => {
+                    const d = bulkDrafts[row.id] || row;
+                    return (
                     <tr key={row.id} className="hover:bg-indigo-50/30">
                       <td className="p-1.5">
                         <input
                           type="date"
-                          value={row.tanggal || ''}
+                          value={d.tanggal || ''}
                           onChange={e => handleBulkUpdateGlField(row.id, 'tanggal', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono"
                         />
@@ -1551,7 +1586,7 @@ export default function GeneralLedgerModule() {
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.noBank || ''}
+                          value={d.noBank || ''}
                           onChange={e => handleBulkUpdateGlField(row.id, 'noBank', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono"
                         />
@@ -1559,7 +1594,7 @@ export default function GeneralLedgerModule() {
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.keterangan || ''}
+                          value={d.keterangan || ''}
                           onChange={e => handleBulkUpdateGlField(row.id, 'keterangan', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs"
                         />
@@ -1567,14 +1602,14 @@ export default function GeneralLedgerModule() {
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.reff || ''}
+                          value={d.reff || ''}
                           onChange={e => handleBulkUpdateGlField(row.id, 'reff', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono font-bold"
                         />
                       </td>
                       <td className="p-1.5">
                         <select
-                          value={row.tipe}
+                          value={d.tipe || 'Debet'}
                           onChange={e => handleBulkUpdateGlField(row.id, 'tipe', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-bold"
                         >
@@ -1586,21 +1621,22 @@ export default function GeneralLedgerModule() {
                         <input
                           type="number"
                           step="0.01"
-                          value={row.nominal ?? 0}
-                          onChange={e => handleBulkUpdateGlField(row.id, 'nominal', parseFloat(e.target.value) || 0)}
+                          value={d.nominal ?? 0}
+                          onChange={e => handleBulkUpdateGlField(row.id, 'nominal', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono text-right"
                         />
                       </td>
                       <td className="p-1.5">
                         <input
                           type="text"
-                          value={row.note || ''}
+                          value={d.note || ''}
                           onChange={e => handleBulkUpdateGlField(row.id, 'note', e.target.value)}
                           className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs"
                         />
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>

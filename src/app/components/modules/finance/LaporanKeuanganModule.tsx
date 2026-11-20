@@ -118,6 +118,7 @@ export default function LaporanKeuanganModule() {
       if (newKey !== key) delete next[key];
       next[newKey] = updated;
       try { localStorage.setItem(STORAGE_KEY_LAPORAN_SYNC, JSON.stringify(next)); } catch {}
+      supabaseAdmin.from(KV).upsert({ key: DB_KEY_LAPORAN_SYNC, value: next }, { onConflict: 'key' }).catch(() => {});
       return next;
     });
   };
@@ -213,6 +214,7 @@ export default function LaporanKeuanganModule() {
         [selectedPeriod]: { ...currentMeta, ...patch }
       };
       try { localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify(next)); } catch {}
+      supabaseAdmin.from(KV).upsert({ key: DB_KEY_REPORTS, value: next }, { onConflict: 'key' }).catch(() => {});
       return next;
     });
   };

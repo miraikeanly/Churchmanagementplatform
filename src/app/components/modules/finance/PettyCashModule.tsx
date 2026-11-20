@@ -94,15 +94,39 @@ export default function PettyCashModule() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<PettyCashItem>>({});
   const [isBulkEdit, setIsBulkEdit] = useState<boolean>(false);
+  const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<PettyCashItem>>>({});
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleBulkUpdateField = (id: string, field: keyof PettyCashItem, value: any) => {
-    setItems(prev => {
-      const next = prev.map(it => it.id === id ? { ...it, [field]: value } : it);
-      try { localStorage.setItem(STORAGE_KEY_PC, JSON.stringify(next)); } catch {}
-      return next;
-    });
+    setBulkDrafts(prev => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [field]: value }
+    }));
+  };
+
+  const toggleBulkEditPettyCash = () => {
+    if (!isBulkEdit) {
+      const drafts: Record<string, Partial<PettyCashItem>> = {};
+      items.forEach(it => { drafts[it.id] = { ...it }; });
+      setBulkDrafts(drafts);
+      setEditingId(null);
+      setIsBulkEdit(true);
+    } else {
+      const next = items.map(it => {
+        const d = bulkDrafts[it.id];
+        if (!d) return it;
+        return {
+          ...it,
+          ...d,
+          nominal: Math.round((Number(d.nominal ?? it.nominal) || 0) * 100) / 100
+        } as PettyCashItem;
+      });
+      updateItems(next);
+      setIsBulkEdit(false);
+      setFeedback({ type: 'success', text: 'Semua perubahan Petty Cash berhasil disimpan ke Database!' });
+      setTimeout(() => setFeedback(null), 4000);
+    }
   };
 
   // Import PDF (BCA/Rekening) or Excel/CSV into Petty Cash
@@ -310,11 +334,12 @@ export default function PettyCashModule() {
     })();
   }, []);
 
-  // Persist locally on change
+  // Persist locally & to Supabase DB on change
   const updateItems = (next: PettyCashItem[]) => {
     const sorted = [...next].sort((a, b) => (a.tanggal || '').localeCompare(b.tanggal || ''));
     setItems(sorted);
     try { localStorage.setItem(STORAGE_KEY_PC, JSON.stringify(sorted)); } catch {}
+    supabaseAdmin.from(KV).upsert({ key: DB_KEY_PC, value: sorted }, { onConflict: 'key' }).catch(() => {});
   };
 
   // Helper: push entry to Kas Bank & General Ledger
@@ -593,7 +618,7 @@ export default function PettyCashModule() {
             </button>
             <button
               type="button"
-              onClick={() => { setIsBulkEdit(prev => !prev); setEditingId(null); }}
+              onClick={toggleBulkEditPettyCash}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer ${
                 isBulkEdit
                   ? 'bg-indigo-600 text-white'
@@ -601,7 +626,7 @@ export default function PettyCashModule() {
               }`}
             >
               <Edit2 size={13} />
-              {isBulkEdit ? 'Selesai Edit Semua' : 'Edit Semua'}
+              {isBulkEdit ? '✓ Simpan & Selesai Edit' : 'Edit Semua'}
             </button>
             <button
               type="button"
@@ -824,12 +849,13 @@ export default function PettyCashModule() {
               ) : (
                 rowsWithSaldo.map(row => {
                   const isEditing = isBulkEdit || editingId === row.id;
-                  const valTgl = isBulkEdit ? row.tanggal : (editDraft.tanggal || '');
-                  const valNo = isBulkEdit ? row.no : (editDraft.no || '');
-                  const valRef = isBulkEdit ? row.ref : (editDraft.ref || '');
-                  const valKet = isBulkEdit ? row.keterangan : (editDraft.keterangan || '');
-                  const valTipe = isBulkEdit ? row.tipe : (editDraft.tipe || row.tipe);
-                  const valNom = isBulkEdit ? row.nominal : (editDraft.nominal ?? 0);
+                  const bDraft = bulkDrafts[row.id] || row;
+                  const valTgl = isBulkEdit ? (bDraft.tanggal ?? row.tanggal) : (editDraft.tanggal || '');
+                  const valNo = isBulkEdit ? (bDraft.no ?? row.no) : (editDraft.no || '');
+                  const valRef = isBulkEdit ? (bDraft.ref ?? row.ref) : (editDraft.ref || '');
+                  const valKet = isBulkEdit ? (bDraft.keterangan ?? row.keterangan) : (editDraft.keterangan || '');
+                  const valTipe = isBulkEdit ? (bDraft.tipe ?? row.tipe) : (editDraft.tipe || row.tipe);
+                  const valNom = isBulkEdit ? (bDraft.nominal ?? row.nominal) : (editDraft.nominal ?? 0);
                   return (
                     <tr key={row.id} className={isBulkEdit ? 'bg-indigo-50/20' : 'hover:bg-slate-50/80'}>
                       <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">
