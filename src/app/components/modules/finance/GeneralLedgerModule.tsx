@@ -8,6 +8,8 @@ import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
 
 const KV = 'kv_store_561004a0';
 const DB_KEY_ITEMS = 'finance:kas_bank_items_2026_v3';
+const STORAGE_KEY_LAPORAN_SYNC = 'gbi_laporan_gl_sync_2026';
+const DB_KEY_LAPORAN_SYNC = 'finance:laporan_gl_sync_2026';
 
 const STORAGE_KEY_ITEMS = 'gbi_kas_bank_items_2026_v3';
 
@@ -23,6 +25,35 @@ export default function GeneralLedgerModule() {
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [isSavingDb, setIsSavingDb] = useState<boolean>(false);
   const [lastSavedDb, setLastSavedDb] = useState<string | null>(null);
+  const [isSyncingLaporan, setIsSyncingLaporan] = useState<boolean>(false);
+
+  const handleSyncCodeToLaporan = async () => {
+    const codeKey = (selectedCode || 'ALL').trim().toUpperCase();
+    setIsSyncingLaporan(true);
+    try {
+      const existingRaw = localStorage.getItem(STORAGE_KEY_LAPORAN_SYNC);
+      const existing: Record<string, any> = existingRaw ? JSON.parse(existingRaw) : {};
+      const glInfoObj = INITIAL_GL_ACCOUNTS[codeKey];
+      existing[codeKey] = {
+        code: codeKey,
+        name: glInfoObj ? glInfoObj.name : `Kode GL ${codeKey}`,
+        totalDebet,
+        totalKredit,
+        finalSaldo,
+        count: rowsWithSaldo.length,
+        syncedAt: new Date().toISOString()
+      };
+      localStorage.setItem(STORAGE_KEY_LAPORAN_SYNC, JSON.stringify(existing));
+      await supabaseAdmin.from(KV).upsert({ key: DB_KEY_LAPORAN_SYNC, value: existing }, { onConflict: 'key' });
+      window.dispatchEvent(new Event('laporan-gl-synced'));
+      setSyncFeedback(`Total Kode ${codeKey} (Debet: ${formatRupiah(totalDebet)}, Kredit: ${formatRupiah(totalKredit)}) berhasil masuk & sinkron ke Laporan Keuangan!`);
+      setTimeout(() => setSyncFeedback(null), 5000);
+    } catch (err: any) {
+      setSyncFeedback(`Gagal sync ke Laporan Keuangan: ${err?.message || 'Terjadi kesalahan'}`);
+    } finally {
+      setIsSyncingLaporan(false);
+    }
+  };
 
   const handleSaveToDatabase = async () => {
     setIsSavingDb(true);
@@ -978,7 +1009,20 @@ export default function GeneralLedgerModule() {
                     {formatRupiah(finalSaldo)}
                   </td>
                   <td colSpan={2} className="py-2.5 px-2 text-center text-[11px] text-slate-500">
-                    {rowsWithSaldo.length} baris
+                    <div className="flex flex-col items-center gap-1">
+                      <span>{rowsWithSaldo.length} baris</span>
+                      {selectedCode && (
+                        <button
+                          type="button"
+                          onClick={handleSyncCodeToLaporan}
+                          disabled={isSyncingLaporan}
+                          className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-2xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                          title="Kirim & sinkronkan total Kode GL ini langsung ke Laporan Keuangan"
+                        >
+                          {isSyncingLaporan ? 'Sync...' : '→ Masuk Laporan'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               </tfoot>

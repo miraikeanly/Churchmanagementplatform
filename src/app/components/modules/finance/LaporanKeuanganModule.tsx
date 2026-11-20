@@ -18,6 +18,8 @@ const DB_KEY_ITEMS = 'finance:kas_bank_items_2026_v3';
 const DB_KEY_GLS = 'finance:kas_bank_gl_accounts_2026';
 const DB_KEY_REPORTS = 'finance:laporan_keuangan_meta_2026';
 const STORAGE_KEY_REPORTS = 'gbi_laporan_keuangan_meta_2026';
+const STORAGE_KEY_LAPORAN_SYNC = 'gbi_laporan_gl_sync_2026';
+const DB_KEY_LAPORAN_SYNC = 'finance:laporan_gl_sync_2026';
 
 interface ReportMeta {
   tanggalLaporan: string;
@@ -71,11 +73,15 @@ export default function LaporanKeuanganModule() {
   });
 
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const m = String(new Date().getMonth() + 1).padStart(2, '0');
-    return m;
-  });
+  const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'all' | 'debet' | 'kredit'>('all');
+  const [glSyncedOverrides, setGlSyncedOverrides] = useState<Record<string, { code: string; name: string; totalDebet: number; totalKredit: number; finalSaldo: number; count: number; syncedAt: string }>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LAPORAN_SYNC);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
 
   const [isSavingDb, setIsSavingDb] = useState(false);
   const [lastSavedDb, setLastSavedDb] = useState<string | null>(null);
@@ -86,11 +92,17 @@ export default function LaporanKeuanganModule() {
   // Load latest data from Supabase KV & localStorage
   const syncFromSource = async (showToast = false) => {
     try {
-      const [{ data: itemsRow }, { data: glsRow }, { data: metaRow }] = await Promise.all([
+      const [{ data: itemsRow }, { data: glsRow }, { data: metaRow }, { data: syncRow }] = await Promise.all([
         supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_ITEMS).maybeSingle(),
         supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_GLS).maybeSingle(),
         supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_REPORTS).maybeSingle(),
+        supabaseAdmin.from(KV).select('value').eq('key', DB_KEY_LAPORAN_SYNC).maybeSingle(),
       ]);
+
+      if (syncRow?.value && typeof syncRow.value === 'object') {
+        setGlSyncedOverrides(syncRow.value);
+        try { localStorage.setItem(STORAGE_KEY_LAPORAN_SYNC, JSON.stringify(syncRow.value)); } catch {}
+      }
 
       if (itemsRow?.value && Array.isArray(itemsRow.value) && itemsRow.value.length > 0) {
         setItems(itemsRow.value);
@@ -129,12 +141,16 @@ export default function LaporanKeuanganModule() {
       try {
         const local = localStorage.getItem(STORAGE_KEY_ITEMS);
         if (local) setItems(JSON.parse(local));
+        const synced = localStorage.getItem(STORAGE_KEY_LAPORAN_SYNC);
+        if (synced) setGlSyncedOverrides(JSON.parse(synced));
       } catch {}
     };
     window.addEventListener('kasbank-updated', onUpdate);
+    window.addEventListener('laporan-gl-synced', onUpdate);
     window.addEventListener('storage', onUpdate);
     return () => {
       window.removeEventListener('kasbank-updated', onUpdate);
+      window.removeEventListener('laporan-gl-synced', onUpdate);
       window.removeEventListener('storage', onUpdate);
     };
   }, []);
@@ -209,6 +225,27 @@ export default function LaporanKeuanganModule() {
       }
     });
 
+    // Apply explicit GL synced overrides when viewing ALL months so GL totals match 100%
+    if (selectedMonth === 'ALL') {
+      Object.values(glSyncedOverrides).forEach(ov => {
+        if (!ov || !ov.code) return;
+        const code = ov.code.trim().toUpperCase();
+        const prevDeb = debetMap.get(code)?.cents || 0;
+        const prevKre = kreditMap.get(code)?.cents || 0;
+        const newDebCents = Math.round((Number(ov.totalDebet) || 0) * 100);
+        const newKreCents = Math.round((Number(ov.totalKredit) || 0) * 100);
+
+        totalDebCents = totalDebCents - prevDeb + newDebCents;
+        totalKreCents = totalKreCents - prevKre + newKreCents;
+
+        if (newDebCents > 0) debetMap.set(code, { cents: newDebCents, count: ov.count || 1 });
+        else debetMap.delete(code);
+
+        if (newKreCents > 0) kreditMap.set(code, { cents: newKreCents, count: ov.count || 1 });
+        else kreditMap.delete(code);
+      });
+    }
+
     const getGlName = (code: string) => {
       const found = glAccounts[code] || INITIAL_GL_ACCOUNTS[code];
       return found ? found.name : `Kode GL ${code}`;
@@ -234,7 +271,7 @@ export default function LaporanKeuanganModule() {
       surplusDefisit: netCents / 100,
       saldoAkhir: endCents / 100
     };
-  }, [items, glAccounts, selectedYear, selectedMonth, selectedPeriod]);
+  }, [items, glAccounts, selectedYear, selectedMonth, selectedPeriod, glSyncedOverrides]);
 
   // Save Laporan Keuangan + latest items to Database (Supabase KV)
   const handleSaveToDatabase = async () => {
