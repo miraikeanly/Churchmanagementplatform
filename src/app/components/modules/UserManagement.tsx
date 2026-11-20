@@ -706,7 +706,7 @@ export default function UserManagement() {
                   
                   return (
                     <div key={mod.key} className={`border rounded-xl p-4 transition-all ${
-                      mod.key === 'Komisi' && (canView || canEdit)
+                      (mod.key === 'Komisi' && (canView || canEdit)) || mod.key === 'Keuangan'
                         ? 'col-span-1 sm:col-span-2 bg-gradient-to-br from-white to-blue-50/30 border-blue-200 ring-1 ring-blue-100 shadow-2xs'
                         : 'border-gray-200 hover:border-gray-300 bg-white'
                     }`}>
@@ -715,6 +715,11 @@ export default function UserManagement() {
                         {mod.key === 'Komisi' && (canView || canEdit) && (
                           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                             {tempPermissions.allKomisi ? 'Semua Komisi' : `${(tempPermissions.allowedKomisi || []).length} Komisi Terpilih`}
+                          </span>
+                        )}
+                        {mod.key === 'Keuangan' && (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                            {tempPermissions.allKeuangan ? 'Semua Keuangan' : `${(tempPermissions.allowedKeuangan || []).length} Menu Terpilih`}
                           </span>
                         )}
                       </div>
