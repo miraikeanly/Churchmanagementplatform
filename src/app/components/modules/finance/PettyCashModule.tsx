@@ -141,42 +141,67 @@ export default function PettyCashModule() {
       if (ext === 'pdf') {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = '';
+        const allLines: string[] = [];
+
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          const lines: string[] = [];
-          let lastY: number | null = null;
-          let cur = '';
+          // Group text items into horizontal rows by Y coordinate (tolerance 6px) and sort left-to-right by X
+          const rowBuckets: { y: number; items: { x: number; str: string }[] }[] = [];
           for (const item of content.items as any[]) {
-            const y = Math.round(item.transform?.[5] ?? 0);
-            if (lastY !== null && Math.abs(y - lastY) > 4) {
-              lines.push(cur.trim());
-              cur = item.str;
-            } else {
-              cur += (cur ? ' ' : '') + item.str;
+            const str = (item.str || '').trim();
+            if (!str) continue;
+            const x = Number(item.transform?.[4] ?? 0);
+            const y = Number(item.transform?.[5] ?? 0);
+            let bucket = rowBuckets.find(b => Math.abs(b.y - y) <= 6);
+            if (!bucket) {
+              bucket = { y, items: [] };
+              rowBuckets.push(bucket);
             }
-            lastY = y;
+            bucket.items.push({ x, str });
           }
-          if (cur.trim()) lines.push(cur.trim());
-          fullText += lines.join('\n') + '\n';
+          // Sort rows top-to-bottom (descending Y in PDF coordinate space)
+          rowBuckets.sort((a, b) => b.y - a.y);
+          for (const b of rowBuckets) {
+            b.items.sort((a, c) => a.x - c.x);
+            allLines.push(b.items.map(it => it.str).join(' ').replace(/\s{2,}/g, ' ').trim());
+          }
         }
 
-        // Dedicated parser for Arus Kas Kecil / Petty Cash PDF format:
-        // [Tanggal?] [No?] [Reff?] [Keterangan] [Nominal] [Saldo]
+        const fullText = allLines.join('\n');
+
         const parseMoney = (s: string) => {
           const cleaned = s.replace(/,/g, '').trim();
           const n = parseFloat(cleaned);
           return isNaN(n) ? 0 : Math.round(n * 100) / 100;
         };
 
-        const rawLines = fullText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        let currentDate = `${selectedYear}-${selectedMonth === 'ALL' ? '01' : selectedMonth}-01`;
+        // Detect month & year from PDF header ("Per 31 Januari 2026") or first DD/MM/YYYY date in text
+        const monthNameMap: Record<string, string> = {
+          JANUARI: '01', FEBRUARI: '02', MARET: '03', APRIL: '04',
+          MEI: '05', JUNI: '06', JULI: '07', AGUSTUS: '08',
+          SEPTEMBER: '09', OKTOBER: '10', NOVEMBER: '11', DESEMBER: '12'
+        };
+        let detectedYear = selectedYear;
+        let detectedMonth = selectedMonth === 'ALL' ? '01' : selectedMonth;
+
+        const headerPeriodMatch = fullText.match(/Per\s+\d+\s+([A-Za-z]+)\s+(\d{4})/i);
+        const firstDateMatch = fullText.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+        if (headerPeriodMatch && monthNameMap[headerPeriodMatch[1].toUpperCase()]) {
+          detectedMonth = monthNameMap[headerPeriodMatch[1].toUpperCase()];
+          detectedYear = headerPeriodMatch[2];
+        } else if (firstDateMatch) {
+          detectedMonth = firstDateMatch[2];
+          detectedYear = firstDateMatch[3];
+        }
+
+        const pdfPeriod = `${detectedYear}-${detectedMonth}`;
+        let currentDate = `${pdfPeriod}-01`;
         let lastNo = '';
         let prevSaldo: number | null = null;
 
-        for (let idx = 0; idx < rawLines.length; idx++) {
-          let line = rawLines[idx];
+        for (let idx = 0; idx < allLines.length; idx++) {
+          const line = allLines[idx];
 
           // Skip headers / titles
           if (/^(Arus Kas Kecil|Ibadah Raya|Per \d+|Tanggal\s+No)/i.test(line)) continue;
@@ -189,7 +214,7 @@ export default function PettyCashModule() {
               prevSaldo = openSaldo;
               imported.push({
                 id: `pc-pdf-open-${Date.now()}-${idx}`,
-                tanggal: `${selectedYear}-${selectedMonth === 'ALL' ? '01' : selectedMonth}-01`,
+                tanggal: `${pdfPeriod}-01`,
                 no: 'SALDO',
                 ref: '1001',
                 keterangan: 'Saldo Awal Petty Cash',
@@ -240,11 +265,15 @@ export default function PettyCashModule() {
             docNo = noMatch[1];
             lastNo = docNo;
             rest = rest.slice(noMatch[0].length).trim();
+          } else if (lastNo && /^KK\d{6}$/.test(lastNo)) {
+            // If KK260029 was vertically merged between KK260028 and KK260030, auto-increment once for the merged group
+            const nextNum = parseInt(lastNo.slice(2), 10) + 1;
+            docNo = `KK${nextNum}`;
           }
 
           // Optional Reff code (DK, OTA, KPP, 6001, 2001, 2002, 3002, etc.)
           let refCode = '1001';
-          const refMatch = rest.match(/^(\d{4}|DK|OTA|KPP|WBI|SM|TEENS|YOUTH)\s+/i);
+          const refMatch = rest.match(/^(\d{4}|DK|OTA|KPP|WBI|SM|TEENS|YOUTH|U|ABI|RBI|VSS|KPS|NTL)\s+/i);
           if (refMatch) {
             refCode = refMatch[1].toUpperCase();
             rest = rest.slice(refMatch[0].length).trim();
@@ -253,12 +282,31 @@ export default function PettyCashModule() {
           imported.push({
             id: `pc-pdf-${Date.now()}-${idx}`,
             tanggal: currentDate,
-            no: docNo || `PC${selectedYear.slice(-2)}${String(items.length + imported.length + 1).padStart(4, '0')}`,
+            no: docNo || `PC${detectedYear.slice(-2)}${String(imported.length + 1).padStart(4, '0')}`,
             ref: refCode,
             keterangan: rest || 'Transaksi Petty Cash',
             tipe,
             nominal: nom
           });
+        }
+
+        // Automatically switch view to the PDF's period and replace old items of that period so Saldo Akhir matches 100%
+        if (imported.length > 0) {
+          setSelectedYear(detectedYear);
+          setSelectedMonth(detectedMonth);
+          const keptOtherMonths = items.filter(it => !(it.tanggal || '').startsWith(pdfPeriod));
+          const merged = [...keptOtherMonths, ...imported];
+          setItems(merged);
+          try { localStorage.setItem(STORAGE_KEY_PC, JSON.stringify(merged)); } catch {}
+          await supabaseAdmin.from(KV).upsert({ key: DB_KEY_PC, value: merged }, { onConflict: 'key' });
+          setFeedback({
+            type: 'success',
+            text: `Berhasil import & simpan ${imported.length} baris PDF (${BULAN_INDO[detectedMonth] || detectedMonth} ${detectedYear}) ke Database! Saldo Akhir: ${formatRupiah(prevSaldo || 0)}`
+          });
+          setTimeout(() => setFeedback(null), 6000);
+          setIsImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
         }
       } else {
         // CSV / TSV / Excel-saved CSV

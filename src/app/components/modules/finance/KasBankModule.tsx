@@ -843,18 +843,26 @@ export default function KasBankModule() {
       for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
         const page = await pdfDoc.getPage(pageNum);
         const textContent = await page.getTextContent();
-        let lastY: number | null = null;
-        let pageText = '';
-
+        // Group text items by Y coordinate (tolerance 5px) and sort left-to-right by X so columns never scramble
+        const rowBuckets: { y: number; items: { x: number; str: string }[] }[] = [];
         for (const item of textContent.items as any[]) {
-          if (lastY === null || Math.abs(item.transform[5] - lastY) > 5) {
-            pageText += '\n' + item.str;
-            lastY = item.transform[5];
-          } else {
-            pageText += ' ' + item.str;
+          const str = (item.str || '').trim();
+          if (!str) continue;
+          const x = Number(item.transform?.[4] ?? 0);
+          const y = Number(item.transform?.[5] ?? 0);
+          let bucket = rowBuckets.find(b => Math.abs(b.y - y) <= 5);
+          if (!bucket) {
+            bucket = { y, items: [] };
+            rowBuckets.push(bucket);
           }
+          bucket.items.push({ x, str });
         }
-        fullText += '\n' + pageText;
+        rowBuckets.sort((a, b) => b.y - a.y);
+        const pageLines = rowBuckets.map(b => {
+          b.items.sort((a, c) => a.x - c.x);
+          return b.items.map(it => it.str).join(' ').replace(/\s{2,}/g, ' ').trim();
+        });
+        fullText += '\n' + pageLines.join('\n');
       }
 
       // Parse text with high-precision parser (86 transactions for Sep 2026)
@@ -967,12 +975,13 @@ export default function KasBankModule() {
           if (b.isOpeningBalance) return 1;
           return a.tanggal.localeCompare(b.tanggal);
         });
+        persistItemsToDb(merged);
         return merged;
       });
 
       setFeedbackMsg({
         type: 'success',
-        text: `✓ ${newConvertedItems.length} transaksi ${parsedPeriod} berhasil diimport dari PDF.`
+        text: `✓ ${newConvertedItems.length} transaksi ${parsedPeriod} berhasil diimport dari PDF & langsung tersimpan ke Database!`
       });
     } catch (err: any) {
       console.error('PDF parsing error', err);

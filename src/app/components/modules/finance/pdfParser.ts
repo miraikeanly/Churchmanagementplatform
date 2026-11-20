@@ -168,19 +168,30 @@ export function parseBcaPdfText(
   }
   if (cur) entries.push(cur);
 
+  // Extract SALDO AWAL if present in text so we can mathematically verify DB vs CR from running saldo
+  let prevSaldo: number | null = null;
+  const openMatch = text.match(/SALDO\s+AWAL\s*:?\s*([\d,]+\.\d{2})/i);
+  if (openMatch) {
+    prevSaldo = parseNum(openMatch[1]);
+  }
+
   for (const entry of entries) {
     const combined = entry.lines.join(' ');
 
-    // Skip SALDO AWAL line
-    if (/SALDO\s+AWAL/i.test(combined)) continue;
+    // Capture SALDO AWAL line if it had a date prefix
+    if (/SALDO\s+AWAL/i.test(combined)) {
+      const mOpen = combined.match(/([\d,]+\.\d{2})/);
+      if (mOpen) prevSaldo = parseNum(mOpen[1]);
+      continue;
+    }
 
-    // Determine DB/CR and extract amount+saldo
+    // Determine DB/CR and extract amount+saldo across ALL lines of the entry (line 0 usually holds the amount in BCA PDFs!)
     let isDB = false;
     let amount = 0;
     let saldo: number | undefined;
+    let explicitDir = false;
 
-    // Search from last line backwards for amount
-    for (let i = entry.lines.length - 1; i >= 0; i--) {
+    for (let i = 0; i < entry.lines.length; i++) {
       const ln = entry.lines[i];
       const mDB = ln.match(AMT_DB_RE);
       const mCR = ln.match(AMT_CR_RE);
@@ -188,32 +199,55 @@ export function parseBcaPdfText(
         amount = parseNum(mDB[1]);
         if (mDB[2]) saldo = parseNum(mDB[2]);
         isDB = true;
+        explicitDir = true;
         break;
       }
       if (mCR) {
         amount = parseNum(mCR[1]);
         if (mCR[2]) saldo = parseNum(mCR[2]);
         isDB = false;
+        explicitDir = true;
         break;
       }
-      // Fallback: last two numbers on line without explicit CR/DB marker
-      if (i === entry.lines.length - 1) {
+    }
+
+    // Fallback: check ALL lines in the entry for trailing monetary amounts (e.g. "6,300,000.00 799,779,914.95" on line 0)
+    if (amount <= 0) {
+      for (let i = 0; i < entry.lines.length; i++) {
+        const ln = entry.lines[i];
         const mLast = ln.match(AMT_LAST_RE);
-        if (mLast && !mLast[1].startsWith('0.')) {
+        if (mLast) {
           if (mLast[2]) {
             amount = parseNum(mLast[1]);
-            saldo  = parseNum(mLast[2]);
+            saldo = parseNum(mLast[2]);
           } else {
             amount = parseNum(mLast[1]);
           }
-          // Determine direction: if 'DB' anywhere in combined text
-          isDB = /\bDB\b/.test(combined);
           if (amount > 0) break;
         }
       }
     }
 
     if (amount <= 0) continue;
+
+    // Determine DB vs CR with 100% mathematical precision using running balance when available
+    if (saldo !== undefined && prevSaldo !== null) {
+      if (Math.abs((prevSaldo + amount) - saldo) < 1) {
+        isDB = false; // CR (money in)
+      } else if (Math.abs((prevSaldo - amount) - saldo) < 1) {
+        isDB = true;  // DB (money out)
+      } else if (!explicitDir) {
+        isDB = saldo < prevSaldo;
+      }
+    } else if (!explicitDir) {
+      isDB = /\b(DB|DEBET|TARIKAN|BIAYA\s+ADM|PAJAK\s+BUNGA|BYR\s+VIA)\b/i.test(combined) && !/\bCR\b/i.test(combined);
+    }
+
+    if (saldo !== undefined) {
+      prevSaldo = saldo;
+    } else if (prevSaldo !== null) {
+      prevSaldo = Math.round((prevSaldo + (isDB ? -amount : amount)) * 100) / 100;
+    }
 
     const [day, month] = entry.rawDate.split('/');
     const date = `${defaultYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
