@@ -236,13 +236,17 @@ export default function SuperAdminDashboard() {
     }
   }, [isKeuanganActive]);
 
-  const subKeuanganItems = [
+  const allSubKeuanganItems = [
     { label: 'Kas Bank',          key: 'kasBank',          icon: Building2 },
     { label: 'General Ledger',    key: 'generalLedger',    icon: BookOpen },
     { label: 'Patty Cash',        key: 'pattyCash',        icon: Coins },
     { label: 'Kas Kecil',         key: 'kasKecil',         icon: Layers },
     { label: 'Laporan Keuangan',  key: 'laporanKeuangan',  icon: FileText },
   ];
+  const allowedKeuanganIds: string[] | undefined = (user as any)?.permissions?.allowedKeuangan;
+  const subKeuanganItems = isSuperAdmin || !Array.isArray(allowedKeuanganIds) || allowedKeuanganIds.length === 0
+    ? allSubKeuanganItems
+    : allSubKeuanganItems.filter(sub => allowedKeuanganIds.includes(sub.key));
 
   const navItems = [
     { label: 'Dashboard',         key: 'dashboard',        visible: true },
