@@ -69,35 +69,71 @@ html.theme-dim body {
   color: var(--dm-text) !important;
 }
 
-/* Surfaces */
+/* Surfaces (including opacity variants like bg-white/80, bg-gray-50/50, bg-slate-200) */
 html.theme-dark .bg-white,
-html.theme-dim .bg-white {
+html.theme-dark [class*="bg-white/"],
+html.theme-dim .bg-white,
+html.theme-dim [class*="bg-white/"] {
   background-color: var(--dm-surface) !important;
 }
 
 html.theme-dark .bg-gray-50,
 html.theme-dark .bg-slate-50,
-html.theme-dark .bg-slate-50\/60,
-html.theme-dark .bg-slate-50\/80,
+html.theme-dark [class*="bg-gray-50/"],
+html.theme-dark [class*="bg-slate-50/"],
 html.theme-dim .bg-gray-50,
 html.theme-dim .bg-slate-50,
-html.theme-dim .bg-slate-50\/60,
-html.theme-dim .bg-slate-50\/80 {
-  background-color: var(--dm-bg) !important;
+html.theme-dim [class*="bg-gray-50/"],
+html.theme-dim [class*="bg-slate-50/"] {
+  background-color: #151820 !important;
 }
 
 html.theme-dark .bg-gray-100,
 html.theme-dark .bg-slate-100,
-html.theme-dark .bg-slate-100\/95,
+html.theme-dark [class*="bg-gray-100/"],
+html.theme-dark [class*="bg-slate-100/"],
+html.theme-dark .bg-gray-200,
+html.theme-dark .bg-slate-200,
+html.theme-dark [class*="bg-gray-200/"],
+html.theme-dark [class*="bg-slate-200/"],
 html.theme-dim .bg-gray-100,
 html.theme-dim .bg-slate-100,
-html.theme-dim .bg-slate-100\/95 {
+html.theme-dim [class*="bg-gray-100/"],
+html.theme-dim [class*="bg-slate-100/"],
+html.theme-dim .bg-gray-200,
+html.theme-dim .bg-slate-200,
+html.theme-dim [class*="bg-gray-200/"],
+html.theme-dim [class*="bg-slate-200/"] {
   background-color: var(--dm-surface-2) !important;
 }
 
-html.theme-dark .bg-slate-200\/90,
-html.theme-dim .bg-slate-200\/90 {
-  background-color: var(--dm-surface-2) !important;
+/* Kill harsh light pastel gradients (e.g. from-emerald-50 to-white) in dark mode */
+html.theme-dark [class*="from-white"],
+html.theme-dark [class*="to-white"],
+html.theme-dark [class*="from-slate-50"],
+html.theme-dark [class*="from-gray-50"],
+html.theme-dark [class*="from-emerald-50"],
+html.theme-dark [class*="from-amber-50"],
+html.theme-dark [class*="from-yellow-50"],
+html.theme-dark [class*="from-blue-50"],
+html.theme-dark [class*="from-indigo-50"],
+html.theme-dark [class*="from-purple-50"],
+html.theme-dark [class*="from-rose-50"],
+html.theme-dark [class*="from-pink-50"],
+html.theme-dim [class*="from-white"],
+html.theme-dim [class*="to-white"],
+html.theme-dim [class*="from-slate-50"],
+html.theme-dim [class*="from-gray-50"],
+html.theme-dim [class*="from-emerald-50"],
+html.theme-dim [class*="from-amber-50"],
+html.theme-dim [class*="from-yellow-50"],
+html.theme-dim [class*="from-blue-50"],
+html.theme-dim [class*="from-indigo-50"],
+html.theme-dim [class*="from-purple-50"],
+html.theme-dim [class*="from-rose-50"],
+html.theme-dim [class*="from-pink-50"] {
+  background-image: none !important;
+  background-color: var(--dm-surface) !important;
 }
 
 /* Soft tinted cards & pills in dark mode — sleek dark translucent (never harsh pastel!) */
