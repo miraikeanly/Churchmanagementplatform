@@ -473,7 +473,11 @@ export default function SuperAdminDashboard() {
             type="button"
             onClick={() => setShowAppearanceModal(true)}
             title="Pengaturan Profil & Tampilan (Dark Mode)"
-            className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/15 active:scale-[0.98] transition-all cursor-pointer text-left group"
+            className={`w-full flex items-center rounded-xl bg-white/5 hover:bg-white/15 active:scale-[0.98] transition-all cursor-pointer group ${
+              (!sidebarOpen && !mobileDrawerOpen)
+                ? 'justify-center p-1.5 min-h-[44px]'
+                : 'gap-2.5 px-2.5 py-2.5 text-left'
+            }`}
           >
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
               {(user?.name || 'A').slice(0, 2).toUpperCase()}
