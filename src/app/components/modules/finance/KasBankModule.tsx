@@ -100,6 +100,8 @@ export default function KasBankModule() {
   const [editTotalSaldoInput, setEditTotalSaldoInput] = useState<string>('');
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState<boolean>(false);
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<KasBankItem>>>({});
+  const autoSaveTimerRef = useRef<any>(null);
+  const dbReadyRef = useRef<boolean>(false);
 
   // Auto-persist helper so edits immediately save to localStorage AND Supabase DB
   const persistItemsToDb = (nextItems: KasBankItem[]) => {
@@ -107,7 +109,50 @@ export default function KasBankModule() {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(nextItems));
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('kasbank-updated'));
     } catch {}
-    supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: nextItems }, { onConflict: 'key' }).catch(() => {});
+    supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: nextItems }, { onConflict: 'key' }).then(() => {
+      const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      setLastSavedDb(`Auto ${nowStr}`);
+    }).catch(() => {});
+  };
+
+  // Helper to merge drafts into items without re-sorting the active bulk edit table
+  const buildMergedItemsFromDrafts = (baseItems: KasBankItem[], draftsMap: Record<string, Partial<KasBankItem>>): KasBankItem[] => {
+    const existingIds = new Set(baseItems.map(it => it.id));
+    const updated = baseItems.map(it => {
+      const d = draftsMap[it.id];
+      if (!d) return it;
+      const nom = Math.round((Number(d.nominal ?? it.nominal) || 0) * 100) / 100;
+      const tipe = (d.tipe || it.tipe) as 'Debet' | 'Kredit';
+      return {
+        ...it,
+        ...d,
+        nominal: nom,
+        tipe,
+        debet: tipe === 'Debet' ? nom : 0,
+        kredit: tipe === 'Kredit' ? nom : 0,
+      } as KasBankItem;
+    });
+    Object.entries(draftsMap).forEach(([id, d]) => {
+      if (!existingIds.has(id) && d) {
+        const nom = Math.round((Number(d.nominal) || 0) * 100) / 100;
+        const tipe = (d.tipe || 'Debet') as 'Debet' | 'Kredit';
+        updated.push({
+          id,
+          tanggal: d.tanggal || '2026-01-01',
+          noBank: d.noBank || 'BCA260000',
+          reff: d.reff || '1001',
+          keterangan: d.keterangan || 'Saldo Awal Rekening',
+          tipe,
+          nominal: nom,
+          debet: tipe === 'Debet' ? nom : 0,
+          kredit: tipe === 'Kredit' ? nom : 0,
+          saldoBerjalan: nom,
+          isOpeningBalance: Boolean(d.isOpeningBalance || id.startsWith('opening-')),
+          note: d.note
+        });
+      }
+    });
+    return updated;
   };
 
   const openBulkEditModal = () => {
@@ -120,10 +165,20 @@ export default function KasBankModule() {
   };
 
   const handleBulkUpdateKasBankField = (id: string, field: keyof KasBankItem, value: any) => {
-    setBulkDrafts(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), [field]: value }
-    }));
+    setBulkDrafts(prev => {
+      const nextDrafts = {
+        ...prev,
+        [id]: { ...(prev[id] || {}), [field]: value }
+      };
+      // Live auto-save to localStorage + debounced DB save even if user closes tab mid-edit!
+      const merged = buildMergedItemsFromDrafts(items, nextDrafts);
+      try { localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(merged)); } catch {}
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        persistItemsToDb(merged);
+      }, 700);
+      return nextDrafts;
+    });
   };
 
   const handleCommitBulkEdit = () => {
@@ -248,7 +303,7 @@ export default function KasBankModule() {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
-  // Save to localStorage
+  // Save to localStorage & auto-save to Supabase DB whenever items change
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
@@ -258,7 +313,28 @@ export default function KasBankModule() {
     } catch (e) {
       console.error('Failed saving items to localStorage', e);
     }
+    if (!dbReadyRef.current) {
+      dbReadyRef.current = true;
+      return;
+    }
+    const t = setTimeout(() => {
+      supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: items }, { onConflict: 'key' }).then(() => {
+        const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        setLastSavedDb(`Auto ${nowStr}`);
+      }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
   }, [items]);
+
+  // Also auto-save in-progress single-row edit (editFormData) as user types
+  useEffect(() => {
+    if (!editingId || !editFormData || Object.keys(editFormData).length === 0) return;
+    const t = setTimeout(() => {
+      const merged = buildMergedItemsFromDrafts(items, { [editingId]: editFormData });
+      persistItemsToDb(merged);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [editingId, editFormData]);
 
   useEffect(() => {
     try {

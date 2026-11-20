@@ -98,13 +98,49 @@ export default function PettyCashModule() {
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<PettyCashItem>>>({});
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const autoSavePcTimerRef = useRef<any>(null);
 
   const handleBulkUpdateField = (id: string, field: keyof PettyCashItem, value: any) => {
-    setBulkDrafts(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), [field]: value }
-    }));
+    setBulkDrafts(prev => {
+      const nextDrafts = {
+        ...prev,
+        [id]: { ...(prev[id] || {}), [field]: value }
+      };
+      // Live auto-save to localStorage & Supabase DB while typing so closing tab mid-edit never loses data!
+      const merged = items.map(it => {
+        const d = nextDrafts[it.id];
+        if (!d) return it;
+        return {
+          ...it,
+          ...d,
+          nominal: Math.round((Number(d.nominal ?? it.nominal) || 0) * 100) / 100
+        } as PettyCashItem;
+      });
+      try { localStorage.setItem(STORAGE_KEY_PC, JSON.stringify(merged)); } catch {}
+      if (autoSavePcTimerRef.current) clearTimeout(autoSavePcTimerRef.current);
+      autoSavePcTimerRef.current = setTimeout(() => {
+        supabaseAdmin.from(KV).upsert({ key: DB_KEY_PC, value: merged }, { onConflict: 'key' }).then(() => {
+          const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+          setLastSavedDb(`Auto ${nowStr}`);
+        }).catch(() => {});
+      }, 700);
+      return nextDrafts;
+    });
   };
+
+  // Live auto-save single-row edit in Petty Cash
+  useEffect(() => {
+    if (!editingId || !editDraft || Object.keys(editDraft).length === 0) return;
+    const t = setTimeout(() => {
+      const merged = items.map(it => it.id === editingId ? { ...it, ...editDraft } as PettyCashItem : it);
+      try { localStorage.setItem(STORAGE_KEY_PC, JSON.stringify(merged)); } catch {}
+      supabaseAdmin.from(KV).upsert({ key: DB_KEY_PC, value: merged }, { onConflict: 'key' }).then(() => {
+        const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        setLastSavedDb(`Auto ${nowStr}`);
+      }).catch(() => {});
+    }, 700);
+    return () => clearTimeout(t);
+  }, [editingId, editDraft]);
 
   const toggleBulkEditPettyCash = () => {
     if (!isBulkEdit) {

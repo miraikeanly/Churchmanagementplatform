@@ -120,7 +120,10 @@ export default function LaporanKeuanganModule() {
       if (newKey !== key) delete next[key];
       next[newKey] = updated;
       try { localStorage.setItem(STORAGE_KEY_LAPORAN_SYNC, JSON.stringify(next)); } catch {}
-      supabaseAdmin.from(KV).upsert({ key: DB_KEY_LAPORAN_SYNC, value: next }, { onConflict: 'key' }).catch(() => {});
+      supabaseAdmin.from(KV).upsert({ key: DB_KEY_LAPORAN_SYNC, value: next }, { onConflict: 'key' }).then(() => {
+        const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        setLastSavedDb(`Auto ${nowStr}`);
+      }).catch(() => {});
       return next;
     });
   };
@@ -647,7 +650,7 @@ export default function LaporanKeuanganModule() {
                               <input
                                 type="text"
                                 defaultValue={d.name}
-                                onBlur={e => handleEditLaporanRow('debet', d.code, { name: e.target.value })}
+                                onChange={e => handleEditLaporanRow('debet', d.code, { name: e.target.value })}
                                 className="w-full px-1.5 py-0.5 border border-emerald-300 rounded bg-white text-xs"
                               />
                             ) : (
@@ -668,7 +671,7 @@ export default function LaporanKeuanganModule() {
                                 type="number"
                                 step="0.01"
                                 defaultValue={d.amount}
-                                onBlur={e => handleEditLaporanRow('debet', d.code, { amount: parseFloat(e.target.value) || 0 })}
+                                onChange={e => handleEditLaporanRow('debet', d.code, { amount: parseFloat(e.target.value) || 0 })}
                                 className="w-32 px-1.5 py-0.5 border border-emerald-300 rounded bg-white text-xs font-mono text-right"
                               />
                             ) : formatRupiah(d.amount)
@@ -700,7 +703,7 @@ export default function LaporanKeuanganModule() {
                               <input
                                 type="text"
                                 defaultValue={k.name}
-                                onBlur={e => handleEditLaporanRow('kredit', k.code, { name: e.target.value })}
+                                onChange={e => handleEditLaporanRow('kredit', k.code, { name: e.target.value })}
                                 className="w-full px-1.5 py-0.5 border border-rose-300 rounded bg-white text-xs"
                               />
                             ) : (
@@ -721,7 +724,7 @@ export default function LaporanKeuanganModule() {
                                 type="number"
                                 step="0.01"
                                 defaultValue={k.amount}
-                                onBlur={e => handleEditLaporanRow('kredit', k.code, { amount: parseFloat(e.target.value) || 0 })}
+                                onChange={e => handleEditLaporanRow('kredit', k.code, { amount: parseFloat(e.target.value) || 0 })}
                                 className="w-32 px-1.5 py-0.5 border border-rose-300 rounded bg-white text-xs font-mono text-right"
                               />
                             ) : formatRupiah(k.amount)

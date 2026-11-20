@@ -28,6 +28,7 @@ export default function GeneralLedgerModule() {
   const [isSyncingLaporan, setIsSyncingLaporan] = useState<boolean>(false);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState<boolean>(false);
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<KasBankItem>>>({});
+  const autoSaveGlTimerRef = useRef<any>(null);
 
   const openBulkEditGlModal = () => {
     const drafts: Record<string, Partial<KasBankItem>> = {};
@@ -39,10 +40,36 @@ export default function GeneralLedgerModule() {
   };
 
   const handleBulkUpdateGlField = (id: string, field: keyof KasBankItem, value: any) => {
-    setBulkDrafts(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), [field]: value }
-    }));
+    setBulkDrafts(prev => {
+      const nextDrafts = {
+        ...prev,
+        [id]: { ...(prev[id] || {}), [field]: value }
+      };
+      // Live auto-save to localStorage & Supabase DB while typing!
+      const merged = items.map(it => {
+        const d = nextDrafts[it.id];
+        if (!d) return it;
+        const nom = Math.round((Number(d.nominal ?? it.nominal) || 0) * 100) / 100;
+        const tipe = (d.tipe || it.tipe) as 'Debet' | 'Kredit';
+        return {
+          ...it,
+          ...d,
+          nominal: nom,
+          tipe,
+          debet: tipe === 'Debet' ? nom : 0,
+          kredit: tipe === 'Kredit' ? nom : 0,
+        } as KasBankItem;
+      });
+      try { localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(merged)); } catch {}
+      if (autoSaveGlTimerRef.current) clearTimeout(autoSaveGlTimerRef.current);
+      autoSaveGlTimerRef.current = setTimeout(() => {
+        supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: merged }, { onConflict: 'key' }).then(() => {
+          const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+          setLastSavedDb(`Auto ${nowStr}`);
+        }).catch(() => {});
+      }, 700);
+      return nextDrafts;
+    });
   };
 
   const handleCommitBulkEditGl = () => {
@@ -274,6 +301,36 @@ export default function GeneralLedgerModule() {
       setNewRowData(prev => ({ ...prev, reff: selectedCode }));
     }
   }, [selectedCode]);
+
+  // Live auto-save in-progress single-row edit in General Ledger
+  useEffect(() => {
+    if (!editingId) return;
+    const t = setTimeout(() => {
+      const nom = Math.round((Number(editRowData.nominal) || 0) * 100) / 100;
+      const merged = items.map(it =>
+        it.id === editingId
+          ? {
+              ...it,
+              tanggal: editRowData.tanggal || it.tanggal,
+              noBank: editRowData.noBank || it.noBank,
+              keterangan: editRowData.keterangan || it.keterangan,
+              tipe: editRowData.tipe || it.tipe,
+              nominal: nom,
+              debet: (editRowData.tipe || it.tipe) === 'Debet' ? nom : 0,
+              kredit: (editRowData.tipe || it.tipe) === 'Kredit' ? nom : 0,
+              manualSaldo: editRowData.manualSaldo,
+              note: editRowData.note,
+            }
+          : it
+      );
+      try { localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(merged)); } catch {}
+      supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: merged }, { onConflict: 'key' }).then(() => {
+        const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        setLastSavedDb(`Auto ${nowStr}`);
+      }).catch(() => {});
+    }, 700);
+    return () => clearTimeout(t);
+  }, [editingId, editRowData]);
 
   // Click outside listener to close custom dropdowns
   useEffect(() => {
