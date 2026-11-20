@@ -468,18 +468,18 @@ export default function SuperAdminDashboard() {
         </nav>
 
         {/* User + Appearance Settings + logout */}
-        <div className={`border-t border-white/10 p-3 space-y-1.5 ${(!sidebarOpen && !mobileDrawerOpen) ? 'md:flex md:flex-col md:items-center' : ''}`}>
+        <div className={`border-t border-white/10 p-3 space-y-2 ${(!sidebarOpen && !mobileDrawerOpen) ? 'md:flex md:flex-col md:items-center' : ''}`}>
           <button
             type="button"
             onClick={() => setShowAppearanceModal(true)}
             title="Pengaturan Profil & Tampilan (Dark Mode)"
-            className={`w-full flex items-center rounded-xl bg-white/5 hover:bg-white/15 active:scale-[0.98] transition-all cursor-pointer group ${
+            className={`flex items-center rounded-xl transition-all cursor-pointer group active:scale-[0.98] ${
               (!sidebarOpen && !mobileDrawerOpen)
-                ? 'justify-center p-1.5 min-h-[44px]'
-                : 'gap-2.5 px-2.5 py-2.5 text-left'
+                ? 'w-10 h-10 justify-center p-0 mx-auto hover:ring-2 hover:ring-white/30'
+                : 'w-full gap-2.5 px-2.5 py-2.5 bg-white/5 hover:bg-white/15 text-left'
             }`}
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+            <div className={`${(!sidebarOpen && !mobileDrawerOpen) ? 'w-10 h-10 rounded-xl' : 'w-8 h-8 rounded-lg'} bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs`}>
               {(user?.name || 'A').slice(0, 2).toUpperCase()}
             </div>
             {(sidebarOpen || mobileDrawerOpen) && (
@@ -495,7 +495,11 @@ export default function SuperAdminDashboard() {
           <button
             onClick={handleSignOut}
             title={(!sidebarOpen && !mobileDrawerOpen) ? 'Keluar' : undefined}
-            className="flex items-center gap-2.5 w-full px-3 py-3 min-h-[46px] rounded-xl text-sm text-white/80 hover:bg-white/10 active:bg-white/20 hover:text-white transition-all cursor-pointer"
+            className={`flex items-center rounded-xl text-sm text-white/80 hover:bg-white/10 active:bg-white/20 hover:text-white transition-all cursor-pointer ${
+              (!sidebarOpen && !mobileDrawerOpen)
+                ? 'w-10 h-10 justify-center p-0 mx-auto'
+                : 'gap-2.5 w-full px-3 py-3 min-h-[46px]'
+            }`}
           >
             <LogOut size={18} className="flex-shrink-0" />
             {(sidebarOpen || mobileDrawerOpen) && <span>Keluar</span>}
