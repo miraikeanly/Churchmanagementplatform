@@ -3,7 +3,7 @@ import {
   RefreshCw, Download, Search, AlertCircle, CheckCircle2,
   Plus, Edit2, Trash2, Check, X, RotateCcw, Link2, Type, Save
 } from 'lucide-react';
-import { KasBankItem, INITIAL_GL_ACCOUNTS, GLAccount, formatRupiah } from './financeUtils';
+import { KasBankItem, INITIAL_GL_ACCOUNTS, GLAccount, formatRupiah, handleSpreadsheetKeyDown } from './financeUtils';
 import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
 
 const KV = 'kv_store_561004a0';
@@ -1570,7 +1570,7 @@ export default function GeneralLedgerModule() {
                     <th className="p-2 text-left w-36">Note</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100" onKeyDown={handleSpreadsheetKeyDown}>
                   {rowsWithSaldo.map(row => {
                     const d = bulkDrafts[row.id] || row;
                     return (

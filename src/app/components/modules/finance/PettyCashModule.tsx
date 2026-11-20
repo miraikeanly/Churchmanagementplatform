@@ -8,7 +8,8 @@ import {
   KasBankItem,
   INITIAL_GL_ACCOUNTS,
   GLAccount,
-  formatRupiah
+  formatRupiah,
+  handleSpreadsheetKeyDown
 } from './financeUtils';
 import { parseBcaPdfText } from './pdfParser';
 import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
@@ -887,7 +888,7 @@ export default function PettyCashModule() {
                 <th className="py-3 px-3 text-center w-20">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100" onKeyDown={handleSpreadsheetKeyDown}>
               {rowsWithSaldo.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-10 text-center text-slate-400">

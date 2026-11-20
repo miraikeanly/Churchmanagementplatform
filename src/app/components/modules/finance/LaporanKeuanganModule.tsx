@@ -8,7 +8,8 @@ import {
   GLAccount,
   INITIAL_GL_ACCOUNTS,
   formatRupiah,
-  formatTanggalDMY
+  formatTanggalDMY,
+  handleSpreadsheetKeyDown
 } from './financeUtils';
 import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
 
@@ -606,7 +607,7 @@ export default function LaporanKeuanganModule() {
                   <th className="py-2 px-3 text-right w-36">Saldo</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100" onKeyDown={handleSpreadsheetKeyDown}>
                 {maxRows === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-10 text-center text-slate-400">

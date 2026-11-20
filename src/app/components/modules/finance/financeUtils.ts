@@ -162,3 +162,82 @@ export function formatTanggalDMY(iso?: string): string {
   if (parts.length !== 3) return iso;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
+
+/**
+ * Excel-style keyboard navigation for spreadsheet/bulk-edit tables:
+ * - Enter / ArrowDown -> move to same column in next row
+ * - ArrowUp -> move to same column in previous row
+ * - ArrowLeft / ArrowRight -> move to previous/next column when at text boundary or in number/date/select
+ */
+export function handleSpreadsheetKeyDown(e: any) {
+  const key = e.key;
+  if (!['Enter', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
+
+  const target = e.target as HTMLInputElement | HTMLSelectElement | null;
+  if (!target || !['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
+
+  const td = target.closest('td');
+  const tr = target.closest('tr');
+  const tbody = target.closest('tbody');
+  if (!td || !tr || !tbody) return;
+
+  const cells = Array.from(tr.children);
+  const colIdx = cells.indexOf(td);
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const rowIdx = rows.indexOf(tr);
+
+  const focusCell = (rIdx: number, cIdx: number) => {
+    const targetRow = rows[rIdx];
+    if (!targetRow) return false;
+    const targetCell = targetRow.children[cIdx] as HTMLElement | undefined;
+    if (!targetCell) return false;
+    const input = targetCell.querySelector<HTMLInputElement | HTMLSelectElement>('input, select, textarea');
+    if (!input) return false;
+    input.focus();
+    if ('select' in input && typeof input.select === 'function' && (input as HTMLInputElement).type !== 'date') {
+      try { (input as HTMLInputElement).select(); } catch {}
+    }
+    return true;
+  };
+
+  if (key === 'Enter' || key === 'ArrowDown') {
+    e.preventDefault();
+    focusCell(rowIdx + 1, colIdx);
+    return;
+  }
+
+  if (key === 'ArrowUp') {
+    e.preventDefault();
+    focusCell(rowIdx - 1, colIdx);
+    return;
+  }
+
+  const isTextInput = target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text';
+  const valLen = (target as HTMLInputElement).value?.length ?? 0;
+  const selStart = isTextInput ? ((target as HTMLInputElement).selectionStart ?? 0) : 0;
+  const selEnd = isTextInput ? ((target as HTMLInputElement).selectionEnd ?? 0) : 0;
+  const allSelected = isTextInput && valLen > 0 && selStart === 0 && selEnd === valLen;
+
+  if (key === 'ArrowLeft') {
+    if (!isTextInput || allSelected || (selStart === 0 && selEnd === 0) || e.altKey || e.ctrlKey || e.metaKey) {
+      for (let c = colIdx - 1; c >= 0; c--) {
+        if (focusCell(rowIdx, c)) {
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+    return;
+  }
+
+  if (key === 'ArrowRight') {
+    if (!isTextInput || allSelected || (selStart === valLen && selEnd === valLen) || e.altKey || e.ctrlKey || e.metaKey) {
+      for (let c = colIdx + 1; c < cells.length; c++) {
+        if (focusCell(rowIdx, c)) {
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  }
+}

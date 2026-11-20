@@ -14,6 +14,7 @@ import {
   CustomColumn,
   formatRupiah,
   formatTanggalDMY,
+  handleSpreadsheetKeyDown,
   classifyTransaction
 } from './financeUtils';
 import { parseBcaPdfText } from './pdfParser';
@@ -2257,7 +2258,7 @@ export default function KasBankModule() {
                     <th className="p-2 text-left w-36">Note</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100" onKeyDown={handleSpreadsheetKeyDown}>
                   {displayedItems.map(row => {
                     const d = bulkDrafts[row.id] || row;
                     return (
