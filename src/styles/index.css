@@ -318,10 +318,14 @@ html.theme-dim .text-indigo-800 {
 html.theme-dark .text-amber-700,
 html.theme-dark .text-amber-800,
 html.theme-dark .text-amber-900,
+html.theme-dark [class*="text-yellow-"],
+html.theme-dark [class*="text-orange-"],
 html.theme-dim .text-amber-700,
 html.theme-dim .text-amber-800,
-html.theme-dim .text-amber-900 {
-  color: #fbbf24 !important;
+html.theme-dim .text-amber-900,
+html.theme-dim [class*="text-yellow-"],
+html.theme-dim [class*="text-orange-"] {
+  color: #f8fafc !important;
 }
 
 /* Borders & Dividers */
