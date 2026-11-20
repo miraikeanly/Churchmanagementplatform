@@ -100,6 +100,8 @@ export default function KasBankModule() {
   const [editTotalSaldoInput, setEditTotalSaldoInput] = useState<string>('');
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState<boolean>(false);
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<KasBankItem>>>({});
+  const [bulkRowOrder, setBulkRowOrder] = useState<string[]>([]);
+  const [bulkAutoSaveStatus, setBulkAutoSaveStatus] = useState<string>('Auto-Save Aktif');
   const autoSaveTimerRef = useRef<any>(null);
   const dbReadyRef = useRef<boolean>(false);
 
@@ -157,26 +159,34 @@ export default function KasBankModule() {
 
   const openBulkEditModal = () => {
     const drafts: Record<string, Partial<KasBankItem>> = {};
+    const order: string[] = [];
     displayedItems.forEach(r => {
       drafts[r.id] = { ...r };
+      order.push(r.id);
     });
     setBulkDrafts(drafts);
+    setBulkRowOrder(order);
+    setBulkAutoSaveStatus('Auto-Save Aktif (Tiap 2 Detik)');
     setIsBulkEditModalOpen(true);
   };
 
   const handleBulkUpdateKasBankField = (id: string, field: keyof KasBankItem, value: any) => {
+    setBulkAutoSaveStatus('Menyimpan otomatis...');
     setBulkDrafts(prev => {
       const nextDrafts = {
         ...prev,
         [id]: { ...(prev[id] || {}), [field]: value }
       };
-      // Live auto-save to localStorage + debounced DB save even if user closes tab mid-edit!
+      // Live auto-save to React state, localStorage + debounced DB save every 1.2s while typing!
       const merged = buildMergedItemsFromDrafts(items, nextDrafts);
       try { localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(merged)); } catch {}
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
+        setItems(merged);
         persistItemsToDb(merged);
-      }, 700);
+        const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setBulkAutoSaveStatus(`✓ Tersimpan Otomatis ${nowStr}`);
+      }, 1200);
       return nextDrafts;
     });
   };
@@ -2301,23 +2311,21 @@ export default function KasBankModule() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
             <div className="px-5 py-3.5 bg-indigo-600 text-white flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold">Edit Semua Baris Kas Bank ({displayedItems.length} baris)</h3>
-                <p className="text-[11px] text-indigo-100">Ubah tanggal, No Bank, Keterangan, Kode GL, Tipe, atau Nominal sekaligus — otomatis hitung ulang saldo!</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold">Edit Semua Baris Kas Bank ({bulkRowOrder.length} baris)</h3>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-[10px] font-bold">
+                    ⚡ {bulkAutoSaveStatus}
+                  </span>
+                </div>
+                <p className="text-[11px] text-indigo-100">Gunakan tombol Panah (↑↓←→) / Enter untuk pindah sel. Setiap ketikan otomatis tersimpan tiap 1-2 detik!</p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsBulkEditModalOpen(false)}
-                  className="px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-semibold hover:bg-white/25 cursor-pointer"
-                >
-                  Batal
-                </button>
                 <button
                   type="button"
                   onClick={handleCommitBulkEdit}
                   className="px-3.5 py-1.5 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black hover:bg-emerald-300 cursor-pointer shadow-xs"
                 >
-                  ✓ Simpan Semua Editan
+                  ✓ Selesai &amp; Tutup
                 </button>
               </div>
             </div>
@@ -2335,8 +2343,10 @@ export default function KasBankModule() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100" onKeyDown={handleSpreadsheetKeyDown}>
-                  {displayedItems.map(row => {
-                    const d = bulkDrafts[row.id] || row;
+                  {bulkRowOrder.map(rowId => {
+                    const d = bulkDrafts[rowId];
+                    if (!d) return null;
+                    const row = { id: rowId, ...d };
                     return (
                     <tr key={row.id} className="hover:bg-indigo-50/30">
                       <td className="p-1.5">

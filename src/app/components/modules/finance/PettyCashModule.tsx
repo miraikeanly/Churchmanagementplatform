@@ -119,11 +119,12 @@ export default function PettyCashModule() {
       try { localStorage.setItem(STORAGE_KEY_PC, JSON.stringify(merged)); } catch {}
       if (autoSavePcTimerRef.current) clearTimeout(autoSavePcTimerRef.current);
       autoSavePcTimerRef.current = setTimeout(() => {
+        setItems(merged);
         supabaseAdmin.from(KV).upsert({ key: DB_KEY_PC, value: merged }, { onConflict: 'key' }).then(() => {
-          const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+          const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
           setLastSavedDb(`Auto ${nowStr}`);
         }).catch(() => {});
-      }, 700);
+      }, 1200);
       return nextDrafts;
     });
   };
