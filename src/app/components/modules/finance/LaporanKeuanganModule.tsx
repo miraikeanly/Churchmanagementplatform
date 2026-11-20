@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  FileText, Save, RefreshCw, Download, Printer,
+  FileText, Save, RefreshCw, Download, Printer, Edit2, Check,
   TrendingUp, TrendingDown, Wallet, Calendar, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import {
@@ -86,6 +86,41 @@ export default function LaporanKeuanganModule() {
   const [isSavingDb, setIsSavingDb] = useState(false);
   const [lastSavedDb, setLastSavedDb] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isBulkEdit, setIsBulkEdit] = useState<boolean>(false);
+  const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
+
+  const handleEditLaporanRow = (
+    side: 'debet' | 'kredit',
+    oldCode: string,
+    patch: { code?: string; name?: string; amount?: number }
+  ) => {
+    const key = oldCode.trim().toUpperCase();
+    const newKey = (patch.code ?? key).trim().toUpperCase() || key;
+    setGlSyncedOverrides(prev => {
+      const next = { ...prev };
+      const existing = next[key] || {
+        code: key,
+        name: (glAccounts[key] || INITIAL_GL_ACCOUNTS[key])?.name || `Kode GL ${key}`,
+        totalDebet: side === 'debet' ? (debetRows.find(r => r.code === key)?.amount || 0) : 0,
+        totalKredit: side === 'kredit' ? (kreditRows.find(r => r.code === key)?.amount || 0) : 0,
+        finalSaldo: 0,
+        count: 1,
+        syncedAt: new Date().toISOString()
+      };
+      const updated = {
+        ...existing,
+        code: newKey,
+        name: patch.name !== undefined ? patch.name : existing.name,
+        totalDebet: side === 'debet' && patch.amount !== undefined ? patch.amount : existing.totalDebet,
+        totalKredit: side === 'kredit' && patch.amount !== undefined ? patch.amount : existing.totalKredit,
+        syncedAt: new Date().toISOString()
+      };
+      if (newKey !== key) delete next[key];
+      next[newKey] = updated;
+      try { localStorage.setItem(STORAGE_KEY_LAPORAN_SYNC, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
 
   const selectedPeriod = selectedMonth === 'ALL' ? 'ALL' : `${selectedYear}-${selectedMonth}`;
 
@@ -247,6 +282,7 @@ export default function LaporanKeuanganModule() {
     }
 
     const getGlName = (code: string) => {
+      if (glSyncedOverrides[code]?.name) return glSyncedOverrides[code].name;
       const found = glAccounts[code] || INITIAL_GL_ACCOUNTS[code];
       return found ? found.name : `Kode GL ${code}`;
     };
@@ -290,6 +326,7 @@ export default function LaporanKeuanganModule() {
       await Promise.all([
         supabaseAdmin.from(KV).upsert({ key: DB_KEY_REPORTS, value: nextMetaMap }, { onConflict: 'key' }),
         supabaseAdmin.from(KV).upsert({ key: DB_KEY_ITEMS, value: items }, { onConflict: 'key' }),
+        supabaseAdmin.from(KV).upsert({ key: DB_KEY_LAPORAN_SYNC, value: glSyncedOverrides }, { onConflict: 'key' }),
       ]);
 
       const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -360,6 +397,19 @@ export default function LaporanKeuanganModule() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => { setIsBulkEdit(prev => !prev); setEditingRowKey(null); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer ${
+                isBulkEdit
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+              }`}
+              title="Edit semua kolom Rek/GL, Keterangan, dan Saldo sekaligus"
+            >
+              <Edit2 size={13} />
+              {isBulkEdit ? 'Selesai Edit Semua' : 'Edit Semua'}
+            </button>
             <button
               type="button"
               onClick={handleSaveToDatabase}
@@ -564,38 +614,114 @@ export default function LaporanKeuanganModule() {
                   Array.from({ length: maxRows }).map((_, idx) => {
                     const d = debetRows[idx];
                     const k = kreditRows[idx];
+                    const editD = isBulkEdit || (d && editingRowKey === `D:${d.code}`);
+                    const editK = isBulkEdit || (k && editingRowKey === `K:${k.code}`);
                     return (
-                      <tr key={idx} className="hover:bg-slate-50/80">
+                      <tr key={idx} className={isBulkEdit ? 'bg-indigo-50/20' : 'hover:bg-slate-50/80'}>
                         {/* DEBET */}
-                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-800 whitespace-nowrap">
-                          {d ? d.code : ''}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-800">
+                        <td
+                          className="py-2 px-3 font-mono font-bold text-emerald-800 whitespace-nowrap cursor-pointer"
+                          onClick={() => d && !isBulkEdit && setEditingRowKey(`D:${d.code}`)}
+                        >
                           {d ? (
-                            <span>
-                              {d.name}{' '}
-                              <span className="text-[10px] text-slate-400">({d.count}x)</span>
-                            </span>
+                            editD ? (
+                              <input
+                                type="text"
+                                defaultValue={d.code}
+                                onBlur={e => handleEditLaporanRow('debet', d.code, { code: e.target.value })}
+                                className="w-16 px-1.5 py-0.5 border border-emerald-300 rounded bg-white text-xs font-mono"
+                              />
+                            ) : d.code
                           ) : ''}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-emerald-700 border-r-2 border-slate-300 whitespace-nowrap">
-                          {d ? formatRupiah(d.amount) : ''}
+                        <td
+                          className="py-2 px-3 text-slate-800 cursor-pointer"
+                          onClick={() => d && !isBulkEdit && setEditingRowKey(`D:${d.code}`)}
+                        >
+                          {d ? (
+                            editD ? (
+                              <input
+                                type="text"
+                                defaultValue={d.name}
+                                onBlur={e => handleEditLaporanRow('debet', d.code, { name: e.target.value })}
+                                className="w-full px-1.5 py-0.5 border border-emerald-300 rounded bg-white text-xs"
+                              />
+                            ) : (
+                              <span>
+                                {d.name}{' '}
+                                <span className="text-[10px] text-slate-400">({d.count}x)</span>
+                              </span>
+                            )
+                          ) : ''}
+                        </td>
+                        <td
+                          className="py-2 px-3 text-right font-mono font-semibold text-emerald-700 border-r-2 border-slate-300 whitespace-nowrap cursor-pointer"
+                          onClick={() => d && !isBulkEdit && setEditingRowKey(`D:${d.code}`)}
+                        >
+                          {d ? (
+                            editD ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                defaultValue={d.amount}
+                                onBlur={e => handleEditLaporanRow('debet', d.code, { amount: parseFloat(e.target.value) || 0 })}
+                                className="w-32 px-1.5 py-0.5 border border-emerald-300 rounded bg-white text-xs font-mono text-right"
+                              />
+                            ) : formatRupiah(d.amount)
+                          ) : ''}
                         </td>
 
                         {/* KREDIT */}
-                        <td className="py-2.5 px-3 font-mono font-bold text-rose-800 whitespace-nowrap">
-                          {k ? k.code : ''}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-800">
+                        <td
+                          className="py-2 px-3 font-mono font-bold text-rose-800 whitespace-nowrap cursor-pointer"
+                          onClick={() => k && !isBulkEdit && setEditingRowKey(`K:${k.code}`)}
+                        >
                           {k ? (
-                            <span>
-                              {k.name}{' '}
-                              <span className="text-[10px] text-slate-400">({k.count}x)</span>
-                            </span>
+                            editK ? (
+                              <input
+                                type="text"
+                                defaultValue={k.code}
+                                onBlur={e => handleEditLaporanRow('kredit', k.code, { code: e.target.value })}
+                                className="w-16 px-1.5 py-0.5 border border-rose-300 rounded bg-white text-xs font-mono"
+                              />
+                            ) : k.code
                           ) : ''}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-rose-700 whitespace-nowrap">
-                          {k ? formatRupiah(k.amount) : ''}
+                        <td
+                          className="py-2 px-3 text-slate-800 cursor-pointer"
+                          onClick={() => k && !isBulkEdit && setEditingRowKey(`K:${k.code}`)}
+                        >
+                          {k ? (
+                            editK ? (
+                              <input
+                                type="text"
+                                defaultValue={k.name}
+                                onBlur={e => handleEditLaporanRow('kredit', k.code, { name: e.target.value })}
+                                className="w-full px-1.5 py-0.5 border border-rose-300 rounded bg-white text-xs"
+                              />
+                            ) : (
+                              <span>
+                                {k.name}{' '}
+                                <span className="text-[10px] text-slate-400">({k.count}x)</span>
+                              </span>
+                            )
+                          ) : ''}
+                        </td>
+                        <td
+                          className="py-2 px-3 text-right font-mono font-semibold text-rose-700 whitespace-nowrap cursor-pointer"
+                          onClick={() => k && !isBulkEdit && setEditingRowKey(`K:${k.code}`)}
+                        >
+                          {k ? (
+                            editK ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                defaultValue={k.amount}
+                                onBlur={e => handleEditLaporanRow('kredit', k.code, { amount: parseFloat(e.target.value) || 0 })}
+                                className="w-32 px-1.5 py-0.5 border border-rose-300 rounded bg-white text-xs font-mono text-right"
+                              />
+                            ) : formatRupiah(k.amount)
+                          ) : ''}
                         </td>
                       </tr>
                     );

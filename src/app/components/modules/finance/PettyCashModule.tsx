@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
 import {
-  Coins, Plus, Save, Download, Trash2, Edit2, Check, X,
-  ArrowDownCircle, ArrowUpCircle, RefreshCw, CheckCircle2, AlertCircle, Send
+  Coins, Plus, Save, Download, Upload, Trash2, Edit2, Check, X,
+  ArrowDownCircle, ArrowUpCircle, RefreshCw, CheckCircle2, AlertCircle, Send, Layers
 } from 'lucide-react';
 import {
   KasBankItem,
@@ -9,7 +10,12 @@ import {
   GLAccount,
   formatRupiah
 } from './financeUtils';
+import { parseBcaPdfText } from './pdfParser';
 import { EdgeKV as supabaseAdmin } from '../../../../lib/edgeKvClient';
+
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 const KV = 'kv_store_561004a0';
 const STORAGE_KEY_PC = 'gbi_petty_cash_items_2026';
@@ -84,9 +90,118 @@ export default function PettyCashModule() {
   const [topUpKet, setTopUpKet] = useState<string>('Top Up Umum Petty Cash dari Kas Bank');
   const [topUpRef, setTopUpRef] = useState<string>('1001');
 
-  // Inline Edit State
+  // Inline Edit & Bulk Edit All State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<PettyCashItem>>({});
+  const [isBulkEdit, setIsBulkEdit] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBulkUpdateField = (id: string, field: keyof PettyCashItem, value: any) => {
+    setItems(prev => {
+      const next = prev.map(it => it.id === id ? { ...it, [field]: value } : it);
+      try { localStorage.setItem(STORAGE_KEY_PC, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  // Import PDF (BCA/Rekening) or Excel/CSV into Petty Cash
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const ext = file.name.toLowerCase().split('.').pop() || '';
+      const imported: PettyCashItem[] = [];
+
+      if (ext === 'pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const lines: string[] = [];
+          let lastY: number | null = null;
+          let cur = '';
+          for (const item of content.items as any[]) {
+            const y = Math.round(item.transform?.[5] ?? 0);
+            if (lastY !== null && Math.abs(y - lastY) > 4) {
+              lines.push(cur.trim());
+              cur = item.str;
+            } else {
+              cur += (cur ? ' ' : '') + item.str;
+            }
+            lastY = y;
+          }
+          if (cur.trim()) lines.push(cur.trim());
+          fullText += lines.join('\n') + '\n';
+        }
+        const parsed = parseBcaPdfText(fullText);
+        parsed.transactions.forEach((tx, idx) => {
+          const nom = Math.round((Number(tx.nominal) || 0) * 100) / 100;
+          if (nom <= 0) return;
+          imported.push({
+            id: `pc-pdf-${Date.now()}-${idx}`,
+            tanggal: tx.tanggal || new Date().toISOString().split('T')[0],
+            no: `PC${selectedYear.slice(-2)}${String(items.length + idx + 1).padStart(4, '0')}`,
+            ref: '1001',
+            keterangan: tx.keterangan || 'Transaksi PDF',
+            tipe: tx.tipe === 'Debet' ? 'Debet' : 'Kredit',
+            nominal: nom
+          });
+        });
+      } else {
+        // CSV / TSV / Excel-saved CSV
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        lines.forEach((line, idx) => {
+          if (idx === 0 && /tgl|tanggal|ket|debet|kredit/i.test(line)) return;
+          const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|;/).map(c => c.replace(/^"|"$/g, '').trim());
+          if (cols.length < 4) return;
+          const parseNum = (s: string) => {
+            if (!s) return 0;
+            const cleaned = s.replace(/Rp|\s/gi, '').replace(/\./g, '').replace(',', '.');
+            const n = parseFloat(cleaned);
+            return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+          };
+          const rawDate = cols[0];
+          let isoDate = new Date().toISOString().split('T')[0];
+          if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) isoDate = rawDate;
+          else if (/^\d{2}\/\d{2}\/\d{4}$/.test(rawDate)) {
+            const [d, m, y] = rawDate.split('/');
+            isoDate = `${y}-${m}-${d}`;
+          }
+          const deb = parseNum(cols[4] || '');
+          const kre = parseNum(cols[5] || '');
+          const nom = deb > 0 ? deb : kre;
+          if (nom <= 0) return;
+          imported.push({
+            id: `pc-csv-${Date.now()}-${idx}`,
+            tanggal: isoDate,
+            no: cols[1] || `PC${selectedYear.slice(-2)}${String(items.length + idx + 1).padStart(4, '0')}`,
+            ref: cols[2] || '1001',
+            keterangan: cols[3] || 'Transaksi Import',
+            tipe: deb > 0 ? 'Debet' : 'Kredit',
+            nominal: nom
+          });
+        });
+      }
+
+      if (imported.length === 0) {
+        setFeedback({ type: 'error', text: 'Tidak ada baris transaksi valid yang ditemukan di file tersebut.' });
+      } else {
+        updateItems([...items, ...imported]);
+        setFeedback({ type: 'success', text: `Berhasil import ${imported.length} baris transaksi dari ${file.name}! Klik "Simpan Data" untuk simpan ke database.` });
+      }
+      setTimeout(() => setFeedback(null), 5000);
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: `Gagal import file: ${err?.message || 'Format tidak didukung'}` });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // DB Save & Feedback
   const [isSavingDb, setIsSavingDb] = useState<boolean>(false);
@@ -375,6 +490,34 @@ export default function PettyCashModule() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="application/pdf,.csv,.txt"
+              className="hidden"
+              onChange={handleFileImport}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <Upload size={13} />
+              {isImporting ? 'Mengimpor...' : 'Import PDF / CSV'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsBulkEdit(prev => !prev); setEditingId(null); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer ${
+                isBulkEdit
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+              }`}
+            >
+              <Edit2 size={13} />
+              {isBulkEdit ? 'Selesai Edit Semua' : 'Edit Semua'}
+            </button>
             <button
               type="button"
               onClick={() => setShowTopUpModal(true)}
@@ -595,16 +738,22 @@ export default function PettyCashModule() {
                 </tr>
               ) : (
                 rowsWithSaldo.map(row => {
-                  const isEditing = editingId === row.id;
+                  const isEditing = isBulkEdit || editingId === row.id;
+                  const valTgl = isBulkEdit ? row.tanggal : (editDraft.tanggal || '');
+                  const valNo = isBulkEdit ? row.no : (editDraft.no || '');
+                  const valRef = isBulkEdit ? row.ref : (editDraft.ref || '');
+                  const valKet = isBulkEdit ? row.keterangan : (editDraft.keterangan || '');
+                  const valTipe = isBulkEdit ? row.tipe : (editDraft.tipe || row.tipe);
+                  const valNom = isBulkEdit ? row.nominal : (editDraft.nominal ?? 0);
                   return (
-                    <tr key={row.id} className="hover:bg-slate-50/80">
+                    <tr key={row.id} className={isBulkEdit ? 'bg-indigo-50/20' : 'hover:bg-slate-50/80'}>
                       <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">
                         {isEditing ? (
                           <input
                             type="date"
-                            value={editDraft.tanggal || ''}
-                            onChange={e => setEditDraft(d => ({ ...d, tanggal: e.target.value }))}
-                            className="px-1.5 py-1 border rounded text-xs w-28"
+                            value={valTgl}
+                            onChange={e => isBulkEdit ? handleBulkUpdateField(row.id, 'tanggal', e.target.value) : setEditDraft(d => ({ ...d, tanggal: e.target.value }))}
+                            className="px-1.5 py-1 border rounded text-xs w-28 bg-white"
                           />
                         ) : formatTglIndo(row.tanggal)}
                       </td>
@@ -612,9 +761,9 @@ export default function PettyCashModule() {
                         {isEditing ? (
                           <input
                             type="text"
-                            value={editDraft.no || ''}
-                            onChange={e => setEditDraft(d => ({ ...d, no: e.target.value }))}
-                            className="px-1.5 py-1 border rounded text-xs w-20"
+                            value={valNo}
+                            onChange={e => isBulkEdit ? handleBulkUpdateField(row.id, 'no', e.target.value) : setEditDraft(d => ({ ...d, no: e.target.value }))}
+                            className="px-1.5 py-1 border rounded text-xs w-20 bg-white"
                           />
                         ) : row.no}
                       </td>
@@ -622,9 +771,9 @@ export default function PettyCashModule() {
                         {isEditing ? (
                           <input
                             type="text"
-                            value={editDraft.ref || ''}
-                            onChange={e => setEditDraft(d => ({ ...d, ref: e.target.value }))}
-                            className="px-1.5 py-1 border rounded text-xs w-16"
+                            value={valRef}
+                            onChange={e => isBulkEdit ? handleBulkUpdateField(row.id, 'ref', e.target.value) : setEditDraft(d => ({ ...d, ref: e.target.value }))}
+                            className="px-1.5 py-1 border rounded text-xs w-16 bg-white"
                           />
                         ) : row.ref}
                       </td>
@@ -632,9 +781,9 @@ export default function PettyCashModule() {
                         {isEditing ? (
                           <input
                             type="text"
-                            value={editDraft.keterangan || ''}
-                            onChange={e => setEditDraft(d => ({ ...d, keterangan: e.target.value }))}
-                            className="px-1.5 py-1 border rounded text-xs w-full"
+                            value={valKet}
+                            onChange={e => isBulkEdit ? handleBulkUpdateField(row.id, 'keterangan', e.target.value) : setEditDraft(d => ({ ...d, keterangan: e.target.value }))}
+                            className="px-1.5 py-1 border rounded text-xs w-full bg-white"
                           />
                         ) : (
                           <div className="flex items-center gap-1.5 flex-wrap">
@@ -653,24 +802,24 @@ export default function PettyCashModule() {
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-semibold text-emerald-700 whitespace-nowrap">
-                        {isEditing && editDraft.tipe === 'Debet' ? (
+                        {isEditing && valTipe === 'Debet' ? (
                           <input
                             type="number"
                             step="0.01"
-                            value={editDraft.nominal ?? 0}
-                            onChange={e => setEditDraft(d => ({ ...d, nominal: parseFloat(e.target.value) || 0 }))}
-                            className="px-1.5 py-1 border rounded text-xs w-28 text-right"
+                            value={valNom}
+                            onChange={e => isBulkEdit ? handleBulkUpdateField(row.id, 'nominal', parseFloat(e.target.value) || 0) : setEditDraft(d => ({ ...d, nominal: parseFloat(e.target.value) || 0 }))}
+                            className="px-1.5 py-1 border rounded text-xs w-28 text-right bg-white"
                           />
                         ) : row.debetVal > 0 ? formatRupiah(row.debetVal) : '-'}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-semibold text-rose-700 whitespace-nowrap">
-                        {isEditing && editDraft.tipe === 'Kredit' ? (
+                        {isEditing && valTipe === 'Kredit' ? (
                           <input
                             type="number"
                             step="0.01"
-                            value={editDraft.nominal ?? 0}
-                            onChange={e => setEditDraft(d => ({ ...d, nominal: parseFloat(e.target.value) || 0 }))}
-                            className="px-1.5 py-1 border rounded text-xs w-28 text-right"
+                            value={valNom}
+                            onChange={e => isBulkEdit ? handleBulkUpdateField(row.id, 'nominal', parseFloat(e.target.value) || 0) : setEditDraft(d => ({ ...d, nominal: parseFloat(e.target.value) || 0 }))}
+                            className="px-1.5 py-1 border rounded text-xs w-28 text-right bg-white"
                           />
                         ) : row.kreditVal > 0 ? formatRupiah(row.kreditVal) : '-'}
                       </td>
