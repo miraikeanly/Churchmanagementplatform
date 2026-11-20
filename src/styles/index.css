@@ -33,23 +33,23 @@ html.theme-light.theme-warm {
 }
 
 html.theme-dark {
-  background-color: #0b0f19;
-  filter: invert(0.92) hue-rotate(180deg) brightness(var(--app-brightness, 1));
+  background-color: #1c1e24;
+  filter: invert(0.87) hue-rotate(180deg) contrast(0.88) saturate(0.88) brightness(var(--app-brightness, 0.96));
 }
 
 html.theme-dark.theme-warm {
-  background-color: #0f0e0c;
-  filter: invert(0.92) hue-rotate(180deg) brightness(var(--app-brightness, 1)) sepia(0.14);
+  background-color: #1f1d1a;
+  filter: invert(0.87) hue-rotate(180deg) contrast(0.88) saturate(0.86) brightness(var(--app-brightness, 0.96)) sepia(0.14);
 }
 
 html.theme-dim {
-  background-color: #141923;
-  filter: invert(0.86) hue-rotate(180deg) contrast(0.94) brightness(var(--app-brightness, 1));
+  background-color: #23262e;
+  filter: invert(0.83) hue-rotate(180deg) contrast(0.84) saturate(0.85) brightness(var(--app-brightness, 0.95));
 }
 
 html.theme-dim.theme-warm {
-  background-color: #181612;
-  filter: invert(0.86) hue-rotate(180deg) contrast(0.94) brightness(var(--app-brightness, 1)) sepia(0.16);
+  background-color: #26231e;
+  filter: invert(0.83) hue-rotate(180deg) contrast(0.84) saturate(0.84) brightness(var(--app-brightness, 0.95)) sepia(0.16);
 }
 
 /* Keep photos, avatars, videos, canvases, and explicit badges true-to-color in dark/dim mode */
