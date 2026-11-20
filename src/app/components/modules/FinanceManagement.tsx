@@ -2,6 +2,7 @@ import React from 'react';
 import KasBankModule from './finance/KasBankModule';
 import GeneralLedgerModule from './finance/GeneralLedgerModule';
 import LaporanKeuanganModule from './finance/LaporanKeuanganModule';
+import PettyCashModule from './finance/PettyCashModule';
 import { Coins, Layers, FileText } from 'lucide-react';
 
 interface Props {
@@ -12,6 +13,7 @@ export default function FinanceManagement({ subTab = 'kasBank' }: Props) {
   if (subTab === 'kasBank') return <KasBankModule />;
   if (subTab === 'generalLedger') return <GeneralLedgerModule />;
   if (subTab === 'laporanKeuangan') return <LaporanKeuanganModule />;
+  if (subTab === 'pattyCash') return <PettyCashModule />;
 
   // Placeholder views for the other sub-tabs
   return (
