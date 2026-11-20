@@ -18,10 +18,10 @@
 }
 @media (prefers-reduced-motion: reduce) { .hero-aurora { animation: none; } }
 
-/* ─── Gen-Z Dark Mode, Dim Mode, Warm Eye-Care & Brightness ─── */
+/* ─── True Native Soft-Black Dark Mode (Zero Invert / Crisp Colors) ─── */
 html {
   --app-brightness: 1;
-  transition: filter 0.35s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.35s ease;
+  transition: background-color 0.3s ease, color 0.3s ease, filter 0.3s ease;
 }
 
 html.theme-light {
@@ -29,41 +29,259 @@ html.theme-light {
 }
 
 html.theme-light.theme-warm {
-  filter: brightness(var(--app-brightness, 1)) sepia(0.14) saturate(0.95);
+  filter: brightness(var(--app-brightness, 1)) sepia(0.12) saturate(0.95);
 }
 
-html.theme-dark {
-  background-color: #1c1e24;
-  filter: invert(0.87) hue-rotate(180deg) contrast(0.88) saturate(0.88) brightness(var(--app-brightness, 0.96));
-}
-
-html.theme-dark.theme-warm {
-  background-color: #1f1d1a;
-  filter: invert(0.87) hue-rotate(180deg) contrast(0.88) saturate(0.86) brightness(var(--app-brightness, 0.96)) sepia(0.14);
-}
-
+html.theme-dark,
 html.theme-dim {
-  background-color: #23262e;
-  filter: invert(0.83) hue-rotate(180deg) contrast(0.84) saturate(0.85) brightness(var(--app-brightness, 0.95));
+  color-scheme: dark;
+  filter: brightness(var(--app-brightness, 1));
 }
 
+html.theme-dark.theme-warm,
 html.theme-dim.theme-warm {
-  background-color: #26231e;
-  filter: invert(0.83) hue-rotate(180deg) contrast(0.84) saturate(0.84) brightness(var(--app-brightness, 0.95)) sepia(0.16);
+  filter: brightness(var(--app-brightness, 1)) sepia(0.12);
 }
 
-/* Keep photos, avatars, videos, canvases, and explicit badges true-to-color in dark/dim mode */
-html.theme-dark img,
-html.theme-dark video,
-html.theme-dark canvas,
-html.theme-dark picture,
-html.theme-dark .no-dark-invert,
-html.theme-dim img,
-html.theme-dim video,
-html.theme-dim canvas,
-html.theme-dim picture,
-html.theme-dim .no-dark-invert {
-  filter: invert(1) hue-rotate(180deg);
+/* Soft Black Palette (Linear / Notion style) */
+html.theme-dark {
+  --dm-bg: #111318;
+  --dm-surface: #181b22;
+  --dm-surface-2: #20242e;
+  --dm-border: #2a2f3d;
+  --dm-text: #eef0f6;
+  --dm-text-muted: #9aa3b5;
+}
+
+/* Cozy Dim Palette */
+html.theme-dim {
+  --dm-bg: #181c24;
+  --dm-surface: #202530;
+  --dm-surface-2: #282e3c;
+  --dm-border: #333a4a;
+  --dm-text: #edf0f7;
+  --dm-text-muted: #a1abc0;
+}
+
+html.theme-dark body,
+html.theme-dim body {
+  background-color: var(--dm-bg) !important;
+  color: var(--dm-text) !important;
+}
+
+/* Surfaces */
+html.theme-dark .bg-white,
+html.theme-dim .bg-white {
+  background-color: var(--dm-surface) !important;
+}
+
+html.theme-dark .bg-gray-50,
+html.theme-dark .bg-slate-50,
+html.theme-dark .bg-slate-50\/60,
+html.theme-dark .bg-slate-50\/80,
+html.theme-dim .bg-gray-50,
+html.theme-dim .bg-slate-50,
+html.theme-dim .bg-slate-50\/60,
+html.theme-dim .bg-slate-50\/80 {
+  background-color: var(--dm-bg) !important;
+}
+
+html.theme-dark .bg-gray-100,
+html.theme-dark .bg-slate-100,
+html.theme-dark .bg-slate-100\/95,
+html.theme-dim .bg-gray-100,
+html.theme-dim .bg-slate-100,
+html.theme-dim .bg-slate-100\/95 {
+  background-color: var(--dm-surface-2) !important;
+}
+
+html.theme-dark .bg-slate-200\/90,
+html.theme-dim .bg-slate-200\/90 {
+  background-color: var(--dm-surface-2) !important;
+}
+
+/* Soft tinted cards in dark mode so colors stay rich & easy on the eyes */
+html.theme-dark .bg-emerald-50,
+html.theme-dark .bg-emerald-50\/70,
+html.theme-dark .bg-emerald-100\/50,
+html.theme-dark .bg-emerald-100\/60,
+html.theme-dark .bg-emerald-100\/70,
+html.theme-dark .bg-emerald-100\/80,
+html.theme-dim .bg-emerald-50,
+html.theme-dim .bg-emerald-50\/70,
+html.theme-dim .bg-emerald-100\/50,
+html.theme-dim .bg-emerald-100\/60,
+html.theme-dim .bg-emerald-100\/70,
+html.theme-dim .bg-emerald-100\/80 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+html.theme-dark .bg-rose-50,
+html.theme-dark .bg-rose-50\/70,
+html.theme-dark .bg-rose-100\/50,
+html.theme-dark .bg-rose-100\/60,
+html.theme-dark .bg-rose-100\/70,
+html.theme-dark .bg-rose-100\/80,
+html.theme-dark .bg-red-50,
+html.theme-dim .bg-rose-50,
+html.theme-dim .bg-rose-50\/70,
+html.theme-dim .bg-rose-100\/50,
+html.theme-dim .bg-rose-100\/60,
+html.theme-dim .bg-rose-100\/70,
+html.theme-dim .bg-rose-100\/80,
+html.theme-dim .bg-red-50 {
+  background-color: rgba(244, 63, 94, 0.12) !important;
+}
+
+html.theme-dark .bg-blue-50,
+html.theme-dark .bg-blue-50\/80,
+html.theme-dark .bg-blue-100\/60,
+html.theme-dark .bg-indigo-50,
+html.theme-dark .bg-indigo-50\/70,
+html.theme-dim .bg-blue-50,
+html.theme-dim .bg-blue-50\/80,
+html.theme-dim .bg-blue-100\/60,
+html.theme-dim .bg-indigo-50,
+html.theme-dim .bg-indigo-50\/70 {
+  background-color: rgba(99, 102, 241, 0.14) !important;
+}
+
+html.theme-dark .bg-amber-50,
+html.theme-dark .bg-amber-50\/60,
+html.theme-dark .bg-amber-100,
+html.theme-dark .bg-amber-100\/80,
+html.theme-dark .bg-amber-200\/90,
+html.theme-dark .bg-yellow-50,
+html.theme-dim .bg-amber-50,
+html.theme-dim .bg-amber-50\/60,
+html.theme-dim .bg-amber-100,
+html.theme-dim .bg-amber-100\/80,
+html.theme-dim .bg-amber-200\/90,
+html.theme-dim .bg-yellow-50 {
+  background-color: rgba(245, 158, 11, 0.14) !important;
+}
+
+/* Text */
+html.theme-dark .text-gray-900,
+html.theme-dark .text-slate-900,
+html.theme-dark .text-slate-950,
+html.theme-dark .text-gray-800,
+html.theme-dark .text-slate-800,
+html.theme-dim .text-gray-900,
+html.theme-dim .text-slate-900,
+html.theme-dim .text-slate-950,
+html.theme-dim .text-gray-800,
+html.theme-dim .text-slate-800 {
+  color: var(--dm-text) !important;
+}
+
+html.theme-dark .text-gray-700,
+html.theme-dark .text-slate-700,
+html.theme-dark .text-gray-600,
+html.theme-dark .text-slate-600,
+html.theme-dim .text-gray-700,
+html.theme-dim .text-slate-700,
+html.theme-dim .text-gray-600,
+html.theme-dim .text-slate-600 {
+  color: #cbd2e1 !important;
+}
+
+html.theme-dark .text-gray-500,
+html.theme-dark .text-slate-500,
+html.theme-dark .text-gray-400,
+html.theme-dark .text-slate-400,
+html.theme-dim .text-gray-500,
+html.theme-dim .text-slate-500,
+html.theme-dim .text-gray-400,
+html.theme-dim .text-slate-400 {
+  color: var(--dm-text-muted) !important;
+}
+
+/* Crisp readable colored text on dark surfaces */
+html.theme-dark .text-emerald-700,
+html.theme-dark .text-emerald-800,
+html.theme-dark .text-emerald-900,
+html.theme-dim .text-emerald-700,
+html.theme-dim .text-emerald-800,
+html.theme-dim .text-emerald-900 {
+  color: #34d399 !important;
+}
+
+html.theme-dark .text-rose-700,
+html.theme-dark .text-rose-800,
+html.theme-dark .text-rose-900,
+html.theme-dark .text-red-600,
+html.theme-dark .text-red-700,
+html.theme-dim .text-rose-700,
+html.theme-dim .text-rose-800,
+html.theme-dim .text-rose-900,
+html.theme-dim .text-red-600,
+html.theme-dim .text-red-700 {
+  color: #fb7185 !important;
+}
+
+html.theme-dark .text-blue-700,
+html.theme-dark .text-blue-900,
+html.theme-dark .text-indigo-700,
+html.theme-dark .text-indigo-800,
+html.theme-dim .text-blue-700,
+html.theme-dim .text-blue-900,
+html.theme-dim .text-indigo-700,
+html.theme-dim .text-indigo-800 {
+  color: #818cf8 !important;
+}
+
+html.theme-dark .text-amber-700,
+html.theme-dark .text-amber-800,
+html.theme-dark .text-amber-900,
+html.theme-dim .text-amber-700,
+html.theme-dim .text-amber-800,
+html.theme-dim .text-amber-900 {
+  color: #fbbf24 !important;
+}
+
+/* Borders & Dividers */
+html.theme-dark .border-gray-100,
+html.theme-dark .border-gray-200,
+html.theme-dark .border-gray-300,
+html.theme-dark .border-slate-100,
+html.theme-dark .border-slate-200,
+html.theme-dark .border-slate-200\/80,
+html.theme-dark .border-slate-300,
+html.theme-dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.theme-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.theme-dim .border-gray-100,
+html.theme-dim .border-gray-200,
+html.theme-dim .border-gray-300,
+html.theme-dim .border-slate-100,
+html.theme-dim .border-slate-200,
+html.theme-dim .border-slate-200\/80,
+html.theme-dim .border-slate-300,
+html.theme-dim .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.theme-dim .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--dm-border) !important;
+}
+
+/* Inputs & Selects */
+html.theme-dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.theme-dark select,
+html.theme-dark textarea,
+html.theme-dim input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.theme-dim select,
+html.theme-dim textarea {
+  background-color: var(--dm-surface-2) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+/* Hover rows */
+html.theme-dark .hover\:bg-gray-50:hover,
+html.theme-dark .hover\:bg-slate-50:hover,
+html.theme-dark .hover\:bg-slate-50\/80:hover,
+html.theme-dim .hover\:bg-gray-50:hover,
+html.theme-dim .hover\:bg-slate-50:hover,
+html.theme-dim .hover\:bg-slate-50\/80:hover {
+  background-color: var(--dm-surface-2) !important;
 }
 
 @keyframes theme-icon-pop {
