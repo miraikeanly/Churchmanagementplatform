@@ -220,6 +220,37 @@ export function buildAttendanceFamilyGroups(
     return null;
   };
 
+  // Members explicitly placed/unlinked/carded by admin must NEVER be auto-merged by fuzzy heuristics
+  const manuallyControlledIds = new Set<string>(customFamilyCardMembers || []);
+  if (Array.isArray(customLinks)) {
+    for (const l of customLinks) {
+      if (l.id2) manuallyControlledIds.add(l.id2);
+    }
+  }
+  const unlinkedMemberToTargets = new Map<string, Set<string>>();
+  if (Array.isArray(customUnlinks)) {
+    for (const u of customUnlinks) {
+      if (u.memberId && u.familyKey) {
+        if (!unlinkedMemberToTargets.has(u.memberId)) {
+          unlinkedMemberToTargets.set(u.memberId, new Set());
+        }
+        unlinkedMemberToTargets.get(u.memberId)!.add(u.familyKey);
+      }
+    }
+  }
+  const isBlockedByUnlink = (idA: string, idB: string): boolean => {
+    return Boolean(
+      unlinkedMemberToTargets.get(idA)?.has(idB) ||
+      unlinkedMemberToTargets.get(idB)?.has(idA)
+    );
+  };
+  const safeUnion = (idA: string, idB: string) => {
+    if (idA === idB) return;
+    if (manuallyControlledIds.has(idA) || manuallyControlledIds.has(idB)) return;
+    if (isBlockedByUnlink(idA, idB)) return;
+    union(idA, idB);
+  };
+
   // 1. Group by explicit familyId
   const familyIdClusters = new Map<string, string[]>();
   for (const m of allMembers) {
@@ -232,7 +263,7 @@ export function buildAttendanceFamilyGroups(
   }
   for (const ids of familyIdClusters.values()) {
     for (let i = 1; i < ids.length; i++) {
-      union(ids[0], ids[i]);
+      safeUnion(ids[0], ids[i]);
     }
   }
 
@@ -241,7 +272,7 @@ export function buildAttendanceFamilyGroups(
     if (m.spouseName && m.spouseName.trim()) {
       const matchId = findMemberMatch(m.spouseName);
       if (matchId && matchId !== m.id) {
-        union(m.id, matchId);
+        safeUnion(m.id, matchId);
       }
     }
   }
@@ -259,11 +290,11 @@ export function buildAttendanceFamilyGroups(
   for (const m of allMembers) {
     if (!isMemberMarried(m)) {
       if (m.parentId && memberById.has(m.parentId)) {
-        union(m.id, m.parentId);
+        safeUnion(m.id, m.parentId);
       } else if (m.parentName && m.parentName.trim()) {
         const matchId = findMemberMatch(m.parentName);
         if (matchId && matchId !== m.id) {
-          union(m.id, matchId);
+          safeUnion(m.id, matchId);
         }
       }
     }
@@ -279,7 +310,7 @@ export function buildAttendanceFamilyGroups(
           if (matchId && matchId !== m.id) {
             const childMember = memberById.get(matchId);
             if (childMember && !isMemberMarried(childMember)) {
-              union(m.id, matchId);
+              safeUnion(m.id, matchId);
             }
           }
         }
@@ -293,8 +324,8 @@ export function buildAttendanceFamilyGroups(
   const customCardSet = new Set<string>(customFamilyCardMembers || []);
   const addressToMembers = new Map<string, string[]>();
   for (const m of allMembers) {
-    // Skip address linking for members who have an explicit custom family card to prevent cluster pollution
-    if (customCardSet.has(m.id)) continue;
+    // Skip address linking for members who have an explicit custom family card or manual placement
+    if (customCardSet.has(m.id) || manuallyControlledIds.has(m.id)) continue;
     const rawAddr = (m.address || '').trim().toLowerCase();
     // Exclude emails or very short vague addresses
     if (rawAddr.length >= 15 && !rawAddr.includes('@')) {
@@ -311,7 +342,7 @@ export function buildAttendanceFamilyGroups(
     // Only link if at most 5 people (prevents false matches on apartment / common boarding houses)
     if (ids.length >= 2 && ids.length <= 5) {
       for (let i = 1; i < ids.length; i++) {
-        union(ids[0], ids[i]);
+        safeUnion(ids[0], ids[i]);
       }
     }
   }
@@ -336,10 +367,17 @@ export function buildAttendanceFamilyGroups(
     }
   }
 
-  // Filter out unlinked members from raw clusters
+  // Filter out unlinked members from raw clusters (check rootId AND any member in cluster so root shifts never cause unlinked members to wander back)
   const clusters = new Map<string, Member[]>();
   for (const [rootId, groupMembers] of rawClusters.entries()) {
-    const kept = groupMembers.filter(m => !unlinkPairs.has(`${rootId}:${m.id}`));
+    const kept = groupMembers.filter(m => {
+      if (unlinkPairs.has(`${rootId}:${m.id}`)) return false;
+      const blockedAgainst = unlinkedMemberToTargets.get(m.id);
+      if (blockedAgainst && groupMembers.some(other => other.id !== m.id && blockedAgainst.has(other.id))) {
+        return false;
+      }
+      return true;
+    });
     if (kept.length > 0) {
       clusters.set(rootId, kept);
     }
@@ -1646,6 +1684,20 @@ function DailyInput({
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
   const [manualAddSearch, setManualAddSearch] = useState('');
 
+  // Per-Family Lock (default: ALL families are LOCKED; only Super Admin can unlock a family card to edit its structure)
+  const { user: currentAuthUser } = useAuth();
+  const isSuperAdmin = currentAuthUser?.role === 'super_admin';
+  const [unlockedFamilyKeys, setUnlockedFamilyKeys] = useState<Set<string>>(new Set());
+  const toggleFamilyLock = (familyKey: string) => {
+    if (!isSuperAdmin) return;
+    setUnlockedFamilyKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(familyKey)) next.delete(familyKey);
+      else next.add(familyKey);
+      return next;
+    });
+  };
+
   // Load persisted custom family links, unlinks, role overrides, and explicit family cards on mount
   useEffect(() => {
     (async () => {
@@ -2120,10 +2172,21 @@ function DailyInput({
   // Only IR-active members shown by default in attendance
   const irMembers = useMemo(() => members.filter(isIbadahRayaMember), [members]);
 
-  // Build all family groups from IR members + custom links - custom unlinks + role overrides + custom family cards
+  // Include all IR members PLUS any member explicitly referenced in customFamilyLinks or customFamilyCardMembers
+  // so no manually arranged family head or member is ever dropped!
+  const familyPoolMembers = useMemo(() => {
+    const customReferencedIds = new Set<string>(customFamilyCardMembers || []);
+    for (const l of customFamilyLinks || []) {
+      if (l.id1) customReferencedIds.add(l.id1);
+      if (l.id2) customReferencedIds.add(l.id2);
+    }
+    return members.filter(m => isIbadahRayaMember(m) || customReferencedIds.has(m.id));
+  }, [members, customFamilyLinks, customFamilyCardMembers]);
+
+  // Build all family groups from familyPoolMembers + custom links - custom unlinks + role overrides + custom family cards
   const allFamilyGroups = useMemo(
-    () => buildAttendanceFamilyGroups(irMembers, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers),
-    [irMembers, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers]
+    () => buildAttendanceFamilyGroups(familyPoolMembers, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers),
+    [familyPoolMembers, customFamilyLinks, customFamilyUnlinks, familyRoleOverrides, customFamilyCardMembers]
   );
 
   // Set of all member IDs that belong to any family in attendance
@@ -2769,6 +2832,7 @@ function DailyInput({
             filteredFamilyGroups.map(group => {
               const isExpanded = expandedFamilies.has(group.key) || group.allMembers.some(m => expandedFamilies.has(m.id));
               const isRecentlyEdited = recentlyEditedFamilyKey === group.key || group.allMembers.some(m => m.id === recentlyEditedFamilyKey);
+              const isFamilyUnlocked = isSuperAdmin && unlockedFamilyKeys.has(group.key);
               const presentCount = group.presentCount;
               const totalCount = group.totalCount;
               const allPresent = group.allPresent;
@@ -2822,19 +2886,46 @@ function DailyInput({
                       {/* On desktop (sm+): Action buttons on the right side */}
                       {!isSessionLocked && canEdit && (
                         <div className="hidden sm:flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLinkTargetFamily(group);
-                              setLinkMemberSearch('');
-                              setIsLinkingMember(true);
-                            }}
-                            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 border border-gray-200 transition-all active:scale-95 cursor-pointer flex items-center gap-1"
-                            title="Tambah anggota jemaat ke keluarga ini dari data jemaat"
-                          >
-                            <UserPlus size={13} className="text-blue-600" />
-                            <span>Tambah Anggota</span>
-                          </button>
+                          {/* Super Admin Family Structure Lock Toggle */}
+                          {isSuperAdmin ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleFamilyLock(group.key)}
+                              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 cursor-pointer flex items-center gap-1 ${
+                                isFamilyUnlocked
+                                  ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                              title={isFamilyUnlocked ? 'Kunci struktur keluarga ini agar tidak berubah' : 'Buka kunci (khusus Super Admin) untuk mengedit anggota keluarga ini'}
+                            >
+                              {isFamilyUnlocked ? <Unlock size={13} className="text-amber-600" /> : <Lock size={13} className="text-slate-500" />}
+                              <span>{isFamilyUnlocked ? 'Kunci Kembali' : 'Terkunci'}</span>
+                            </button>
+                          ) : (
+                            <span
+                              className="px-2 py-1 rounded-xl text-[10px] font-semibold bg-slate-50 text-slate-400 border border-slate-200 flex items-center gap-1"
+                              title="Struktur keluarga dikunci oleh Super Admin"
+                            >
+                              <Lock size={11} />
+                              <span>Terkunci</span>
+                            </span>
+                          )}
+
+                          {isFamilyUnlocked && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLinkTargetFamily(group);
+                                setLinkMemberSearch('');
+                                setIsLinkingMember(true);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 border border-gray-200 transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+                              title="Tambah anggota jemaat ke keluarga ini dari data jemaat"
+                            >
+                              <UserPlus size={13} className="text-blue-600" />
+                              <span>Tambah Anggota</span>
+                            </button>
+                          )}
 
                           <button
                             type="button"
@@ -2852,14 +2943,16 @@ function DailyInput({
                             <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan Sekeluarga'}</span>
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteFamilyCard(group)}
-                            className="p-1.5 rounded-xl text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                            title={`Hapus Kartu Keluarga "${group.familyName}"`}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {isFamilyUnlocked && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFamilyCard(group)}
+                              className="p-1.5 rounded-xl text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                              title={`Hapus Kartu Keluarga "${group.familyName}"`}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -2871,18 +2964,39 @@ function DailyInput({
                     {/* On mobile (< sm): Action buttons rendered cleanly BELOW title in full-width row */}
                     {!isSessionLocked && canEdit && (
                       <div className="flex sm:hidden items-center gap-2 mt-2.5 pt-2.5 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLinkTargetFamily(group);
-                            setLinkMemberSearch('');
-                            setIsLinkingMember(true);
-                          }}
-                          className="flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 active:scale-95 border border-blue-200 flex items-center justify-center gap-1.5 shadow-2xs"
-                        >
-                          <UserPlus size={13} />
-                          <span>+ Tambah</span>
-                        </button>
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleFamilyLock(group.key)}
+                            className={`py-1.5 px-2.5 rounded-xl text-xs font-bold border active:scale-95 flex items-center justify-center gap-1 shadow-2xs ${
+                              isFamilyUnlocked
+                                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                : 'bg-slate-50 text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            {isFamilyUnlocked ? <Unlock size={13} /> : <Lock size={13} />}
+                            <span>{isFamilyUnlocked ? 'Kunci' : 'Buka'}</span>
+                          </button>
+                        ) : (
+                          <span className="py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-slate-50 text-slate-400 border border-slate-200 flex items-center gap-1">
+                            <Lock size={11} />
+                          </span>
+                        )}
+
+                        {isFamilyUnlocked && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLinkTargetFamily(group);
+                              setLinkMemberSearch('');
+                              setIsLinkingMember(true);
+                            }}
+                            className="flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 active:scale-95 border border-blue-200 flex items-center justify-center gap-1.5 shadow-2xs"
+                          >
+                            <UserPlus size={13} />
+                            <span>+ Tambah</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -2899,21 +3013,23 @@ function DailyInput({
                           <span>{allPresent ? 'Semua Hadir ✓' : 'Absenkan'}</span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteFamilyCard(group)}
-                          className="py-1.5 px-2.5 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200 active:scale-95 transition-all shadow-2xs"
-                          title="Hapus Kartu Keluarga"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {isFamilyUnlocked && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFamilyCard(group)}
+                            className="py-1.5 px-2.5 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200 active:scale-95 transition-all shadow-2xs"
+                            title="Hapus Kartu Keluarga"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
 
                   {/* Expanded Family Members List with Checkboxes & Drag/Drop */}
                   {isExpanded && (() => {
-                    const allowEdit = !isSessionLocked && canEdit;
+                    const allowEdit = !isSessionLocked && canEdit && isFamilyUnlocked;
 
                     const renderMemberRow = (m: Member, currentCat: 'parent' | 'child' | 'grandchild' | 'other') => {
                       const isPresent = present.has(m.id);
